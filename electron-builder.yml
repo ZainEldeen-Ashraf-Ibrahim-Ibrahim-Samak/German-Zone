@@ -1,0 +1,42 @@
+appId: com.nursery.management
+productName: Nursery Autism Management System
+publish:
+  provider: github
+  owner: ZainEldeen-Ashraf-Ibrahim-Ibrahim-Samak
+  repo: Nursery
+  releaseType: release
+directories:
+  output: release
+  buildResources: assets
+files:
+  - dist
+  - dist-electron
+  - package.json
+  # Runtime assets the app reads/copies on first launch (branding logos, app icon, fonts).
+  # Bundled inside the asar so the existing `path.join(__dirname, '../assets/...')` resolves.
+  - assets/branding/**/*
+  - assets/default-branding/**/*
+
+extraFiles:
+  - from: .env.example
+    to: .env.example
+
+win:
+  target: nsis
+  icon: assets/branding/icon.ico
+  executableName: NurseryManagementSystem
+  artifactName: nursery-management-system-setup-${version}.${ext}
+mac:
+  target: dmg
+  icon: assets/branding/icon.icns
+  category: public.app-category.business
+linux:
+  target: AppImage
+  icon: assets/branding/icon.png
+  category: Office
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Nursery Management System
