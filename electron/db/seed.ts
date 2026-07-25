@@ -41,9 +41,9 @@ export async function seedDatabase(db: Db): Promise<void> {
       // Branding Settings
       { key: 'brand_app_name', value: seedSetting('SEED_BRAND_APP_NAME', 'German Zone') },
       { key: 'brand_org_name', value: seedSetting('SEED_BRAND_ORG_NAME', 'German Zone For Courses') },
-      { key: 'brand_tagline', value: 'رعاية متميزة وتنمية مهارات طالبك' },
-      { key: 'brand_primary_color', value: seedSetting('SEED_BRAND_PRIMARY_COLOR', '#0f766e') }, // Teal 700
-      { key: 'brand_accent_color', value: seedSetting('SEED_BRAND_ACCENT_COLOR', '#f59e0b') },  // Amber 500
+      { key: 'brand_tagline', value: 'تعلّم الألمانية بثقة' },
+      { key: 'brand_primary_color', value: seedSetting('SEED_BRAND_PRIMARY_COLOR', '#1F2937') }, // Slate 800 — the logo wordmark
+      { key: 'brand_accent_color', value: seedSetting('SEED_BRAND_ACCENT_COLOR', '#EAB308') },  // Gold — the German flag band in the logo
       { key: 'brand_phone', value: seedSetting('SEED_BRAND_PHONE', '+20 123 456 7890') },
       { key: 'brand_address', value: 'القاهرة، مصر' },
       { key: 'brand_email', value: seedSetting('SEED_BRAND_EMAIL', 'info@zaineldeen.com') },
