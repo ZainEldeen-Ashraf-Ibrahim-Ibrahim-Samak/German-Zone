@@ -334,7 +334,7 @@ function initAutoUpdater() {
   })
 
   ipcMain.handle('updater:open-release-page', () => {
-    shell.openExternal('https://github.com/ZainEldeen-Ashraf-Ibrahim-Ibrahim-Samak/Nursery/releases/latest')
+    shell.openExternal('https://github.com/ZainEldeen-Ashraf-Ibrahim-Ibrahim-Samak/German-Zone/releases/latest')
   })
 }
 

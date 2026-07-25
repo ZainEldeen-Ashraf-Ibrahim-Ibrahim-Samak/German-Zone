@@ -18,7 +18,7 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 const VERSION = pkg.version
 const TOKEN = process.env.GH_TOKEN
 const OWNER = 'ZainEldeen-Ashraf-Ibrahim-Ibrahim-Samak'
-const REPO = 'Nursery'
+const REPO = 'German-Zone'
 const TAG = `v${VERSION}`
 const RELEASE_DIR = 'release'
 
@@ -212,7 +212,7 @@ async function main() {
 
     if (!fs.existsSync(filePath)) {
       // Try productName variant for the exe
-      const exeVariant = path.join(RELEASE_DIR, `Nursery & Autism Center Management System Setup ${VERSION}.exe`)
+      const exeVariant = path.join(RELEASE_DIR, `German Zone Setup ${VERSION}.exe`)
       if (name.endsWith('.exe') && fs.existsSync(exeVariant)) {
         filePath = exeVariant
       } else {
