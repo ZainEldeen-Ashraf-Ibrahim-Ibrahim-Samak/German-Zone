@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input.js'
 import { Button } from '../../components/ui/Button.js'
 import { Alert } from '../../components/ui/Alert.js'
 
-// Service pricing (nursery/hosting/session rates) lives exclusively in service_definitions,
+// Service pricing (course level / speaking-session rates) lives exclusively in service_definitions,
 // managed on the Settings → Services tab — this tab only holds the Targets & Capacity
 // settings, which are not service-specific and have no equivalent there.
 type SettingsKey =
@@ -239,8 +239,8 @@ export default function PricingSettings() {
 
       <p className="text-xs text-slate-400">
         {isAr
-          ? '💡 أسعار الخدمات (الحضانة، الإيواء، الجلسات) تُدار من تبويب «الخدمات».'
-          : '💡 Service pricing (nursery, hosting, sessions) is managed on the "Services" tab.'}
+          ? '💡 أسعار الخدمات (المستويات وجلسات المحادثة) تُدار من تبويب «الخدمات».'
+          : '💡 Service pricing (course levels and speaking sessions) is managed on the "Services" tab.'}
       </p>
 
       <div className="flex justify-end items-center gap-3 pt-4 border-t border-slate-100">

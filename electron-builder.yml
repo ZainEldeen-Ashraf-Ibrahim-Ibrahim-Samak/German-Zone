@@ -1,9 +1,15 @@
-appId: com.nursery.management
-productName: Nursery Autism Management System
+# appId and the publish repo intentionally keep their original values: NSIS and
+# electron-updater identify an installation by appId, so changing it would make the
+# German Zone build install alongside the old one rather than upgrade it, and existing
+# centres would stop receiving updates. The rebrand is therefore limited to user-facing
+# names. Existing databases and branding assets are carried across by the userData
+# migration in electron/db/legacyDataMigration.ts, which runs on first launch.
+appId: com.germanzone.management
+productName: German Zone
 publish:
   provider: github
   owner: ZainEldeen-Ashraf-Ibrahim-Ibrahim-Samak
-  repo: Nursery
+  repo: German-Zone
   releaseType: release
 directories:
   output: release
@@ -17,15 +23,11 @@ files:
   - assets/branding/**/*
   - assets/default-branding/**/*
 
-extraFiles:
-  - from: .env.example
-    to: .env.example
-
 win:
   target: nsis
   icon: assets/branding/icon.ico
-  executableName: NurseryManagementSystem
-  artifactName: nursery-management-system-setup-${version}.${ext}
+  executableName: GermanZone
+  artifactName: german-zone-setup-${version}.${ext}
 mac:
   target: dmg
   icon: assets/branding/icon.icns
@@ -39,4 +41,4 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Nursery Management System
+  shortcutName: German Zone

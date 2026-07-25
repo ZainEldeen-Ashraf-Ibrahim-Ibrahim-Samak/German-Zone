@@ -11,6 +11,7 @@ import { Card } from '../../components/ui/Card.js'
 import { Alert } from '../../components/ui/Alert.js'
 import PhotoCapture from '../../components/PhotoCapture.js'
 import type { ServiceType, UnitType, Teacher } from '../../types/index.js'
+import { isSessionService } from '../../utils/services.js'
 
 
 interface ServiceRow {
@@ -123,7 +124,7 @@ export default function StudentForm() {
     national_id: '',
     reg_date: new Date().toISOString().split('T')[0],
     notes: '',
-    services: [{ service: 'حضانة' as ServiceType, unit: 'شهر' as UnitType, price: 0, teacher_id: '', lesson_days: [] as number[], extra_lessons: 0, session_price: 0, teacher_session_rate: '' as number | '' }] as ServiceRow[],
+    services: [{ service: 'A1' as ServiceType, unit: 'شهر' as UnitType, price: 0, teacher_id: '', lesson_days: [] as number[], extra_lessons: 0, session_price: 0, teacher_session_rate: '' as number | '' }] as ServiceRow[],
   })
 
   // Photo (data URL for new/changed photo; existing URL otherwise)
@@ -274,7 +275,6 @@ export default function StudentForm() {
   // service_definitions row — those get seeded together (migration 015) and are not mutually
   // exclusive, but a service literally named "session" isn't meant to be billed monthly by
   // default.
-  const isSessionService = (serviceName: string) => serviceName === 'جلسة' || serviceName === 'جلسه'
 
   // Returns available unit options for a given service name based on which prices are defined
   // on that service's definition (Settings → Services) — exactly one unit per configured price

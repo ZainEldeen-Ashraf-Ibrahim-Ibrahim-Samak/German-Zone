@@ -17,17 +17,19 @@ const WORKBOOK = path.join(process.cwd(), 'Nursery_V4_Final_5.xlsx')
 let db: any
 let summary: any
 
+// The reference workbook holds real student and guardian data, so it is not committed.
+// Drop a copy in the repo root to exercise these cases; otherwise the suite skips.
+const hasWorkbook = fs.existsSync(WORKBOOK)
+
 beforeAll(async () => {
+  if (!hasWorkbook) return
   process.env.NODE_ENV = 'test'
   db = initDb()
   runMigrations(db)
   summary = await importFromWorkbook(WORKBOOK)
 })
 
-describe('full-workbook import of Nursery_V4_Final_5.xlsx (US3)', () => {
-  it('the reference workbook exists', () => {
-    expect(fs.existsSync(WORKBOOK)).toBe(true)
-  })
+describe.skipIf(!hasWorkbook)('full-workbook import of the reference workbook (US3)', () => {
 
   it('imports with zero row errors (SC-009)', () => {
     if (summary.rowErrors > 0) {

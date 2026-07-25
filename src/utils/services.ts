@@ -8,6 +8,8 @@ import type { ServiceType } from '../types/index.js'
  *
  * `name` is the value stored on students/payments/student_services rows.
  */
+export type ServiceBadgeVariant = 'success' | 'danger' | 'warning' | 'info' | 'neutral'
+
 export const BUILT_IN_SERVICES: {
   name: ServiceType
   labelAr: string
@@ -16,13 +18,20 @@ export const BUILT_IN_SERVICES: {
   swatch: string
   /** Hex, for SVG charts that cannot use Tailwind classes. */
   color: string
+  /** Badge variant. Only five exist, so B1/B2 reuse info/warning alongside A1/A2. */
+  variant: ServiceBadgeVariant
 }[] = [
-  { name: 'A1',            labelAr: 'A1',            labelEn: 'A1',                swatch: 'bg-teal-500',    color: '#0d9488' },
-  { name: 'A2',            labelAr: 'A2',            labelEn: 'A2',                swatch: 'bg-amber-500',   color: '#f59e0b' },
-  { name: 'B1',            labelAr: 'B1',            labelEn: 'B1',                swatch: 'bg-sky-500',     color: '#0ea5e9' },
-  { name: 'B2',            labelAr: 'B2',            labelEn: 'B2',                swatch: 'bg-violet-500',  color: '#8b5cf6' },
-  { name: 'جلسات محادثة',  labelAr: 'جلسات محادثة',  labelEn: 'Speaking Sessions', swatch: 'bg-emerald-500', color: '#10b981' },
+  { name: 'A1',            labelAr: 'A1',            labelEn: 'A1',                swatch: 'bg-teal-500',    color: '#0d9488', variant: 'info' },
+  { name: 'A2',            labelAr: 'A2',            labelEn: 'A2',                swatch: 'bg-amber-500',   color: '#f59e0b', variant: 'warning' },
+  { name: 'B1',            labelAr: 'B1',            labelEn: 'B1',                swatch: 'bg-sky-500',     color: '#0ea5e9', variant: 'info' },
+  { name: 'B2',            labelAr: 'B2',            labelEn: 'B2',                swatch: 'bg-violet-500',  color: '#8b5cf6', variant: 'warning' },
+  { name: 'جلسات محادثة',  labelAr: 'جلسات محادثة',  labelEn: 'Speaking Sessions', swatch: 'bg-emerald-500', color: '#10b981', variant: 'success' },
 ]
+
+/** Badge variant for a stored service name; neutral when unknown. */
+export function serviceVariant(serviceName: string): ServiceBadgeVariant {
+  return BUILT_IN_SERVICES.find((s) => s.name === serviceName)?.variant ?? 'neutral'
+}
 
 export const SERVICE_NAMES: string[] = BUILT_IN_SERVICES.map((s) => s.name)
 

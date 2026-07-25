@@ -67,7 +67,7 @@ describe('importFromWorkbook — contract', () => {
     // Sheets classification — the dashboard sheet is now imported as a snapshot
     // (no longer ignored) per the full-workbook import scope.
     expect(summary.sheetsProcessed).toContain('📊 داشبورد')
-    expect(summary.sheetsProcessed).toContain('👶 بيانات الطلاب')
+    expect(summary.sheetsProcessed).toContain('🧑‍ بيانات الطلاب')
   })
 
   it('is idempotent and resilient on re-import (US1)', async () => {

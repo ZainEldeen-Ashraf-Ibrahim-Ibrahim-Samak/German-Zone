@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { requireAdmin } from './_guard.js'
+import { RECOMMENDED_MIX_WEIGHTS, isSessionService } from '../constants/services.js'
 
 const arabicMonths = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -24,13 +25,13 @@ function calcCoveragePct(collected: number, requiredRevenue: number): number {
 
 // Single source of truth for service pricing (Settings → Services / service_definitions),
 // no more legacy `settings` table pricing keys. نصف يوم/جلسة use price_hourly, otherwise
-// price_monthly, matching the prior nursery/hosting/session semantics.
+// price_monthly, matching the prior per-session / monthly service semantics.
 function getServicePricing(db: ReturnType<typeof getDb>): Record<string, number> {
   const defs = db.prepare('SELECT name, price_monthly, price_hourly FROM service_definitions').all() as
     { name: string; price_monthly: number | null; price_hourly: number | null }[]
   const pricing: Record<string, number> = {}
   for (const d of defs) {
-    pricing[d.name] = Number((d.name === 'جلسة' || d.name === 'جلسه' ? d.price_hourly : d.price_monthly) ?? 0)
+    pricing[d.name] = Number((isSessionService(d.name) ? d.price_hourly : d.price_monthly) ?? 0)
   }
   return pricing
 }
@@ -114,7 +115,7 @@ ipcMain.handle('target:get', async (_event, { year }) => {
  *  - totalCapacity (numClasses × classCapacity)
  *  - For each service: minimum students needed to reach desiredRevenue alone,
  *    and whether that fits within capacity.
- *  - A balanced recommended mix (50 % nursery, 30 % hosting, 20 % sessions).
+ *  - A balanced recommended mix across course levels (see RECOMMENDED_MIX_WEIGHTS).
  *  - Per-staff and per-class revenue metrics.
  * Admin only.
  */
@@ -142,16 +143,18 @@ ipcMain.handle('target:capacity-plan', (_event, { numClasses, classCapacity, num
       scenarios[service]  = { studentsNeeded, feasible, maxRevenue, utilization }
     }
 
-    // Recommended mix: 50 % nursery, 30 % hosting, rest sessions
-    const nurserySlots  = Math.floor(totalCapacity * 0.5)
-    const hostingSlots  = Math.floor(totalCapacity * 0.3)
-    const sessionSlots  = Math.max(0, totalCapacity - nurserySlots - hostingSlots)
-
-    const recommendedMix: Record<string, number> = {
-      حضانة:  nurserySlots,
-      استضافة: hostingSlots,
-      جلسة:   sessionSlots,
-    }
+    // Recommended mix: capacity split across the course levels by RECOMMENDED_MIX_WEIGHTS,
+    // with any rounding remainder handed to the last service so the slots always total capacity.
+    const recommendedMix: Record<string, number> = {}
+    let assigned = 0
+    RECOMMENDED_MIX_WEIGHTS.forEach(([service, weight], idx) => {
+      const isLast = idx === RECOMMENDED_MIX_WEIGHTS.length - 1
+      const slots = isLast
+        ? Math.max(0, totalCapacity - assigned)
+        : Math.floor(totalCapacity * weight)
+      recommendedMix[service] = slots
+      assigned += slots
+    })
 
     const recommendedRevenue = Number(
       Object.entries(recommendedMix)

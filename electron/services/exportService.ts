@@ -214,8 +214,8 @@ function generateMonthSheet(
 
   // Columns definition
   const headers = lang === 'ar'
-    ? ['اسم الطالب 👶', 'ولي الأمر 👤', 'الهاتف 📞', 'الخدمة ⚙️', 'الوحدة 📦', 'الكمية 🔢', 'السعر 💰', 'الإجمالي 💵', 'المحصل ✅', 'المتأخرات ⚠️', 'الحالة 📊', 'ملاحظات 📝']
-    : ['Student Name 👶', 'Guardian 👤', 'Phone 📞', 'Service ⚙️', 'Unit 📦', 'Qty 🔢', 'Price 💰', 'Total 💵', 'Paid ✅', 'Arrears ⚠️', 'Status 📊', 'Notes 📝']
+    ? ['اسم الطالب 🧑‍', 'ولي الأمر 👤', 'الهاتف 📞', 'الخدمة ⚙️', 'الوحدة 📦', 'الكمية 🔢', 'السعر 💰', 'الإجمالي 💵', 'المحصل ✅', 'المتأخرات ⚠️', 'الحالة 📊', 'ملاحظات 📝']
+    : ['Student Name 🧑‍', 'Guardian 👤', 'Phone 📞', 'Service ⚙️', 'Unit 📦', 'Qty 🔢', 'Price 💰', 'Total 💵', 'Paid ✅', 'Arrears ⚠️', 'Status 📊', 'Notes 📝']
 
   // Headers
   const headerRow = worksheet.getRow(startRow)

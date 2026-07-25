@@ -23,8 +23,8 @@ export async function writeSampleWorkbook(): Promise<string> {
   wb.addWorksheet('📊 داشبورد')
 
   // Students master — real layout: blank col A, "#" in col B(2), data from C(3)
-  const kids = wb.addWorksheet('👶 بيانات الطلاب')
-  setRow(kids, 1, 3, ['👶 بيانات الطلاب'])
+  const kids = wb.addWorksheet('🧑‍ بيانات الطلاب')
+  setRow(kids, 1, 3, ['🧑‍ بيانات الطلاب'])
   setRow(kids, 3, 2, ['#', 'اسم الطالب', 'اسم ولي الأمر', 'رقم هاتف ولي الأمر', 'رقم هاتف الطالب', 'الرقم القومي', 'الخدمة', 'الوحدة', 'السعر', 'تاريخ التسجيل', 'ملاحظات'])
   setRow(kids, 4, 2, [1, 'أحمد محمد', 'ولي أمر 1', '01000000001', null, '20000000000000', 'حضانة', 'شهر', 3500, '2025-01-01', null])
   setRow(kids, 5, 2, [2, 'فاطمة علي', 'ولي أمر 2', '01000000002', null, '20000000000001', 'حضانة', 'شهر', 3500, '2025-01-01', null])

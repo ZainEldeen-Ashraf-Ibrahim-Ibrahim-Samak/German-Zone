@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button.js'
 import { Card } from '../../components/ui/Card.js'
 import { Alert } from '../../components/ui/Alert.js'
 import { Pagination } from '../../components/ui/Pagination.js'
+import { BUILT_IN_SERVICES, serviceLabel, serviceVariant } from '../../utils/services.js'
 import { Modal } from '../../components/ui/Modal.js'
 import type { Student } from '../../types/index.js'
 
@@ -217,20 +218,9 @@ export default function StudentsList() {
         return (
           <div className="flex flex-wrap gap-1">
             {enrollments.map((s: any, idx: number) => {
-              const variant =
-                s.service === 'حضانة'
-                  ? 'info'
-                  : s.service === 'استضافة'
-                    ? 'warning'
-                    : 'success'
-
-              let label: string = s.service
-              if (i18n.language === 'en') {
-                if (s.service === 'حضانة') label = t('services.nursery')
-                if (s.service === 'استضافة') label = t('services.hosting')
-                if (s.service === 'جلسة') label = t('services.session')
-              }
-              return <Badge key={idx} variant={variant as any}>{label}</Badge>
+              const variant = serviceVariant(s.service)
+              const label = serviceLabel(s.service, i18n.language)
+              return <Badge key={idx} variant={variant}>{label}</Badge>
             })}
           </div>
         )
@@ -423,9 +413,10 @@ export default function StudentsList() {
               onChange={(e) => setFilters({ service: e.target.value })}
               options={[
                 { value: '', label: i18n.language === 'ar' ? 'جميع الخدمات' : 'All Services' },
-                { value: 'حضانة', label: t('services.nursery') },
-                { value: 'استضافة', label: t('services.hosting') },
-                { value: 'جلسة', label: t('services.session') },
+                ...BUILT_IN_SERVICES.map((s) => ({
+                  value: s.name,
+                  label: serviceLabel(s.name, i18n.language),
+                })),
               ]}
             />
           </div>

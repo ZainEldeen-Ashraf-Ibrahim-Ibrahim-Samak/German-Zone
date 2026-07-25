@@ -9,7 +9,7 @@ function checkAuth() {
   }
 }
 
-// Nursery's operating week is Saturday–Friday (see spec 009 Assumptions), not ISO Monday–Sunday.
+// The centre's operating week is Saturday–Friday (see spec 009 Assumptions), not ISO Monday–Sunday.
 function weekBounds(dateStr: string): { from: string; to: string } {
   const date = new Date(dateStr)
   const day = date.getDay() // 0=Sun..6=Sat

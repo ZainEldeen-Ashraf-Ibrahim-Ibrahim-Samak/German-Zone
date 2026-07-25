@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import { app } from 'electron'
+import { DB_FILENAME } from './paths.js'
 
 /**
  * Database layer backed by Node's built-in `node:sqlite` (DatabaseSync).
@@ -91,9 +92,9 @@ export function getDbPath(): string {
   }
   // Safe check if app is not initialized or in some scripts
   try {
-    return path.join(app.getPath('userData'), 'nursery.db')
+    return path.join(app.getPath('userData'), DB_FILENAME)
   } catch {
-    return path.join(process.cwd(), 'nursery.db')
+    return path.join(process.cwd(), DB_FILENAME)
   }
 }
 

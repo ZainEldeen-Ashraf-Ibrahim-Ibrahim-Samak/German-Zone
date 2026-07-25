@@ -76,9 +76,11 @@ const englishMonths = [
 const yearsList = [2024, 2025, 2026, 2027, 2028, 2029, 2030]
 
 const SERVICE_ICONS: Record<string, string> = {
-  حضانة: '🏫',
-  استضافة: '🏠',
-  جلسة: '🧩',
+  A1: '🇩🇪',
+  A2: '📘',
+  B1: '📗',
+  B2: '📙',
+  'جلسات محادثة': '🗣️',
 }
 
 // ── component ──────────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ export default function TargetPlanning() {
   // ── distribution calculator state ──────────────────────────────────────
   const [calcMonth, setCalcMonth] = useState(arabicMonths[new Date().getMonth()])
   const [calcYear, setCalcYear] = useState(new Date().getFullYear())
-  const [calcCounts, setCalcCounts] = useState<Record<string, string>>({ حضانة: '10', استضافة: '5', جلسة: '20' })
+  const [calcCounts, setCalcCounts] = useState<Record<string, string>>({ A1: '10', A2: '5', B1: '5', B2: '5', 'جلسات محادثة': '20' })
   const [calcProfitPct, setCalcProfitPct] = useState('')
   const [calcResult, setCalcResult] = useState<CalcResult | null>(null)
   const [isCalcing, setIsCalcing] = useState(false)
@@ -667,7 +669,7 @@ export default function TargetPlanning() {
               {/* Section C: Recommended mix */}
               <div className="border-t border-slate-100 pt-4">
                 <p className={`text-xs font-bold text-slate-400 mb-3 ${isAr ? '' : 'uppercase tracking-widest'}`}>
-                  {isAr ? '🏆 التوزيع المقترح (50٪ حضانة · 30٪ استضافة · 20٪ جلسات)' : '🏆 Recommended Mix (50% nursery · 30% hosting · 20% sessions)'}
+                  {isAr ? '🏆 التوزيع المقترح (30٪ A1 · 25٪ A2 · 20٪ B1 · 15٪ B2 · 10٪ جلسات محادثة)' : '🏆 Recommended Mix (30% A1 · 25% A2 · 20% B1 · 15% B2 · 10% Speaking)'}
                 </p>
                 <div className="space-y-2">
                   {Object.entries(capacityPlan.recommendedMix).map(([svc, count]) => {

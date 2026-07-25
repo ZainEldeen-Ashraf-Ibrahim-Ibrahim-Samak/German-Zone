@@ -178,7 +178,7 @@ export default function SyncManager() {
                 type="password"
                 value={mongoUri}
                 onChange={(e) => setMongoUri(e.target.value)}
-                placeholder="mongodb+srv://user:pass@cluster.mongodb.net/nursery"
+                placeholder="mongodb+srv://user:pass@cluster.mongodb.net/germanzone"
                 className="flex-1"
               />
               <Button
@@ -192,8 +192,8 @@ export default function SyncManager() {
             </div>
             <p className="text-xs text-slate-400">
               {isAr
-                ? 'مثال: mongodb+srv://user:password@cluster0.mongodb.net/nursery_db'
-                : 'Example: mongodb+srv://user:password@cluster0.mongodb.net/nursery_db'}
+                ? 'مثال: mongodb+srv://user:password@cluster0.mongodb.net/germanzone_db'
+                : 'Example: mongodb+srv://user:password@cluster0.mongodb.net/germanzone_db'}
             </p>
           </div>
         )}

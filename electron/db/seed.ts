@@ -1,6 +1,7 @@
 import type { Db } from './connection.js'
 import bcrypt from 'bcryptjs'
 import { getSeedAdmin, seedSetting } from '../env.js'
+import { A1, A2, B1, B2, SPEAKING } from '../constants/services.js'
 
 export async function seedDatabase(db: Db): Promise<void> {
   // Check if users already exist
@@ -71,9 +72,11 @@ export async function seedDatabase(db: Db): Promise<void> {
   // service pricing; INSERT OR IGNORE so an admin's edits are never overwritten on restart).
   {
     const defaultServices: { name: string; monthly: string; daily: string; hourly: string }[] = [
-      { name: 'حضانة', monthly: seedSetting('SEED_NURSERY_MONTHLY', '2500'), daily: seedSetting('SEED_NURSERY_DAILY', '150'), hourly: seedSetting('SEED_NURSERY_HOURLY', '30') },
-      { name: 'استضافة', monthly: seedSetting('SEED_HOSTING_MONTHLY', '3000'), daily: seedSetting('SEED_HOSTING_DAILY', '200'), hourly: seedSetting('SEED_HOSTING_HOURLY', '40') },
-      { name: 'جلسة', monthly: seedSetting('SEED_SESSION_MONTHLY', '1200'), daily: seedSetting('SEED_SESSION_DAILY', '400'), hourly: seedSetting('SEED_SESSION_HOURLY', '100') },
+      { name: A1,       monthly: seedSetting('SEED_A1_MONTHLY', '2500'),       daily: seedSetting('SEED_A1_DAILY', '150'),       hourly: seedSetting('SEED_A1_HOURLY', '30') },
+      { name: A2,       monthly: seedSetting('SEED_A2_MONTHLY', '3000'),       daily: seedSetting('SEED_A2_DAILY', '200'),       hourly: seedSetting('SEED_A2_HOURLY', '40') },
+      { name: B1,       monthly: seedSetting('SEED_B1_MONTHLY', '3500'),       daily: seedSetting('SEED_B1_DAILY', '250'),       hourly: seedSetting('SEED_B1_HOURLY', '50') },
+      { name: B2,       monthly: seedSetting('SEED_B2_MONTHLY', '4000'),       daily: seedSetting('SEED_B2_DAILY', '300'),       hourly: seedSetting('SEED_B2_HOURLY', '60') },
+      { name: SPEAKING, monthly: seedSetting('SEED_SPEAKING_MONTHLY', '1200'), daily: seedSetting('SEED_SPEAKING_DAILY', '400'), hourly: seedSetting('SEED_SPEAKING_HOURLY', '100') },
     ]
     const now = new Date().toISOString()
     const insertService = db.prepare(`

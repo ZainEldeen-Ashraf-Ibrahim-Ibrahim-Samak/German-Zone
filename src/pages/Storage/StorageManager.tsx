@@ -205,7 +205,7 @@ export default function StorageManager() {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: isAr ? 'الطلاب' : 'Students', count: stats.counts.students, icon: '👶' },
+              { label: isAr ? 'الطلاب' : 'Students', count: stats.counts.students, icon: '🧑‍' },
               { label: isAr ? 'الدفعات' : 'Payments', count: stats.counts.payments, icon: '💳' },
               { label: isAr ? 'الموظفون' : 'Employees', count: stats.counts.employees, icon: '👔' },
               { label: isAr ? 'دفعات الرواتب' : 'Salary Payments', count: stats.counts.salary_payments, icon: '💵' },

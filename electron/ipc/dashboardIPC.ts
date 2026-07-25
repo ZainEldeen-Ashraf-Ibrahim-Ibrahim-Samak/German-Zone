@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { getCurrentUser } from './authIPC.js'
+import { SERVICE_NAMES } from '../constants/services.js'
 
 const arabicMonths = [
   'يناير',
@@ -99,7 +100,7 @@ ipcMain.handle('dashboard:get', async (_event, { month, year }) => {
     const kpi = calculateDashboard(payments, expenses, salaries, targetProfitPct)
 
     // 3. Revenue broken down by service
-    const services = ['حضانة', 'استضافة', 'جلسة']
+    const services = SERVICE_NAMES
     const revenueByService = services.map((srv) => {
       const srvPayments = payments.filter((p) => p.service === srv)
       const collectedSrv = srvPayments.reduce((sum, p) => sum + p.paid, 0)

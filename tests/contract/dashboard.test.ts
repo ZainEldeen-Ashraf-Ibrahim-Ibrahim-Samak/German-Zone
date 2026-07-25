@@ -140,14 +140,16 @@ describe('dashboard:get IPC contract', () => {
     expect(result.summary12Month[11].month).toBe('ديسمبر')
   })
 
-  it('returns revenueByService array with 3 services', async () => {
+  it('returns revenueByService array with the five course services', async () => {
     admin()
     const result = await h()(null, { month: 'يونيو', year: 2026 })
-    expect(result.revenueByService).toHaveLength(3)
+    expect(result.revenueByService).toHaveLength(5)
     const services = result.revenueByService.map((r: any) => r.service)
-    expect(services).toContain('حضانة')
-    expect(services).toContain('استضافة')
-    expect(services).toContain('جلسة')
+    expect(services).toContain('A1')
+    expect(services).toContain('A2')
+    expect(services).toContain('B1')
+    expect(services).toContain('B2')
+    expect(services).toContain('جلسات محادثة')
   })
 
   it('breaks down collected amounts by payment method', async () => {

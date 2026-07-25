@@ -1,9 +1,9 @@
 {
-  "name": "nursery-management-system",
+  "name": "german-zone",
   "private": true,
-  "version": "1.0.0",
-  "description": "Nursery & Autism Center Management System",
-  "author": "Nursery Management",
+  "version": "2.0.5",
+  "description": "German Zone — Language Course Management System",
+  "author": "German Zone",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -16,6 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "migrate:atlas": "node scripts/migrate-atlas-to-students.mjs",
+    "migrate:atlas:dry": "node scripts/migrate-atlas-to-students.mjs --dry-run",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

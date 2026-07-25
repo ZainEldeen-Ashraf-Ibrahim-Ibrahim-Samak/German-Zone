@@ -6,6 +6,7 @@ import { requireAdmin } from './_guard.js'
 import { getCurrentUser } from './authIPC.js'
 import { progressReporter } from './progress.js'
 import { uploadImage } from '../services/cloudinaryService.js'
+import { DB_FILENAME } from '../db/paths.js'
 
 /**
  * storage:uploadPhoto { dataUrl, folder? }
@@ -45,7 +46,7 @@ ipcMain.handle('storage:stats', async () => {
     // Get db file size
     let sizeBytes = 0
     try {
-      const dbPath = path.join(app.getPath('userData'), 'nursery.db')
+      const dbPath = path.join(app.getPath('userData'), DB_FILENAME)
       if (fs.existsSync(dbPath)) {
         sizeBytes = fs.statSync(dbPath).size
       }
@@ -70,11 +71,11 @@ ipcMain.handle('storage:backup', async (event) => {
     requireAdmin()
 
     const report = progressReporter(event, 'backup')
-    const dbPath = path.join(app.getPath('userData'), 'nursery.db')
+    const dbPath = path.join(app.getPath('userData'), DB_FILENAME)
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
 
     const result = await dialog.showSaveDialog({
-      defaultPath: `nursery-backup-${timestamp}.db`,
+      defaultPath: `germanzone-backup-${timestamp}.db`,
       filters: [{ name: 'SQLite Database', extensions: ['db'] }]
     })
 
@@ -83,7 +84,7 @@ ipcMain.handle('storage:backup', async (event) => {
     }
 
     // Fold committed WAL pages into the .db file so the copy is complete
-    // (the DB runs in WAL mode; recent commits may live in nursery.db-wal).
+    // (the DB runs in WAL mode; recent commits may live in the -wal sidecar).
     report(1, 3, 'checkpoint')
     getDb().checkpoint()
 
@@ -126,7 +127,7 @@ ipcMain.handle('storage:restore', async (event, { path: restorePath }) => {
       throw new Error('Backup file not found')
     }
 
-    const dbPath = path.join(app.getPath('userData'), 'nursery.db')
+    const dbPath = path.join(app.getPath('userData'), DB_FILENAME)
 
     // Create a current backup before restoring
     report(1, 3, 'safety backup')

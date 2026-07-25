@@ -43,7 +43,7 @@ ipcMain.handle('studentActivities:create', async (_event, { student_id, activity
 
     if (media_data_url) {
       try {
-        const folder = `nursery/students/${student_id}/activities`
+        const folder = `german-zone/students/${student_id}/activities`
         const uploaded = media_type === 'video'
           ? await uploadVideo(media_data_url, folder)
           : media_type === 'file'

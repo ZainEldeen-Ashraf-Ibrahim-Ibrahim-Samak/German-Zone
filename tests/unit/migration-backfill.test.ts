@@ -13,7 +13,7 @@ describe('Migration Backfill 004/005', () => {
     // we can't easily run "up to 003" without mocking.
     // Instead, we can just insert data as if it were the old schema, 
     // but the old schema columns still exist in 004/005 (we don't drop them).
-    // So we can insert a student into `students`, and a payment into `payments`,
+    // So we can insert a student into `children`, and a payment into `payments`,
     // THEN run `runMigrations(db)`, which will run ALL migrations (including 001-005).
     // Wait, if `runMigrations(db)` runs 001-005 immediately, we can't insert "legacy" data *between* migrations!
     
@@ -27,12 +27,12 @@ describe('Migration Backfill 004/005', () => {
     // We import the migrations array directly to run only up to 003
     // But since it's not exported, we can just create the tables directly as they were in 003.
     memDb.exec(`
-      CREATE TABLE IF NOT EXISTS students (
+      CREATE TABLE IF NOT EXISTS children (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         guardian TEXT NOT NULL,
         guardian_phone TEXT NOT NULL,
-        student_phone TEXT,
+        child_phone TEXT,
         national_id TEXT,
         service TEXT NOT NULL,
         unit TEXT NOT NULL,
@@ -47,7 +47,7 @@ describe('Migration Backfill 004/005', () => {
 
       CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL,
+        child_id INTEGER NOT NULL,
         month TEXT NOT NULL,
         year INTEGER NOT NULL,
         service TEXT NOT NULL,
@@ -62,8 +62,8 @@ describe('Migration Backfill 004/005', () => {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         synced INTEGER DEFAULT 0,
-        FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
-        UNIQUE (student_id, month, year)
+        FOREIGN KEY (child_id) REFERENCES children (id) ON DELETE CASCADE,
+        UNIQUE (child_id, month, year)
       );
 
       CREATE TABLE IF NOT EXISTS migrations (
@@ -103,27 +103,28 @@ describe('Migration Backfill 004/005', () => {
       INSERT INTO migrations (name) VALUES ('001_initial_schema'), ('002_expenses_unique_constraint'), ('003_add_updated_at_columns');
     `)
 
-    // Insert legacy student
+    // Insert legacy student (into the pre-rename `children` table)
     const insertStudent = memDb.prepare(`
-      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
+      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
       VALUES ('Test Student', 'Test Guardian', '123', 'حضانة', 'شهر', 1000, '2025-01-01', '2025-01-01', '2025-01-01')
     `)
     const studentId = insertStudent.run().lastInsertRowid
 
     // Insert legacy payment
     const insertPayment = memDb.prepare(`
-      INSERT INTO payments (student_id, month, year, service, unit, price, total, balance, status, created_at, updated_at)
+      INSERT INTO payments (child_id, month, year, service, unit, price, total, balance, status, created_at, updated_at)
       VALUES (?, 'يناير', 2025, 'حضانة', 'شهر', 1000, 1000, 1000, 'unpaid', '2025-01-01', '2025-01-01')
     `)
     const paymentId = insertPayment.run(studentId).lastInsertRowid
 
-    // Run migrations (will run 004 and 005)
+    // Run migrations 004 onwards — including 043, which renames the tables and
+    // columns to their student names, and 045, which remaps the service names.
     runMigrations(memDb)
 
-    // Verify backfill
+    // Verify backfill (asserted against the post-rename schema)
     const services = memDb.prepare('SELECT * FROM student_services WHERE student_id = ?').all(studentId)
     expect(services.length).toBe(1)
-    expect(services[0].service).toBe('حضانة')
+    expect(services[0].service).toBe('A1')
     expect(services[0].unit).toBe('شهر')
     expect(services[0].price).toBe(1000)
 

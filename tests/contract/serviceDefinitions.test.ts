@@ -29,9 +29,15 @@ describe('serviceDefinitions IPC contract', () => {
   it('serviceDefinitions:list returns built-in services', async () => {
     const rows = await h()['serviceDefinitions:list']({})
     expect(Array.isArray(rows)).toBe(true)
-    // Migration 015 seeds at least nursery/hosting/session
+    // Migration 015 seeds the services, 045 remaps them to the course levels
     const names = rows.map((r: any) => r.name)
-    expect(names.some((n: string) => n === 'حضانة')).toBe(true)
+    expect(names).toContain('A1')
+    expect(names).toContain('A2')
+    expect(names).toContain('B1')
+    expect(names).toContain('B2')
+    expect(names).toContain('جلسات محادثة')
+    // The pre-rebrand names must be gone, not merely supplemented.
+    expect(names).not.toContain('حضانة')
   })
 
   it('serviceDefinitions:add creates custom service', async () => {

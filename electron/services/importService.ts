@@ -1,8 +1,26 @@
 import ExcelJS from 'exceljs'
 import { getDb } from '../db/connection.js'
+import { A1, A2, SPEAKING } from '../constants/services.js'
 
 /**
- * Import service for the Nursery Management System.
+ * The legacy workbook still labels enrolments with the pre-rebrand nursery service
+ * names, so keep matching those on the way in and map them onto the German Zone
+ * course levels. Mirrors migration 045, which applies the same mapping to rows
+ * already in the database.
+ */
+const LEGACY_SERVICE_MAP: Record<string, string> = {
+  'حضانة': A1, 'حضانه': A1,
+  'استضافة': A2, 'استضافه': A2,
+  'جلسة': SPEAKING, 'جلسه': SPEAKING,
+}
+
+function mapLegacyService(name: string): string {
+  const trimmed = (name ?? '').trim()
+  return LEGACY_SERVICE_MAP[trimmed] ?? trimmed
+}
+
+/**
+ * Import service for German Zone.
  *
  * Reads the center's `Nursery_V4_Final_5.xlsx` workbook (and workbooks of the same
  * layout) and loads students, payments, employees, salary payments, and expenses
@@ -64,7 +82,7 @@ const ARABIC_MONTHS = [
 // lead column (A); the row number ("#") sits in column B(2) and real data starts
 // at column C(3). Verified against Nursery_V4_Final_5.xlsx.
 
-// Students master sheet (👶 بيانات الطلاب)
+// Students master sheet (🧑‍ بيانات الطلاب)
 const STUDENT_COL = {
   name: 3, guardian: 4, guardianPhone: 5, studentPhone: 6, nationalId: 7,
   service: 8, unit: 9, price: 10, regDate: 11, notes: 12
@@ -353,7 +371,7 @@ export async function importFromWorkbook(
   } = {}): number {
     const existing = findStudent.get(name) as any
     if (existing) return existing.id
-    const svc = opts.service || 'حضانة'
+    const svc = mapLegacyService(opts.service ?? '') || A1
     const unit = opts.unit || 'شهر'
     const price = opts.price ?? 0
     const res = insertStudent.run(
@@ -378,7 +396,7 @@ export async function importFromWorkbook(
         if (!isDataName(name)) continue
         if (findStudent.get(name)) { summary.students.skipped++; continue }
         try {
-          const svc = toStr(cellAt(row, STUDENT_COL.service)) || 'حضانة'
+          const svc = mapLegacyService(toStr(cellAt(row, STUDENT_COL.service))) || A1
           const unit = toStr(cellAt(row, STUDENT_COL.unit)) || 'شهر'
           const price = toNum(cellAt(row, STUDENT_COL.price))
           const res = insertStudent.run(
@@ -424,7 +442,7 @@ export async function importFromWorkbook(
         const name = toStr(cellAt(row, PAY_COL.name))
         if (!isDataName(name)) continue
         try {
-          const service = toStr(cellAt(row, PAY_COL.service)) || 'حضانة'
+          const service = mapLegacyService(toStr(cellAt(row, PAY_COL.service))) || A1
           const unit = toStr(cellAt(row, PAY_COL.unit)) || 'شهر'
           const quantity = toNum(cellAt(row, PAY_COL.quantity)) || 1
           const price = toNum(cellAt(row, PAY_COL.price))
@@ -552,17 +570,17 @@ export async function importFromWorkbook(
           const monthly = toNum(cellAt(row, 5))
           if (label.includes('حضانة')) {
             if (monthly > 0) {
-              setServicePrice('حضانة', 'price_monthly', monthly)
+              setServicePrice(A1, 'price_monthly', monthly)
               setSetting('nursery_monthly', monthly)
             }
           } else if (label.includes('استضافة')) {
             if (monthly > 0) {
-              setServicePrice('استضافة', 'price_monthly', monthly)
+              setServicePrice(A2, 'price_monthly', monthly)
               setSetting('hosting_monthly', monthly)
             }
           } else if (label.includes('جلسة')) {
             if (hourly > 0) {
-              setServicePrice('جلسة', 'price_hourly', hourly)
+              setServicePrice(SPEAKING, 'price_hourly', hourly)
               setSetting('session_hourly', hourly)
             }
           } else if (label.includes('نسبة الربح')) {
