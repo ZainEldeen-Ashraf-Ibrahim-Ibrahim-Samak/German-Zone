@@ -31,8 +31,8 @@ export function getExportHeader(): ExportHeaderData {
     : path.join(app.getPath('userData'), logoRelPath)
 
   return {
-    appName: settings['brand_app_name'] || 'أكاديمية مهند الليثي',
-    orgName: settings['brand_org_name'] || 'مركز مهند الليثي للتوحد ونمو الطالب',
+    appName: settings['brand_app_name'] || 'German Zone',
+    orgName: settings['brand_org_name'] || 'German Zone For Courses',
     tagline: settings['brand_tagline'] || 'رعاية متميزة وتنمية مهارات طالبك',
     phone: settings['brand_phone'] || '+20 123 456 7890',
     address: settings['brand_address'] || 'القاهرة، مصر',

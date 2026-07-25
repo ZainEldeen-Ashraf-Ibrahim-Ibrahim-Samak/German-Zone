@@ -131,7 +131,7 @@ describe('Branding IPC Contract tests', () => {
       expect(result.ok).toBe(true)
 
       branding = await getHandler(null)
-      expect(branding.brand_app_name).toBe('أكاديمية مهند الليثي')
+      expect(branding.brand_app_name).toBe('German Zone')
       expect(branding.brand_primary_color).toBe('#0f766e')
     })
   })

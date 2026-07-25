@@ -119,8 +119,8 @@ ipcMain.handle('branding:reset', () => {
 
     // Default branding settings
     const defaultBranding = {
-      brand_app_name: 'أكاديمية مهند الليثي',
-      brand_org_name: 'مركز مهند الليثي للتوحد ونمو الطالب',
+      brand_app_name: 'German Zone',
+      brand_org_name: 'German Zone For Courses',
       brand_tagline: 'رعاية متميزة وتنمية مهارات طالبك',
       brand_primary_color: '#0f766e',
       brand_accent_color: '#f59e0b',
