@@ -1,0 +1,116 @@
+import path from "node:path";
+import { app } from "electron";
+import { DatabaseSync } from "node:sqlite";
+//#region electron/db/paths.ts
+/**
+* Database filename, kept in one place so the app and the backup/restore flow can
+* never disagree about what the file is called.
+*/
+var DB_FILENAME = "germanzone.db";
+//#endregion
+//#region electron/db/connection.ts
+var Db = class {
+	raw;
+	constructor(location) {
+		this.raw = new DatabaseSync(location);
+	}
+	prepare(sql) {
+		return this.raw.prepare(sql);
+	}
+	exec(sql) {
+		this.raw.exec(sql);
+	}
+	/**
+	* Fold all committed WAL pages back into the main `.db` file so a plain
+	* file copy (backup) is complete. Safe to call any time; ignored on error.
+	*/
+	checkpoint() {
+		try {
+			this.raw.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+		} catch {}
+	}
+	/** Mirror better-sqlite3's `pragma('key = value')` via an exec'd PRAGMA statement. */
+	pragma(statement) {
+		this.raw.exec(`PRAGMA ${statement}`);
+	}
+	/**
+	* Mirror better-sqlite3's `transaction(fn)`: returns a function that runs `fn`
+	* inside BEGIN/COMMIT, rolling back (and rethrowing) on error.
+	*/
+	transaction(fn) {
+		const raw = this.raw;
+		const wrapped = (...args) => {
+			raw.exec("BEGIN");
+			try {
+				const result = fn(...args);
+				raw.exec("COMMIT");
+				return result;
+			} catch (err) {
+				try {
+					raw.exec("ROLLBACK");
+				} catch {}
+				throw err;
+			}
+		};
+		return wrapped;
+	}
+	close() {
+		this.raw.close();
+	}
+};
+var db = null;
+function getDbPath() {
+	if (process.env.NODE_ENV === "test") return ":memory:";
+	try {
+		return path.join(app.getPath("userData"), DB_FILENAME);
+	} catch {
+		return path.join(process.cwd(), DB_FILENAME);
+	}
+}
+function initDb(dbPath = getDbPath()) {
+	if (db) return db;
+	db = new Db(dbPath);
+	db.pragma("journal_mode = WAL");
+	db.pragma("foreign_keys = ON");
+	db.pragma("synchronous = NORMAL");
+	db.pragma("temp_store = MEMORY");
+	return db;
+}
+function getDb() {
+	if (!db) return initDb();
+	return db;
+}
+function closeDb() {
+	if (db) {
+		db.close();
+		db = null;
+	}
+}
+var SPEAKING = "جلسات محادثة";
+var SERVICE_NAMES = [
+	"A1",
+	"A2",
+	"B1",
+	"B2",
+	SPEAKING
+];
+/** True when a service is billed per session rather than per month. */
+function isSessionService(serviceName) {
+	return serviceName === SPEAKING;
+}
+/**
+* Share of total capacity each service gets in the "recommended mix" target
+* scenario. Weighted towards the entry levels, which carry the most enrolments.
+* Must sum to 1.
+*/
+var RECOMMENDED_MIX_WEIGHTS = [
+	["A1", .3],
+	["A2", .25],
+	["B1", .2],
+	["B2", .15],
+	[SPEAKING, .1]
+];
+//#endregion
+export { closeDb as a, DB_FILENAME as c, isSessionService as i, SERVICE_NAMES as n, getDb as o, SPEAKING as r, initDb as s, RECOMMENDED_MIX_WEIGHTS as t };
+
+//# sourceMappingURL=services-CNS37nWs.js.map

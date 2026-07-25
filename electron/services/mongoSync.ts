@@ -120,9 +120,24 @@ function uriNamesDatabase(uri: string): boolean {
   return afterHost.split('?')[0].length > 0
 }
 
-export async function connectMongo(uri: string): Promise<void> {
-  if (isConnected) return
+/**
+ * The connection attempt currently in flight, if any, together with the URI that
+ * started it.
+ *
+ * Startup fires connectMongo() without awaiting it and auto-sync begins immediately
+ * afterwards; auto-sync then sees `connected: false` (the first attempt has not
+ * resolved yet) and calls connectMongo() again. Mongoose rejects the second call with
+ * "Can't call `openUri()` on an active connection with different connection strings",
+ * and the URIs genuinely differ because convertSrvToStandardUri() re-resolves the SRV
+ * record each time and DNS can hand back the hosts in a different order.
+ *
+ * Sharing the in-flight promise makes overlapping callers await the same attempt
+ * instead of racing to open a second connection.
+ */
+let connectAttempt: Promise<void> | null = null
+let connectedUri: string | null = null
 
+async function openConnection(uri: string): Promise<void> {
   try {
     const finalUri = await convertSrvToStandardUri(uri);
     await mongoose.connect(finalUri, {
@@ -135,6 +150,8 @@ export async function connectMongo(uri: string): Promise<void> {
 
     mongoose.connection.on('disconnected', () => {
       isConnected = false
+      connectAttempt = null
+      connectedUri = null
     })
   } catch (err: any) {
     isConnected = false
@@ -144,7 +161,34 @@ export async function connectMongo(uri: string): Promise<void> {
   }
 }
 
+export async function connectMongo(uri: string): Promise<void> {
+  // Already connected, or a connection to this same URI is being established:
+  // join it rather than opening a second one.
+  if (connectAttempt && connectedUri === uri) return connectAttempt
+
+  // A genuinely different URI (the admin changed it in Settings) — tear the old
+  // connection down first, since mongoose allows only one default connection.
+  if (connectAttempt) {
+    await disconnectMongo().catch(() => { /* replacing it regardless */ })
+  }
+
+  connectedUri = uri
+  connectAttempt = openConnection(uri)
+
+  try {
+    await connectAttempt
+  } catch (err) {
+    // Clear the failed attempt so the next caller retries instead of re-awaiting
+    // an already-rejected promise.
+    connectAttempt = null
+    connectedUri = null
+    throw err
+  }
+}
+
 export async function disconnectMongo(): Promise<void> {
+  connectAttempt = null
+  connectedUri = null
   if (!isConnected) return
   await mongoose.disconnect()
   isConnected = false
