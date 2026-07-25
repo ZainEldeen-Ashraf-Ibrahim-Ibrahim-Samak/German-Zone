@@ -88,7 +88,7 @@ export default function EditRequestsInbox() {
             <div key={req.id} className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1 text-sm">
                 <p className="font-semibold text-slate-800">
-                  {req.child_name || `#${req.child_id}`} — {req.attendance_date}
+                  {req.student_name || `#${req.student_id}`} — {req.attendance_date}
                 </p>
                 <p className="text-slate-500">
                   {statusLabel(req.original_status, isAr)} → {statusLabel(req.requested_status, isAr)}

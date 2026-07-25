@@ -29,7 +29,7 @@ Single Electron desktop project. Main-process code in `electron/`, renderer in `
 **Purpose**: Dependencies and test fixtures needed by the feature.
 
 - [X] T001 Add `dotenv` to `dependencies` in `package.json` and install (`npm install dotenv`).
-- [X] T002 [P] Create an import test fixture at `tests/fixtures/nursery-sample.xlsx` — a trimmed copy of `Nursery_V4_Final_5.xlsx` containing the `👶 بيانات الأطفال`, `👔 الرواتب`, `💸 المصروفات`, and at least the `يناير` and `فبراير` sheets (keep ~3 children, 2 employees, 2 expense items) for fast, deterministic tests.
+- [X] T002 [P] Create an import test fixture at `tests/fixtures/nursery-sample.xlsx` — a trimmed copy of `Nursery_V4_Final_5.xlsx` containing the `👶 بيانات الطلاب`, `👔 الرواتب`, `💸 المصروفات`, and at least the `يناير` and `فبراير` sheets (keep ~3 children, 2 employees, 2 expense items) for fast, deterministic tests.
 
 ---
 
@@ -60,7 +60,7 @@ Single Electron desktop project. Main-process code in `electron/`, renderer in `
 ### Implementation for User Story 1
 
 - [X] T007 [US1] Add a `resolveCell(cell)` helper in `electron/services/importService.ts` that unwraps ExcelJS formula cells (`{formula,result}` → `result`), joins `richText` runs, and returns the raw value otherwise; route existing `toNum`/`toStr` through it.
-- [X] T008 [US1] Rewrite children import in `electron/services/importService.ts` to read the `👶 بيانات الأطفال` master sheet (cols D–M from row 4) into the correct schema columns (`name, guardian, guardian_phone, child_phone, national_id, service, unit, price, reg_date, notes`, `is_active=1`, `created_at/updated_at=now`, `synced=0`); match existing children by exact `name` and skip.
+- [X] T008 [US1] Rewrite children import in `electron/services/importService.ts` to read the `👶 بيانات الطلاب` master sheet (cols D–M from row 4) into the correct schema columns (`name, guardian, guardian_phone, child_phone, national_id, service, unit, price, reg_date, notes`, `is_active=1`, `created_at/updated_at=now`, `synced=0`); match existing children by exact `name` and skip.
 - [X] T009 [US1] Rewrite monthly payments import in `electron/services/importService.ts`: detect month sheets by Arabic month name (no year required), resolve `year` via `IMPORT_DEFAULT_YEAR` → current year, read cols D–M from row 4, unwrap the name-formula cell, create a child placeholder per `data-model.md` if the name is unknown, recompute `status` from paid/total, match payments by `(child_id, month, year, service)` and skip duplicates.
 - [X] T010 [US1] Rewrite employees + salary payments import in `electron/services/importService.ts` from `👔 الرواتب` (fix sheet match for `الرواتب`, cols D–K from row 4): upsert employee by name with `base_salary/housing/transport/net_salary` (net fallback = base+housing+transport, `role` required), then one `salary_payments` row per month-net column present, matched by `(employee_id, month, year)`.
 - [X] T011 [US1] Rewrite expenses import in `electron/services/importService.ts` from `💸 المصروفات` (item at col D, month amounts cols E–P from row 4): insert one expense per non-zero month via `ON CONFLICT(item,month,year) DO NOTHING`, `year` = resolved import year.

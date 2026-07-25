@@ -22,7 +22,7 @@ function getHandler(channel: string) {
 describe('End-to-end via the real IPC handlers a user actually drives: add teacher (own rate 30)', () => {
   let db: any
   let teacherId: number
-  let childId: number
+  let studentId: number
   let sessionId: number
 
   const addEmployee = getHandler('employees:add')
@@ -41,8 +41,8 @@ describe('End-to-end via the real IPC handlers a user actually drives: add teach
     const emp = await addEmployee(null, { name: 'Ahmed', base_salary: 0, teacher_session_rate: 30 })
     teacherId = emp.id
 
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
       VALUES ('Sami', 'Guardian', '0100', 'جلسة', 'جلسة', 100, '2026-01-01', ?, ?, ?)
     `).run(now, now, teacherId).lastInsertRowid)
 
@@ -57,8 +57,8 @@ describe('End-to-end via the real IPC handlers a user actually drives: add teach
   })
 
   it('the generated payment uses 30 (the teacher\'s own rate)', async () => {
-    await record(null, { session_id: sessionId, records: [{ child_id: childId, status: 'attended', teacher_status: 'present' }] })
-    const row = db.prepare('SELECT * FROM teacher_payments WHERE teacher_id = ? AND child_id = ?').get(teacherId, childId) as any
+    await record(null, { session_id: sessionId, records: [{ student_id: studentId, status: 'attended', teacher_status: 'present' }] })
+    const row = db.prepare('SELECT * FROM teacher_payments WHERE teacher_id = ? AND student_id = ?').get(teacherId, studentId) as any
     expect(row.session_cost).toBe(30)
   })
 
@@ -69,15 +69,15 @@ describe('End-to-end via the real IPC handlers a user actually drives: add teach
 
   it('correcting the rate via employees:update immediately re-snapshots the still-pending payment, with no re-save of attendance needed', async () => {
     await updateEmployee(null, { id: teacherId, patch: { teacher_session_rate: 55 } })
-    const row = db.prepare('SELECT session_cost, status FROM teacher_payments WHERE teacher_id = ? AND child_id = ?').get(teacherId, childId) as any
+    const row = db.prepare('SELECT session_cost, status FROM teacher_payments WHERE teacher_id = ? AND student_id = ?').get(teacherId, studentId) as any
     expect(row.status).toBe('pending')
     expect(row.session_cost).toBe(55)
   })
 
   it('does not touch an already-paid payment when the rate is corrected again', async () => {
-    db.prepare(`UPDATE teacher_payments SET status = 'paid' WHERE teacher_id = ? AND child_id = ?`).run(teacherId, childId)
+    db.prepare(`UPDATE teacher_payments SET status = 'paid' WHERE teacher_id = ? AND student_id = ?`).run(teacherId, studentId)
     await updateEmployee(null, { id: teacherId, patch: { teacher_session_rate: 999 } })
-    const row = db.prepare('SELECT session_cost, status FROM teacher_payments WHERE teacher_id = ? AND child_id = ?').get(teacherId, childId) as any
+    const row = db.prepare('SELECT session_cost, status FROM teacher_payments WHERE teacher_id = ? AND student_id = ?').get(teacherId, studentId) as any
     expect(row.status).toBe('paid')
     expect(row.session_cost).toBe(55)
   })

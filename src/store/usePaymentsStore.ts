@@ -10,7 +10,7 @@ interface PaymentSummary {
 
 interface PaymentsState {
   payments: Payment[]
-  byChild: any[]
+  byStudent: any[]
   summary: PaymentSummary
   isLoading: boolean
   error: string | null
@@ -27,7 +27,7 @@ interface PaymentsState {
     payment_method_id?: number | null
   }) => Promise<Payment | null>
   bulkPay: (ids: number[], payment_method_id?: number | null) => Promise<number>
-  deleteChildPayments: (child_id: number) => Promise<boolean>
+  deleteStudentPayments: (student_id: number) => Promise<boolean>
   deleteSelectedPayments: (ids: number[]) => Promise<number>
   deleteAllPayments: () => Promise<number>
   clearError: () => void
@@ -54,7 +54,7 @@ const defaultYear = now.getFullYear()
 
 export const usePaymentsStore = create<PaymentsState>((set, get) => ({
   payments: [],
-  byChild: [],
+  byStudent: [],
   summary: { totalInvoiced: 0, totalCollected: 0, arrears: 0 },
   isLoading: false,
   error: null,
@@ -74,7 +74,7 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
       const result = await window.api.payments.get({ month, year })
       set({
         payments: result.payments,
-        byChild: result.byChild,
+        byStudent: result.byStudent,
         summary: result.summary,
         isLoading: false,
       })
@@ -104,7 +104,7 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
     try {
       const result = await window.api.payments.update({ id, quantity, paid, notes, payment_method_id })
       
-      // Update byChild as well (simplified approach: just call fetchPayments instead of manual recalcs)
+      // Update byStudent as well (simplified approach: just call fetchPayments instead of manual recalcs)
       // Since we want to be fast, maybe we should just call fetchPayments anyway.
       // Actually, let's keep it simple and just do a full refetch after update.
       await get().fetchPayments()
@@ -130,16 +130,16 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
     }
   },
 
-  deleteChildPayments: async (child_id) => {
+  deleteStudentPayments: async (student_id) => {
     set({ isLoading: true, error: null })
     try {
       const month = get().currentMonth
       const year = get().currentYear
-      await window.api.payments.deleteForChild({ child_id, month, year })
+      await window.api.payments.deleteForStudent({ student_id, month, year })
       await get().fetchPayments()
       return true
     } catch (err: any) {
-      const errorMsg = friendlyError(err, 'Failed to delete child payments')
+      const errorMsg = friendlyError(err, 'Failed to delete student payments')
       set({ error: errorMsg, isLoading: false })
       return false
     }

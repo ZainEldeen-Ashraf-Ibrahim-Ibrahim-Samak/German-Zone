@@ -77,7 +77,7 @@ describe('Storage IPC Contract tests', () => {
       expect(result).toBeDefined()
       expect(result.counts).toBeDefined()
       expect(typeof result.counts.users).toBe('number')
-      expect(typeof result.counts.children).toBe('number')
+      expect(typeof result.counts.students).toBe('number')
       expect(typeof result.counts.payments).toBe('number')
       expect(typeof result.counts.employees).toBe('number')
       expect(typeof result.sizeBytes).toBe('number')
@@ -160,26 +160,26 @@ describe('Storage IPC Contract tests', () => {
       const handler = getHandlers()['storage:clear']
       const statsHandler = getHandlers()['storage:stats']
 
-      // Insert dummy child & employee & payment to ensure we have data to clear
+      // Insert dummy student & employee & payment to ensure we have data to clear
       const now = new Date().toISOString()
       db.prepare(`
-        INSERT INTO children (name, guardian, guardian_phone, reg_date, created_at, updated_at, service, unit, price)
-        VALUES ('Test Child', 'Test Guardian', '0123456789', '2026-07-02', ?, ?, 'حضانة', 'monthly', 1000)
+        INSERT INTO students (name, guardian, guardian_phone, reg_date, created_at, updated_at, service, unit, price)
+        VALUES ('Test Student', 'Test Guardian', '0123456789', '2026-07-02', ?, ?, 'حضانة', 'monthly', 1000)
       `).run(now, now)
       
-      const childId = db.prepare("SELECT last_insert_rowid() as id").get().id
+      const studentId = db.prepare("SELECT last_insert_rowid() as id").get().id
 
       db.prepare(`
-        INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at)
+        INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at)
         VALUES (?, 'حضانة', 'monthly', 1000, ?, ?)
-      `).run(childId, now, now)
+      `).run(studentId, now, now)
 
       const serviceId = db.prepare("SELECT last_insert_rowid() as id").get().id
 
       db.prepare(`
-        INSERT INTO payments (child_id, service_id, month, year, service, unit, price, total, balance, status, created_at, updated_at)
+        INSERT INTO payments (student_id, service_id, month, year, service, unit, price, total, balance, status, created_at, updated_at)
         VALUES (?, ?, 'July', 2026, 'حضانة', 'monthly', 1000, 1000, 1000, 'unpaid', ?, ?)
-      `).run(childId, serviceId, now, now)
+      `).run(studentId, serviceId, now, now)
 
       db.prepare(`
         INSERT INTO employees (name, role, base_salary, net_salary, created_at, updated_at)
@@ -189,7 +189,7 @@ describe('Storage IPC Contract tests', () => {
       adminSession()
       
       const statsBefore = await statsHandler(null)
-      expect(statsBefore.counts.children).toBeGreaterThan(0)
+      expect(statsBefore.counts.students).toBeGreaterThan(0)
       expect(statsBefore.counts.payments).toBeGreaterThan(0)
       expect(statsBefore.counts.employees).toBeGreaterThan(0)
 
@@ -199,7 +199,7 @@ describe('Storage IPC Contract tests', () => {
 
       // Call stats again to confirm everything has been cleared to 0
       const statsAfter = await statsHandler(null)
-      expect(statsAfter.counts.children).toBe(0)
+      expect(statsAfter.counts.students).toBe(0)
       expect(statsAfter.counts.payments).toBe(0)
       expect(statsAfter.counts.employees).toBe(0)
 

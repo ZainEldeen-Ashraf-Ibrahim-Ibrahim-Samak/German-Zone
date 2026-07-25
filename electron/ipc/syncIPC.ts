@@ -427,7 +427,7 @@ export async function runPull(force: boolean, report: Reporter = noopReport) {
           } catch (err: any) {
             const message = err instanceof Error ? err.message : String(err)
             // A FOREIGN KEY failure means the cloud row references a parent
-            // (e.g. a child) that doesn't exist — stale/orphaned cloud data.
+            // (e.g. a student) that doesn't exist — stale/orphaned cloud data.
             // It can never be applied, so skip it quietly instead of flooding
             // the log and the UI with one "failed" per orphan.
             if (/FOREIGN KEY/i.test(message)) {

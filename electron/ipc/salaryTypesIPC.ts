@@ -18,7 +18,7 @@ ipcMain.handle('salaryTypes:add', async (_event, input) => {
     const db = getDb()
     const { name, mode, monthly_rate = null, session_rate = null, session_pct = null } = input
     if (!name?.trim()) throw new Error('الاسم مطلوب / Name is required')
-    const validModes = ['fixed_monthly', 'per_session_fixed', 'per_session_pct', 'hybrid', 'per_child_session']
+    const validModes = ['fixed_monthly', 'per_session_fixed', 'per_session_pct', 'hybrid', 'per_student_session']
     if (!validModes.includes(mode)) throw new Error('نوع الراتب غير صالح / Invalid salary mode')
     if (mode === 'per_session_pct' && (session_pct == null || session_pct <= 0 || session_pct > 1)) {
       throw new Error('نسبة الجلسة يجب أن تكون بين 0 و 1 / Session percentage must be between 0 and 1')

@@ -40,13 +40,13 @@ describe('IPC Contract tests: window.api surface validation', () => {
     expect(api.users.deactivate).toBeTypeOf('function')
   })
 
-  it('should match the Children contract', () => {
+  it('should match the Students contract', () => {
     const api = getApis().api
-    expect(api.children).toBeDefined()
-    expect(api.children.get).toBeTypeOf('function')
-    expect(api.children.add).toBeTypeOf('function')
-    expect(api.children.update).toBeTypeOf('function')
-    expect(api.children.deactivate).toBeTypeOf('function')
+    expect(api.students).toBeDefined()
+    expect(api.students.get).toBeTypeOf('function')
+    expect(api.students.add).toBeTypeOf('function')
+    expect(api.students.update).toBeTypeOf('function')
+    expect(api.students.deactivate).toBeTypeOf('function')
   })
 
   it('should match the Payments contract', () => {
@@ -106,7 +106,7 @@ describe('IPC Contract tests: window.api surface validation', () => {
     expect(api.export).toBeDefined()
     expect(api.export.full).toBeTypeOf('function')
     expect(api.export.month).toBeTypeOf('function')
-    expect(api.export.child).toBeTypeOf('function')
+    expect(api.export.student).toBeTypeOf('function')
     expect(api.export.salaries).toBeTypeOf('function')
     expect(api.export.expenses).toBeTypeOf('function')
   })

@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { getDb } from '../db/connection.js'
 import { getExportHeader } from './exportHeader.js'
-import { getChildStatement } from './statementService.js'
+import { getStudentStatement } from './statementService.js'
 import ArabicReshaper from 'arabic-persian-reshaper'
 
 const arabicMonths = [
@@ -137,7 +137,7 @@ function getStatusColor(status: string): string {
 }
 
 export function buildPdfFile(
-  type: 'full' | 'month' | 'child' | 'childReport' | 'salaries' | 'expenses' | 'employees' | 'payrollReport',
+  type: 'full' | 'month' | 'student' | 'studentReport' | 'salaries' | 'expenses' | 'employees' | 'payrollReport',
   params: any,
   savePath: string
 ): Promise<void> {
@@ -145,7 +145,7 @@ export function buildPdfFile(
     try {
       const db = getDb()
       const brand = getExportHeader()
-      const { month, year, childId, lang = 'ar' } = params
+      const { month, year, studentId, lang = 'ar' } = params
       const isAr = lang === 'ar'
 
       // Initialize Font Descriptors from userData path
@@ -195,17 +195,17 @@ export function buildPdfFile(
         // Get monthly payments — filtered to the selected payment IDs when provided (empty = all)
         const hasSelection = Array.isArray(params.paymentIds) && params.paymentIds.length > 0
         const payments = db.prepare(`
-          SELECT c.name as child_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes
+          SELECT c.name as student_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes
           FROM payments p
-          JOIN children c ON p.child_id = c.id
+          JOIN students c ON p.student_id = c.id
           WHERE p.month = ? AND p.year = ?
           ${hasSelection ? `AND p.id IN (${params.paymentIds.map(() => '?').join(',')})` : ''}
         `).all(month, year, ...(hasSelection ? params.paymentIds : [])) as any[]
 
         // Table headers
         const headers = isAr
-          ? ['اسم الطفل', 'ولي الأمر', 'الهاتف', 'الخدمة', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة']
-          : ['Child Name', 'Guardian', 'Phone', 'Service', 'Unit', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status']
+          ? ['اسم الطالب', 'ولي الأمر', 'الهاتف', 'الخدمة', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة']
+          : ['Student Name', 'Guardian', 'Phone', 'Service', 'Unit', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status']
 
         const body: any[][] = [
           headers.map(h => ({ text: shapeText(h), bold: true, fillColor: brand.primaryColor, color: '#ffffff', alignment: 'center' }))
@@ -221,7 +221,7 @@ export function buildPdfFile(
           arrears += p.balance
 
           body.push([
-            { text: shapeText(p.child_name), bold: false, fillColor: '', color: '', alignment: isAr ? 'right' : 'left' },
+            { text: shapeText(p.student_name), bold: false, fillColor: '', color: '', alignment: isAr ? 'right' : 'left' },
             { text: shapeText(p.guardian), bold: false, fillColor: '', color: '', alignment: isAr ? 'right' : 'left' },
             { text: shapeText(p.guardian_phone), bold: false, fillColor: '', color: '', alignment: 'center' },
             { text: shapeText(p.service), bold: false, fillColor: '', color: '', alignment: 'center' },
@@ -265,11 +265,11 @@ export function buildPdfFile(
         })
       } 
       
-      else if (type === 'childReport') {
-        const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-        if (!child) throw new Error('Child not found')
+      else if (type === 'studentReport') {
+        const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+        if (!student) throw new Error('Student not found')
 
-        const title = isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`
+        const title = isAr ? `تقرير الطالب الشامل: ${student.name}` : `Full Student Report: ${student.name}`
         docDefinition.content.push(...getPdfHeader(brand, lang, title))
 
         const sectionHeader = (text: string) => ({
@@ -305,20 +305,20 @@ export function buildPdfFile(
         // Personal Information
         docDefinition.content.push(sectionHeader(isAr ? '📋 البيانات الشخصية' : '📋 Personal Information'))
         docDefinition.content.push(kvTable([
-          [isAr ? 'الاسم' : 'Name', child.name],
-          [isAr ? 'ولي الأمر' : 'Guardian', child.guardian],
-          [isAr ? 'هاتف ولي الأمر' : 'Guardian Phone', child.guardian_phone],
-          [isAr ? 'تاريخ التسجيل' : 'Registration Date', child.reg_date],
-          [isAr ? 'الحالة' : 'Status', child.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive')]
+          [isAr ? 'الاسم' : 'Name', student.name],
+          [isAr ? 'ولي الأمر' : 'Guardian', student.guardian],
+          [isAr ? 'هاتف ولي الأمر' : 'Guardian Phone', student.guardian_phone],
+          [isAr ? 'تاريخ التسجيل' : 'Registration Date', student.reg_date],
+          [isAr ? 'الحالة' : 'Status', student.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive')]
         ]))
 
         // Enrolled Services & Teachers
         docDefinition.content.push(sectionHeader(isAr ? '🏷️ الخدمات والمعلمون' : '🏷️ Services & Teachers'))
         const services = db.prepare(`
           SELECT cs.service, cs.unit, cs.price, e.name as teacher_name
-          FROM child_services cs LEFT JOIN employees e ON e.id = cs.teacher_id
-          WHERE cs.child_id = ?
-        `).all(childId) as any[]
+          FROM student_services cs LEFT JOIN employees e ON e.id = cs.teacher_id
+          WHERE cs.student_id = ?
+        `).all(studentId) as any[]
         docDefinition.content.push(simpleTable(
           isAr ? ['الخدمة', 'الوحدة', 'السعر', 'المعلم'] : ['Service', 'Unit', 'Price', 'Teacher'],
           services.map((s) => [s.service, s.unit, formatCurrency(s.price, lang), s.teacher_name || (isAr ? 'بدون معلم' : 'No teacher')]),
@@ -327,30 +327,30 @@ export function buildPdfFile(
 
         // Attendance History + Percentage
         const attendanceRows = db.prepare(`
-          SELECT ss.session_date as attendance_date, e.name as teacher_name, ar.teacher_status, ar.status as child_status
+          SELECT ss.session_date as attendance_date, e.name as teacher_name, ar.teacher_status, ar.status as student_status
           FROM attendance_records ar
           JOIN scheduled_sessions ss ON ss.id = ar.session_id
           LEFT JOIN employees e ON e.id = ar.attended_teacher_id
-          WHERE ar.child_id = ?
+          WHERE ar.student_id = ?
           ORDER BY ss.session_date DESC
-        `).all(childId) as any[]
-        const attended = attendanceRows.filter((r) => r.child_status === 'attended').length
+        `).all(studentId) as any[]
+        const attended = attendanceRows.filter((r) => r.student_status === 'attended').length
         const pct = attendanceRows.length > 0 ? Math.round((attended / attendanceRows.length) * 100) : null
         docDefinition.content.push(sectionHeader(
           isAr ? `📅 سجل الحضور — نسبة الحضور: ${pct != null ? pct + '%' : 'غير متاح'}` : `📅 Attendance History — Attendance %: ${pct != null ? pct + '%' : 'N/A'}`
         ))
         docDefinition.content.push(simpleTable(
-          isAr ? ['التاريخ', 'المعلم', 'حالة المعلم', 'حالة الطفل'] : ['Date', 'Teacher', 'Teacher Status', 'Child Status'],
-          attendanceRows.map((a) => [a.attendance_date, a.teacher_name || '', a.teacher_status || '', a.child_status]),
+          isAr ? ['التاريخ', 'المعلم', 'حالة المعلم', 'حالة الطالب'] : ['Date', 'Teacher', 'Teacher Status', 'Student Status'],
+          attendanceRows.map((a) => [a.attendance_date, a.teacher_name || '', a.teacher_status || '', a.student_status]),
           isAr ? 'لا يوجد سجل حضور بعد.' : 'No attendance history yet.'
         ))
 
         // Payment History
         docDefinition.content.push(sectionHeader(isAr ? '💰 السجل المالي' : '💰 Payment History'))
         const existingPaymentsForReport = db.prepare(
-          'SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE child_id = ?'
-        ).all(childId) as any[]
-        const statementForReport = getChildStatement(child, existingPaymentsForReport, new Date())
+          'SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE student_id = ?'
+        ).all(studentId) as any[]
+        const statementForReport = getStudentStatement(student, existingPaymentsForReport, new Date())
         docDefinition.content.push(simpleTable(
           isAr ? ['الشهر', 'السنة', 'الخدمة', 'الإجمالي', 'المدفوع', 'الرصيد', 'الحالة'] : ['Month', 'Year', 'Service', 'Total', 'Paid', 'Balance', 'Status'],
           statementForReport.rows.map((p: any) => {
@@ -363,38 +363,38 @@ export function buildPdfFile(
 
         // Notes
         docDefinition.content.push(sectionHeader(isAr ? '📝 ملاحظات' : '📝 Notes'))
-        docDefinition.content.push({ text: shapeText(child.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.')), margin: [0, 6, 0, 0] })
+        docDefinition.content.push({ text: shapeText(student.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.')), margin: [0, 6, 0, 0] })
       }
 
-      else if (type === 'child') {
-        const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-        if (!child) throw new Error('Child not found')
+      else if (type === 'student') {
+        const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+        if (!student) throw new Error('Student not found')
 
-        const title = isAr ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`
+        const title = isAr ? `كشف حساب الطالب: ${student.name}` : `Account Statement: ${student.name}`
         docDefinition.content.push(...getPdfHeader(brand, lang, title))
 
-        // Child Details Block
+        // Student Details Block
         docDefinition.content.push({
           margin: [0, 0, 0, 15],
           table: {
             widths: ['*', '*'],
             body: [
               [
-                { text: shapeText(`${isAr ? 'ولي الأمر:' : 'Guardian:'} ${child.guardian}`), bold: true },
-                { text: shapeText(`${isAr ? 'الهاتف:' : 'Phone:'} ${child.guardian_phone}`), bold: true }
+                { text: shapeText(`${isAr ? 'ولي الأمر:' : 'Guardian:'} ${student.guardian}`), bold: true },
+                { text: shapeText(`${isAr ? 'الهاتف:' : 'Phone:'} ${student.guardian_phone}`), bold: true }
               ],
               [
-                { text: shapeText(`${isAr ? 'الخدمة الأساسية:' : 'Service:'} ${child.service}`), bold: true },
-                { text: shapeText(`${isAr ? 'تاريخ التسجيل:' : 'Reg Date:'} ${child.reg_date}`), bold: true }
+                { text: shapeText(`${isAr ? 'الخدمة الأساسية:' : 'Service:'} ${student.service}`), bold: true },
+                { text: shapeText(`${isAr ? 'تاريخ التسجيل:' : 'Reg Date:'} ${student.reg_date}`), bold: true }
               ]
             ]
           },
           layout: 'noBorders'
         })
 
-        // Fetch child statements via statement service
-        const existingPayments = db.prepare('SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE child_id = ?').all(childId) as any[]
-        const statement = getChildStatement(child, existingPayments, new Date())
+        // Fetch student statements via statement service
+        const existingPayments = db.prepare('SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE student_id = ?').all(studentId) as any[]
+        const statement = getStudentStatement(student, existingPayments, new Date())
 
         const headers = isAr
           ? ['الشهر', 'السنة', 'الخدمة المقدمة', 'الكمية', 'السعر', 'الإجمالي المطلـوب', 'المبلغ المدفوع', 'المتأخرات', 'الحالة']
@@ -767,16 +767,16 @@ export function buildPdfFile(
 
         docDefinition.content.push({ table: summaryTable, margin: [0, 0, 0, 20] })
 
-        // Page break to children list
+        // Page break to students list
         docDefinition.content.push({ text: '', pageBreak: 'after' })
 
-        // 2. Children roster
-        docDefinition.content.push(...getPdfHeader(brand, lang, isAr ? 'قائمة سجلات الأطفال' : 'Children Records List'))
-        const kids = db.prepare('SELECT name, guardian, guardian_phone, service, price, reg_date FROM children').all() as any[]
+        // 2. Students roster
+        docDefinition.content.push(...getPdfHeader(brand, lang, isAr ? 'قائمة سجلات الطلاب' : 'Students Records List'))
+        const kids = db.prepare('SELECT name, guardian, guardian_phone, service, price, reg_date FROM students').all() as any[]
         
         const kidHeaders = isAr 
-          ? ['اسم الطفل', 'ولي الأمر', 'رقم الهاتف', 'الخدمة', 'السعر', 'تاريخ التسجيل']
-          : ['Child Name', 'Guardian', 'Phone', 'Service', 'Price', 'Reg Date']
+          ? ['اسم الطالب', 'ولي الأمر', 'رقم الهاتف', 'الخدمة', 'السعر', 'تاريخ التسجيل']
+          : ['Student Name', 'Guardian', 'Phone', 'Service', 'Price', 'Reg Date']
 
         const kidBody: any[][] = [kidHeaders.map(h => ({ text: shapeText(h), bold: true, fillColor: brand.primaryColor, color: '#ffffff', alignment: 'center' }))]
         for (const k of kids) {
@@ -802,15 +802,15 @@ export function buildPdfFile(
           docDefinition.content.push(...getPdfHeader(brand, lang, mTitle))
 
           const payments = db.prepare(`
-            SELECT c.name as child_name, p.service, p.quantity, p.price, p.total, p.paid, p.balance, p.status
+            SELECT c.name as student_name, p.service, p.quantity, p.price, p.total, p.paid, p.balance, p.status
             FROM payments p
-            JOIN children c ON p.child_id = c.id
+            JOIN students c ON p.student_id = c.id
             WHERE p.month = ? AND p.year = ?
           `).all(m, year) as any[]
 
           const headers = isAr
-            ? ['اسم الطفل', 'الخدمة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة']
-            : ['Child Name', 'Service', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status']
+            ? ['اسم الطالب', 'الخدمة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة']
+            : ['Student Name', 'Service', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status']
 
           const body: any[][] = [
             headers.map(h => ({ text: shapeText(h), bold: true, fillColor: brand.primaryColor, color: '#ffffff', alignment: 'center' }))
@@ -826,7 +826,7 @@ export function buildPdfFile(
             arrearsM += p.balance
 
             body.push([
-              { text: shapeText(p.child_name), alignment: isAr ? 'right' : 'left' },
+              { text: shapeText(p.student_name), alignment: isAr ? 'right' : 'left' },
               { text: shapeText(p.service), alignment: 'center' },
               { text: shapeText(p.quantity), alignment: 'center' },
               { text: shapeText(formatCurrency(p.price, lang)), alignment: 'right' },

@@ -22,7 +22,7 @@ describe('payroll:report — monthly per-teacher aggregation (US8)', () => {
   let db: any
   let ahmedId: number
   let saraId: number
-  let childId: number
+  let studentId: number
 
   beforeAll(() => {
     db = initDb()
@@ -37,21 +37,21 @@ describe('payroll:report — monthly per-teacher aggregation (US8)', () => {
     ahmedId = addEmp('Ahmed', 200)
     saraId = addEmp('Sara', 250)
 
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
       VALUES ('Sami', 'Guardian', '0100', 'جلسة', 'جلسة', 100, '2026-01-01', ?, ?)
     `).run(now, now).lastInsertRowid)
 
     const insertPayment = (teacher: number, date: string, status: string, cost: number) => {
       const sessionId = Number(db.prepare(`INSERT INTO scheduled_sessions (session_date, created_at, updated_at) VALUES (?, ?, ?)`).run(date, now, now).lastInsertRowid)
       const arId = Number(db.prepare(`
-        INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at, attended_teacher_id, teacher_status)
+        INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at, attended_teacher_id, teacher_status)
         VALUES (?, ?, 'attended', ?, ?, ?, 'present')
-      `).run(sessionId, childId, now, now, teacher).lastInsertRowid)
+      `).run(sessionId, studentId, now, now, teacher).lastInsertRowid)
       db.prepare(`
-        INSERT INTO teacher_payments (teacher_id, child_id, attendance_record_id, attendance_date, session_cost, status, created_at, updated_at)
+        INSERT INTO teacher_payments (teacher_id, student_id, attendance_record_id, attendance_date, session_cost, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(teacher, childId, arId, date, cost, status, now, now)
+      `).run(teacher, studentId, arId, date, cost, status, now, now)
     }
 
     // Ahmed: 2 pending + 1 paid in July 2026 = 3 sessions paid, 600 total

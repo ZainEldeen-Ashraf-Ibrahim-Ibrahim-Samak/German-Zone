@@ -8,23 +8,23 @@ vi.mock('electron', () => ({
 import { isPaymentEligible } from '../../electron/ipc/attendanceIPC.js'
 
 describe('isPaymentEligible — the five attendance-based payment cases (spec.md FR-008…FR-011)', () => {
-  it('Case 1: teacher present + child attended → payable', () => {
+  it('Case 1: teacher present + student attended → payable', () => {
     expect(isPaymentEligible('present', 'attended')).toBe(true)
   })
 
-  it('Case 2: teacher present + child absent unexcused → payable', () => {
+  it('Case 2: teacher present + student absent unexcused → payable', () => {
     expect(isPaymentEligible('present', 'absent_unexcused')).toBe(true)
   })
 
-  it('Case 3: teacher present + child absent excused → not payable', () => {
+  it('Case 3: teacher present + student absent excused → not payable', () => {
     expect(isPaymentEligible('present', 'absent_excused')).toBe(false)
   })
 
-  it('Case 4: teacher absent + child attended → not payable', () => {
+  it('Case 4: teacher absent + student attended → not payable', () => {
     expect(isPaymentEligible('absent', 'attended')).toBe(false)
   })
 
-  it('Case 5: teacher absent + child absent → not payable', () => {
+  it('Case 5: teacher absent + student absent → not payable', () => {
     expect(isPaymentEligible('absent', 'absent_unexcused')).toBe(false)
     expect(isPaymentEligible('absent', 'absent_excused')).toBe(false)
   })

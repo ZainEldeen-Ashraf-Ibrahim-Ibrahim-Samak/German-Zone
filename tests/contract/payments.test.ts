@@ -37,7 +37,7 @@ describe('Payments IPC Contract tests', () => {
 
   beforeEach(() => {
     db.prepare('DELETE FROM payments').run()
-    db.prepare('DELETE FROM children').run()
+    db.prepare('DELETE FROM students').run()
     setCurrentUser(null)
   })
 
@@ -54,22 +54,22 @@ describe('Payments IPC Contract tests', () => {
     await expect(getHandler(null, { month: 'يناير', year: 2026 })).rejects.toThrow('UNAUTHORIZED')
   })
 
-  it('should generate payments for active children and skip existing ones (idempotent)', async () => {
+  it('should generate payments for active students and skip existing ones (idempotent)', async () => {
     const generateHandler = getHandlers()['payments:generate']
     const getHandler = getHandlers()['payments:get']
     expect(generateHandler).toBeDefined()
     expect(getHandler).toBeDefined()
 
-    // Add children directly to DB
+    // Add students directly to DB
     db.prepare(`
-      INSERT INTO children (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+      INSERT INTO students (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
       VALUES 
-        (1, 'طفل 1', 'ولي 1', '010', 'حضانة', 'شهر', 2500, '2026-01-01', '2026-06-06', '2026-06-06', 1),
-        (2, 'طفل 2', 'ولي 2', '011', 'استضافة', 'يوم', 150, '2026-01-01', '2026-06-06', '2026-06-06', 0) -- Inactive
+        (1, 'طالب 1', 'ولي 1', '010', 'حضانة', 'شهر', 2500, '2026-01-01', '2026-06-06', '2026-06-06', 1),
+        (2, 'طالب 2', 'ولي 2', '011', 'استضافة', 'يوم', 150, '2026-01-01', '2026-06-06', '2026-06-06', 0) -- Inactive
     `).run()
 
     db.prepare(`
-      INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at)
+      INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at)
       VALUES 
         (1, 'حضانة', 'شهر', 2500, '2026-06-06', '2026-06-06'),
         (2, 'استضافة', 'يوم', 150, '2026-06-06', '2026-06-06')
@@ -79,12 +79,12 @@ describe('Payments IPC Contract tests', () => {
 
     // Generate for June 2026
     const genResult = await generateHandler(null, { month: 'يونيو', year: 2026 })
-    expect(genResult.created).toBe(1) // Only active child 1
+    expect(genResult.created).toBe(1) // Only active student 1
 
     // Fetch payments
     const getResult = await getHandler(null, { month: 'يونيو', year: 2026 })
     expect(getResult.payments.length).toBe(1)
-    expect(getResult.payments[0].child_name).toBe('طفل 1')
+    expect(getResult.payments[0].student_name).toBe('طالب 1')
     expect(getResult.payments[0].price).toBe(2500)
     expect(getResult.payments[0].quantity).toBe(1)
     expect(getResult.payments[0].total).toBe(2500)
@@ -105,19 +105,19 @@ describe('Payments IPC Contract tests', () => {
   it('should update payment recording quantity/paid, ignore client price, and recompute server-side', async () => {
     const updateHandler = getHandlers()['payments:update']
     
-    // Create direct child and payment
+    // Create direct student and payment
     db.prepare(`
-      INSERT INTO children (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
-      VALUES (10, 'طفل 10', 'ولي 10', '010', 'حضانة', 'شهر', 2000, '2026-01-01', '2026-06-06', '2026-06-06', 1)
+      INSERT INTO students (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+      VALUES (10, 'طالب 10', 'ولي 10', '010', 'حضانة', 'شهر', 2000, '2026-01-01', '2026-06-06', '2026-06-06', 1)
     `).run()
 
     db.prepare(`
-      INSERT INTO child_services (id, child_id, service, unit, price, created_at, updated_at)
+      INSERT INTO student_services (id, student_id, service, unit, price, created_at, updated_at)
       VALUES (10, 10, 'حضانة', 'شهر', 2000, '2026-06-06', '2026-06-06')
     `).run()
 
     db.prepare(`
-      INSERT INTO payments (id, child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
+      INSERT INTO payments (id, student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
       VALUES (100, 10, 10, 'يونيو', 2026, 'حضانة', 'شهر', 1, 2000, 2000, 0, 2000, 'unpaid', '2026-06-06', '2026-06-06', 1)
     `).run()
 
@@ -132,7 +132,7 @@ describe('Payments IPC Contract tests', () => {
     })
 
     expect(updated.quantity).toBe(1.5)
-    expect(updated.price).toBe(2000) // kept original child price
+    expect(updated.price).toBe(2000) // kept original student price
     expect(updated.total).toBe(3000) // 1.5 * 2000
     expect(updated.paid).toBe(2000)
     expect(updated.balance).toBe(1000) // 3000 - 2000
@@ -144,17 +144,17 @@ describe('Payments IPC Contract tests', () => {
     const updateHandler = getHandlers()['payments:update']
 
     db.prepare(`
-      INSERT INTO children (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
-      VALUES (11, 'طفل 11', 'ولي 11', '011', 'حضانة', 'شهر', 2000, '2026-01-01', '2026-06-06', '2026-06-06', 1)
+      INSERT INTO students (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+      VALUES (11, 'طالب 11', 'ولي 11', '011', 'حضانة', 'شهر', 2000, '2026-01-01', '2026-06-06', '2026-06-06', 1)
     `).run()
 
     db.prepare(`
-      INSERT INTO child_services (id, child_id, service, unit, price, created_at, updated_at)
+      INSERT INTO student_services (id, student_id, service, unit, price, created_at, updated_at)
       VALUES (11, 11, 'حضانة', 'شهر', 2000, '2026-06-06', '2026-06-06')
     `).run()
 
     db.prepare(`
-      INSERT INTO payments (id, child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
+      INSERT INTO payments (id, student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
       VALUES (101, 11, 11, 'يونيو', 2026, 'حضانة', 'شهر', 1, 2000, 2000, 0, 2000, 'unpaid', '2026-06-06', '2026-06-06', 1)
     `).run()
 
@@ -181,21 +181,21 @@ describe('Payments IPC Contract tests', () => {
     const getHandler = getHandlers()['payments:get']
 
     db.prepare(`
-      INSERT INTO children (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+      INSERT INTO students (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
       VALUES 
-        (20, 'طفل 20', 'ولي 20', '010', 'حضانة', 'شهر', 2000, '2026-01-01', '2026-06-06', '2026-06-06', 1),
-        (21, 'طفل 21', 'ولي 21', '011', 'حضانة', 'شهر', 1500, '2026-01-01', '2026-06-06', '2026-06-06', 1)
+        (20, 'طالب 20', 'ولي 20', '010', 'حضانة', 'شهر', 2000, '2026-01-01', '2026-06-06', '2026-06-06', 1),
+        (21, 'طالب 21', 'ولي 21', '011', 'حضانة', 'شهر', 1500, '2026-01-01', '2026-06-06', '2026-06-06', 1)
     `).run()
 
     db.prepare(`
-      INSERT INTO child_services (id, child_id, service, unit, price, created_at, updated_at)
+      INSERT INTO student_services (id, student_id, service, unit, price, created_at, updated_at)
       VALUES 
         (20, 20, 'حضانة', 'شهر', 2000, '2026-06-06', '2026-06-06'),
         (21, 21, 'حضانة', 'شهر', 1500, '2026-06-06', '2026-06-06')
     `).run()
 
     db.prepare(`
-      INSERT INTO payments (id, child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
+      INSERT INTO payments (id, student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
       VALUES 
         (200, 20, 20, 'يونيو', 2026, 'حضانة', 'شهر', 1, 2000, 2000, 500, 1500, 'partial', '2026-06-06', '2026-06-06', 1),
         (201, 21, 21, 'يونيو', 2026, 'حضانة', 'شهر', 1, 1500, 1500, 0, 1500, 'unpaid', '2026-06-06', '2026-06-06', 1)
@@ -222,11 +222,11 @@ describe('Payments IPC Contract tests', () => {
   describe('partial payments (installments)', () => {
     const seedPayment = (paid = 0, methodName: string | null = null) => {
       db.prepare(`
-        INSERT INTO children (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
-        VALUES (5, 'طفل أقساط', 'ولي', '010', 'حضانة', 'شهر', 3000, '2026-01-01', '2026-06-06', '2026-06-06', 1)
+        INSERT INTO students (id, name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+        VALUES (5, 'طالب أقساط', 'ولي', '010', 'حضانة', 'شهر', 3000, '2026-01-01', '2026-06-06', '2026-06-06', 1)
       `).run()
       db.prepare(`
-        INSERT INTO payments (id, child_id, month, year, service, unit, quantity, price, total, paid, balance, status, payment_method_name, created_at, updated_at, synced)
+        INSERT INTO payments (id, student_id, month, year, service, unit, quantity, price, total, paid, balance, status, payment_method_name, created_at, updated_at, synced)
         VALUES (500, 5, 'يونيو', 2026, 'حضانة', 'شهر', 1, 3000, 3000, ?, ?, ?, ?, '2026-06-06', '2026-06-06', 0)
       `).run(paid, 3000 - paid, paid >= 3000 ? 'paid' : paid > 0 ? 'partial' : 'unpaid', methodName)
     }

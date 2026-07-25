@@ -62,14 +62,14 @@ export default function SessionsList() {
 
   // Attendance sheet state
   const [viewingSessionId, setViewingSessionId] = useState<number | null>(null)
-  // Keyed by "childId:teacherId" (teacherId is "none" when the child has no teacher at all) —
-  // a child can appear more than once in `sheet` when they have multiple teachers across
-  // service enrollments, so child_id alone is no longer a unique key.
+  // Keyed by "studentId:teacherId" (teacherId is "none" when the student has no teacher at all) —
+  // a student can appear more than once in `sheet` when they have multiple teachers across
+  // service enrollments, so student_id alone is no longer a unique key.
   const [attendanceEdits, setAttendanceEdits] = useState<Record<string, { status: AttendanceStatus | null; excuse_notes: string; teacher_status: 'present' | 'absent' }>>({})
   const [isSavingAttendance, setIsSavingAttendance] = useState(false)
 
   // Today's auto-session detection
-  const [todayChildren, setTodayChildren] = useState<{ id: number; name: string }[]>([])
+  const [todayStudents, setTodayStudents] = useState<{ id: number; name: string }[]>([])
   const [isCreatingToday, setIsCreatingToday] = useState(false)
   const todayStr = new Date().toISOString().slice(0, 10)
   const todayDow = new Date().getDay()
@@ -77,7 +77,7 @@ export default function SessionsList() {
   useEffect(() => { fetchSessions(fromDate, toDate) }, [fromDate, toDate])
 
   useEffect(() => {
-    window.api.sessions.childrenForDay(todayDow).then(setTodayChildren).catch(() => {})
+    window.api.sessions.studentsForDay(todayDow).then(setTodayStudents).catch(() => { })
   }, [todayDow])
 
   const hasTodaySession = sessions.some(s => s.session_date === todayStr)
@@ -145,7 +145,7 @@ export default function SessionsList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  const editKey = (rec: AttendanceRecord) => `${rec.child_id}:${rec.teacher_id ?? 'none'}`
+  const editKey = (rec: AttendanceRecord) => `${rec.student_id}:${rec.teacher_id ?? 'none'}`
 
   const getEdit = (rec: AttendanceRecord) => attendanceEdits[editKey(rec)] || {
     status: rec.status as AttendanceStatus | null,
@@ -154,8 +154,8 @@ export default function SessionsList() {
   }
 
   // Live preview of what will actually be paid. `rec.teacher_session_rate` already carries the
-  // backend's full rate resolution (attendanceIPC.ts resolveTeacherSessionRate): this child's own
-  // rate override (salary type per child) → the teacher's own per-session rate → their assigned
+  // backend's full rate resolution (attendanceIPC.ts resolveTeacherSessionRate): this student's own
+  // rate override (salary type per student) → the teacher's own per-session rate → their assigned
   // salary type's session rate. No org-wide default anymore — a teacher with none of the above
   // configured just generates no payment, so misconfiguration is visible here too.
   const teacherPaymentPreview = (() => {
@@ -203,14 +203,14 @@ export default function SessionsList() {
     const records = sheet
       .map((rec) => {
         const edit = getEdit(rec)
-        return { child_id: rec.child_id, teacher_id: rec.teacher_id ?? null, status: edit.status, excuse_notes: edit.excuse_notes || undefined, teacher_status: edit.teacher_status }
+        return { student_id: rec.student_id, teacher_id: rec.teacher_id ?? null, status: edit.status, excuse_notes: edit.excuse_notes || undefined, teacher_status: edit.teacher_status }
       })
-      .filter((r): r is { child_id: number; teacher_id: number | null; status: AttendanceStatus; excuse_notes: string | undefined; teacher_status: 'present' | 'absent' } => r.status != null)
-    // (child, teacher) rows whose previously-saved status was cleared in the sheet — remove
+      .filter((r): r is { student_id: number; teacher_id: number | null; status: AttendanceStatus; excuse_notes: string | undefined; teacher_status: 'present' | 'absent' } => r.status != null)
+    // (student, teacher) rows whose previously-saved status was cleared in the sheet — remove
     // their records so they don't reappear as selected after saving.
     const clearedItems = sheet
       .filter((rec) => editKey(rec) in attendanceEdits && attendanceEdits[editKey(rec)].status == null && rec.status != null)
-      .map((rec) => ({ child_id: rec.child_id, teacher_id: rec.teacher_id ?? null }))
+      .map((rec) => ({ student_id: rec.student_id, teacher_id: rec.teacher_id ?? null }))
     const ok = await recordBulk(viewingSessionId, records)
     if (ok) {
       // Non-admins don't delete directly — the backend turns each cleared row into a pending
@@ -322,16 +322,16 @@ export default function SessionsList() {
       {error && <Alert variant="danger" onClose={clearError}>{error}</Alert>}
 
       {/* Today's session banner */}
-      {!hasTodaySession && todayChildren.length > 0 && (
+      {!hasTodaySession && todayStudents.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3">
           <div>
             <p className="font-semibold text-amber-800 text-sm">
               {isAr
-                ? `⚠️ لا توجد جلسة لليوم — ${todayChildren.length} طفل لديهم حصة اليوم`
-                : `⚠️ No session for today — ${todayChildren.length} child${todayChildren.length !== 1 ? 'ren' : ''} scheduled`}
+                ? `⚠️ لا توجد جلسة لليوم — ${todayStudents.length} طالب لديهم حصة اليوم`
+                : `⚠️ No session for today — ${todayStudents.length} student${todayStudents.length !== 1 ? 'ren' : ''} scheduled`}
             </p>
             <p className="text-xs text-amber-600 mt-0.5">
-              {todayChildren.map(c => c.name).join(' • ')}
+              {todayStudents.map(c => c.name).join(' • ')}
             </p>
           </div>
           <Button variant="primary" size="sm" isLoading={isCreatingToday} onClick={handleCreateTodaySession}>
@@ -424,8 +424,8 @@ export default function SessionsList() {
           <Input label={isAr ? 'ملاحظات' : 'Notes'} value={sessionNotes} onChange={(e) => setSessionNotes(e.target.value)} />
           <p className="text-xs text-slate-400">
             {isAr
-              ? '👩‍🏫 يتم ربط معلم كل طفل تلقائياً عند تسجيل حضوره — لا حاجة لتعيين المعلمين يدوياً.'
-              : '👩‍🏫 Each attending child\'s teacher is linked automatically when attendance is recorded — no manual assignment needed.'}
+              ? '👩‍🏫 يتم ربط معلم كل طالب تلقائياً عند تسجيل حضوره — لا حاجة لتعيين المعلمين يدوياً.'
+              : '👩‍🏫 Each attending student\'s teacher is linked automatically when attendance is recorded — no manual assignment needed.'}
           </p>
         </div>
       </Modal>
@@ -450,7 +450,7 @@ export default function SessionsList() {
       {(() => {
         const viewingSession = sessions.find(s => s.id === viewingSessionId)
         const viewingClosed = viewingSession ? sessionStatus(viewingSession.session_date) === 'closed' : false
-        // Teachers actually assigned to a child in this session's sheet — not every teacher in the system.
+        // Teachers actually assigned to a student in this session's sheet — not every teacher in the system.
         const sheetTeachers = (() => {
           const map = new Map<number, string>()
           for (const rec of sheet) {
@@ -464,205 +464,205 @@ export default function SessionsList() {
           if (!attendanceSearch) return true
           const searchLower = attendanceSearch.toLowerCase()
           return (
-            (rec.child_name && rec.child_name.toLowerCase().includes(searchLower)) ||
+            (rec.student_name && rec.student_name.toLowerCase().includes(searchLower)) ||
             (rec.teacher_name && rec.teacher_name.toLowerCase().includes(searchLower))
           )
         })
         return (
-      <Modal isOpen={!!viewingSessionId} onClose={() => setViewingSessionId(null)}
-        title={isAr ? 'كشف الحضور' : 'Attendance Sheet'}
-        footer={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setViewingSessionId(null)}>{isAr ? 'إغلاق' : 'Close'}</Button>
-            {!viewingClosed && (
-              <Button variant="primary" onClick={handleSaveAttendance} isLoading={isSavingAttendance}>{isAr ? 'حفظ الحضور' : 'Save Attendance'}</Button>
+          <Modal isOpen={!!viewingSessionId} onClose={() => setViewingSessionId(null)}
+            title={isAr ? 'كشف الحضور' : 'Attendance Sheet'}
+            footer={
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setViewingSessionId(null)}>{isAr ? 'إغلاق' : 'Close'}</Button>
+                {!viewingClosed && (
+                  <Button variant="primary" onClick={handleSaveAttendance} isLoading={isSavingAttendance}>{isAr ? 'حفظ الحضور' : 'Save Attendance'}</Button>
+                )}
+              </div>
+            }
+          >
+            {viewingClosed && (
+              <div className="mb-3 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-500">
+                🔒 {isAr ? 'هذه الجلسة مغلقة — تم إغلاقها تلقائياً بواسطة النظام. يمكن عرض الحضور فقط.' : 'This session is closed — auto-closed by the system. Attendance is view-only.'}
+              </div>
             )}
-          </div>
-        }
-      >
-        {viewingClosed && (
-          <div className="mb-3 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-500">
-            🔒 {isAr ? 'هذه الجلسة مغلقة — تم إغلاقها تلقائياً بواسطة النظام. يمكن عرض الحضور فقط.' : 'This session is closed — auto-closed by the system. Attendance is view-only.'}
-          </div>
-        )}
-        {/* Teacher payment banner — reflects the SAME rate resolution as the real payment
+            {/* Teacher payment banner — reflects the SAME rate resolution as the real payment
             engine (own rate → Settings default → none), so this preview can never disagree
             with what actually gets generated once Save is pressed. */}
-        {teacherPaymentPreview.credits.length > 0 ? (
-          <div className="mb-3 rounded-lg px-3 py-2 text-sm border bg-emerald-50 border-emerald-200 text-emerald-800">
-            <div className="font-semibold">💰 {isAr ? 'دفعات المعلمين المتوقعة لهذه الجلسة:' : 'Expected teacher payments for this session:'}</div>
-            <ul className="mt-1 space-y-0.5">
-              {teacherPaymentPreview.credits.map((c) => (
-                <li key={c.employee_id}>
-                  {c.name}: <span className="font-semibold">+{c.amount} {isAr ? 'ج.م' : 'EGP'}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className="mb-3 rounded-lg px-3 py-2 text-sm bg-slate-50 border border-slate-200 text-slate-600">
-            ℹ️ {teacherPaymentPreview.hasTeachers
-              ? (isAr ? 'لا يوجد دفعات متوقعة حتى الآن — سجّل حضور المعلم وحضور/غياب بدون عذر للطفل.' : 'No expected payments yet — mark the teacher present and the child attended/absent-without-excuse.')
-              : (isAr ? 'لا يوجد معلم معيّن لأي طفل في هذه الجلسة.' : 'No teacher is assigned to any child in this session.')}
-          </div>
-        )}
-        {sheetError && <Alert variant="danger" onClose={clearSheetError}>{sheetError}</Alert>}
-        {sheetLoading ? (
-          <p className="text-sm text-slate-400">{isAr ? 'جارٍ التحميل...' : 'Loading...'}</p>
-        ) : sheet.length === 0 ? (
-          <p className="text-sm text-slate-400">{isAr ? 'لا يوجد أطفال مسجلون في هذه الجلسة.' : 'No children enrolled for this session.'}</p>
-        ) : (
-          <div className="space-y-3">
-            <Input
-              placeholder={isAr ? 'البحث عن طفل أو معلم...' : 'Search child or teacher...'}
-              value={attendanceSearch}
-              onChange={(e) => setAttendanceSearch(e.target.value)}
-            />
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="flex-1">
-                <select
-                  value={teacherFilterId}
-                  onChange={(e) => setTeacherFilterId(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-sky-200"
-                >
-                  <option value="">{isAr ? 'كل المعلمين' : 'All teachers'}</option>
-                  {sheetTeachers.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+            {teacherPaymentPreview.credits.length > 0 ? (
+              <div className="mb-3 rounded-lg px-3 py-2 text-sm border bg-emerald-50 border-emerald-200 text-emerald-800">
+                <div className="font-semibold">💰 {isAr ? 'دفعات المعلمين المتوقعة لهذه الجلسة:' : 'Expected teacher payments for this session:'}</div>
+                <ul className="mt-1 space-y-0.5">
+                  {teacherPaymentPreview.credits.map((c) => (
+                    <li key={c.employee_id}>
+                      {c.name}: <span className="font-semibold">+{c.amount} {isAr ? 'ج.م' : 'EGP'}</span>
+                    </li>
                   ))}
-                </select>
+                </ul>
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap select-none">
-                <input
-                  type="checkbox"
-                  checked={attendanceHasTeacherOnly}
-                  onChange={(e) => setAttendanceHasTeacherOnly(e.target.checked)}
-                  className="rounded border-slate-300"
-                />
-                {isAr ? 'لديه معلم' : 'Has teacher'}
-              </label>
-            </div>
-            {filteredSheet.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">{isAr ? 'لا توجد نتائج مطابقة للبحث.' : 'No matching results found.'}</p>
             ) : (
-              filteredSheet.map((rec) => {
-                const edit = getEdit(rec)
-                const key = editKey(rec)
-                // Locked (feature 007, FR-011): the row already exists, and the current user
-                // isn't an admin — direct edits are blocked; only a "Request Edit" is offered.
-                const isLockedForMe = !!rec.locked && !isAdmin
-                const controlsDisabled = viewingClosed || isLockedForMe
-                return (
-                  <div key={key} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 p-3 border border-slate-100 rounded-lg">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/children/${rec.child_id}/statement`)}
-                      className="flex items-center gap-2 flex-1 text-start hover:opacity-75 transition-opacity"
-                    >
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                        {rec.child_photo_url
-                          ? <img src={rec.child_photo_url} alt={rec.child_name} className="w-full h-full object-cover" />
-                          : <span className="text-sm text-slate-300">🧒</span>
-                        }
-                      </div>
-                      <span className="flex flex-col">
-                        <span className="font-medium text-sm text-slate-800">{rec.child_name}</span>
-                        <span className="text-xs text-slate-400">
-                          {rec.teacher_name
-                            ? (rec.teacher_session_rate == null
-                                ? (isAr ? `⚠️ ${rec.teacher_name} — لا يوجد سعر جلسة محدد` : `⚠️ ${rec.teacher_name} — no session rate set`)
-                                : `👩‍🏫 ${rec.teacher_name}`)
-                            : (isAr ? '⚠️ لا يوجد معلم' : '⚠️ No teacher')}
-                        </span>
-                      </span>
-                    </button>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
-                        👩‍🏫 {isAr ? 'المعلم' : 'Teacher'}
-                      </span>
-                      <div className="flex gap-1">
-                        {(['present', 'absent'] as const).map((ts) => (
-                          <button
-                            key={ts}
-                            type="button"
-                            disabled={controlsDisabled}
-                            onClick={() => !controlsDisabled && setTeacherStatus(key, ts)}
-                            className={[
-                              'px-2 py-1 rounded text-xs font-medium border transition-all',
-                              controlsDisabled ? 'cursor-default opacity-70' : '',
-                              edit.teacher_status === ts
-                                ? ts === 'present' ? 'bg-sky-100 border-sky-400 text-sky-700' : 'bg-red-100 border-red-400 text-red-700'
-                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400'
-                            ].join(' ')}
-                          >
-                            {ts === 'present' ? (isAr ? 'حاضر' : 'Present') : (isAr ? 'غائب' : 'Absent')}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
-                        🧒 {isAr ? 'الطفل' : 'Child'}
-                      </span>
-                      <div className="flex gap-1">
-                        {(['attended', 'absent_excused', 'absent_unexcused'] as AttendanceStatus[]).map((status) => (
-                          <button
-                            key={status}
-                            type="button"
-                            disabled={controlsDisabled}
-                            onClick={() => !controlsDisabled && toggleStatus(key, status, edit.status)}
-                            className={[
-                              'px-2 py-1 rounded text-xs font-medium border transition-all',
-                              controlsDisabled ? 'cursor-default opacity-70' : '',
-                              edit.status === status
-                                ? status === 'attended' ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : status === 'absent_excused' ? 'bg-amber-100 border-amber-400 text-amber-700' : 'bg-red-100 border-red-400 text-red-700'
-                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400'
-                            ].join(' ')}
-                          >
-                            {statusLabel(status)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {edit.status === 'absent_excused' && (
-                      <input
-                        type="text"
-                        disabled={controlsDisabled}
-                        value={edit.excuse_notes}
-                        onChange={(e) => !controlsDisabled && setEdit(key, 'excuse_notes', e.target.value)}
-                        placeholder={isAr ? 'سبب الغياب بعذر...' : 'Reason...'}
-                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 disabled:bg-slate-50 disabled:cursor-default"
-                      />
-                    )}
-                    {rec.payment?.generated && (
-                      <span className="text-xs font-semibold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                        {isAr ? `💰 دفعة: ${rec.payment.amount ?? 0} ج.م` : `💰 Payment: ${rec.payment.amount ?? 0} EGP`}
-                      </span>
-                    )}
-                    {isLockedForMe && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-400">🔒 {isAr ? 'مقفل' : 'Locked'}</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditRequestTarget(rec)
-                            setEditRequestStatus((rec.status as AttendanceStatus) ?? 'attended')
-                            setEditRequestExcuseNotes(rec.excuse_notes || '')
-                            setEditRequestReason('')
-                            setEditRequestError('')
-                          }}
-                        >
-                          {isAr ? 'طلب تعديل' : 'Request Edit'}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })
+              <div className="mb-3 rounded-lg px-3 py-2 text-sm bg-slate-50 border border-slate-200 text-slate-600">
+                ℹ️ {teacherPaymentPreview.hasTeachers
+                  ? (isAr ? 'لا يوجد دفعات متوقعة حتى الآن — سجّل حضور المعلم وحضور/غياب بدون عذر للطالب.' : 'No expected payments yet — mark the teacher present and the student attended/absent-without-excuse.')
+                  : (isAr ? 'لا يوجد معلم معيّن لأي طالب في هذه الجلسة.' : 'No teacher is assigned to any student in this session.')}
+              </div>
             )}
-          </div>
-        )}
-      </Modal>
+            {sheetError && <Alert variant="danger" onClose={clearSheetError}>{sheetError}</Alert>}
+            {sheetLoading ? (
+              <p className="text-sm text-slate-400">{isAr ? 'جارٍ التحميل...' : 'Loading...'}</p>
+            ) : sheet.length === 0 ? (
+              <p className="text-sm text-slate-400">{isAr ? 'لا يوجد طلاب مسجلون في هذه الجلسة.' : 'No students enrolled for this session.'}</p>
+            ) : (
+              <div className="space-y-3">
+                <Input
+                  placeholder={isAr ? 'البحث عن طالب أو معلم...' : 'Search student or teacher...'}
+                  value={attendanceSearch}
+                  onChange={(e) => setAttendanceSearch(e.target.value)}
+                />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="flex-1">
+                    <select
+                      value={teacherFilterId}
+                      onChange={(e) => setTeacherFilterId(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    >
+                      <option value="">{isAr ? 'كل المعلمين' : 'All teachers'}</option>
+                      {sheetTeachers.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap select-none">
+                    <input
+                      type="checkbox"
+                      checked={attendanceHasTeacherOnly}
+                      onChange={(e) => setAttendanceHasTeacherOnly(e.target.checked)}
+                      className="rounded border-slate-300"
+                    />
+                    {isAr ? 'لديه معلم' : 'Has teacher'}
+                  </label>
+                </div>
+                {filteredSheet.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">{isAr ? 'لا توجد نتائج مطابقة للبحث.' : 'No matching results found.'}</p>
+                ) : (
+                  filteredSheet.map((rec) => {
+                    const edit = getEdit(rec)
+                    const key = editKey(rec)
+                    // Locked (feature 007, FR-011): the row already exists, and the current user
+                    // isn't an admin — direct edits are blocked; only a "Request Edit" is offered.
+                    const isLockedForMe = !!rec.locked && !isAdmin
+                    const controlsDisabled = viewingClosed || isLockedForMe
+                    return (
+                      <div key={key} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 p-3 border border-slate-100 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/students/${rec.student_id}/statement`)}
+                          className="flex items-center gap-2 flex-1 text-start hover:opacity-75 transition-opacity"
+                        >
+                          <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                            {rec.student_photo_url
+                              ? <img src={rec.student_photo_url} alt={rec.student_name} className="w-full h-full object-cover" />
+                              : <span className="text-sm text-slate-300">🧒</span>
+                            }
+                          </div>
+                          <span className="flex flex-col">
+                            <span className="font-medium text-sm text-slate-800">{rec.student_name}</span>
+                            <span className="text-xs text-slate-400">
+                              {rec.teacher_name
+                                ? (rec.teacher_session_rate == null
+                                  ? (isAr ? `⚠️ ${rec.teacher_name} — لا يوجد سعر جلسة محدد` : `⚠️ ${rec.teacher_name} — no session rate set`)
+                                  : `👩‍🏫 ${rec.teacher_name}`)
+                                : (isAr ? '⚠️ لا يوجد معلم' : '⚠️ No teacher')}
+                            </span>
+                          </span>
+                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
+                            👩‍🏫 {isAr ? 'المعلم' : 'Teacher'}
+                          </span>
+                          <div className="flex gap-1">
+                            {(['present', 'absent'] as const).map((ts) => (
+                              <button
+                                key={ts}
+                                type="button"
+                                disabled={controlsDisabled}
+                                onClick={() => !controlsDisabled && setTeacherStatus(key, ts)}
+                                className={[
+                                  'px-2 py-1 rounded text-xs font-medium border transition-all',
+                                  controlsDisabled ? 'cursor-default opacity-70' : '',
+                                  edit.teacher_status === ts
+                                    ? ts === 'present' ? 'bg-sky-100 border-sky-400 text-sky-700' : 'bg-red-100 border-red-400 text-red-700'
+                                    : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400'
+                                ].join(' ')}
+                              >
+                                {ts === 'present' ? (isAr ? 'حاضر' : 'Present') : (isAr ? 'غائب' : 'Absent')}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
+                            🧒 {isAr ? 'الطالب' : 'Student'}
+                          </span>
+                          <div className="flex gap-1">
+                            {(['attended', 'absent_excused', 'absent_unexcused'] as AttendanceStatus[]).map((status) => (
+                              <button
+                                key={status}
+                                type="button"
+                                disabled={controlsDisabled}
+                                onClick={() => !controlsDisabled && toggleStatus(key, status, edit.status)}
+                                className={[
+                                  'px-2 py-1 rounded text-xs font-medium border transition-all',
+                                  controlsDisabled ? 'cursor-default opacity-70' : '',
+                                  edit.status === status
+                                    ? status === 'attended' ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : status === 'absent_excused' ? 'bg-amber-100 border-amber-400 text-amber-700' : 'bg-red-100 border-red-400 text-red-700'
+                                    : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400'
+                                ].join(' ')}
+                              >
+                                {statusLabel(status)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {edit.status === 'absent_excused' && (
+                          <input
+                            type="text"
+                            disabled={controlsDisabled}
+                            value={edit.excuse_notes}
+                            onChange={(e) => !controlsDisabled && setEdit(key, 'excuse_notes', e.target.value)}
+                            placeholder={isAr ? 'سبب الغياب بعذر...' : 'Reason...'}
+                            className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 disabled:bg-slate-50 disabled:cursor-default"
+                          />
+                        )}
+                        {rec.payment?.generated && (
+                          <span className="text-xs font-semibold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                            {isAr ? `💰 دفعة: ${rec.payment.amount ?? 0} ج.م` : `💰 Payment: ${rec.payment.amount ?? 0} EGP`}
+                          </span>
+                        )}
+                        {isLockedForMe && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-slate-400">🔒 {isAr ? 'مقفل' : 'Locked'}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditRequestTarget(rec)
+                                setEditRequestStatus((rec.status as AttendanceStatus) ?? 'attended')
+                                setEditRequestExcuseNotes(rec.excuse_notes || '')
+                                setEditRequestReason('')
+                                setEditRequestError('')
+                              }}
+                            >
+                              {isAr ? 'طلب تعديل' : 'Request Edit'}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </Modal>
         )
       })()}
 
@@ -706,8 +706,8 @@ export default function SessionsList() {
           {editRequestError && <Alert variant="danger" onClose={() => setEditRequestError('')}>{editRequestError}</Alert>}
           <p className="text-sm text-slate-600">
             {isAr
-              ? `${editRequestTarget?.child_name} — الحالة الحالية: ${editRequestTarget ? statusLabel(editRequestTarget.status) : ''}`
-              : `${editRequestTarget?.child_name} — current status: ${editRequestTarget ? statusLabel(editRequestTarget.status) : ''}`}
+              ? `${editRequestTarget?.student_name} — الحالة الحالية: ${editRequestTarget ? statusLabel(editRequestTarget.status) : ''}`
+              : `${editRequestTarget?.student_name} — current status: ${editRequestTarget ? statusLabel(editRequestTarget.status) : ''}`}
           </p>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-500">{isAr ? 'الحالة المطلوبة' : 'Requested status'}</label>

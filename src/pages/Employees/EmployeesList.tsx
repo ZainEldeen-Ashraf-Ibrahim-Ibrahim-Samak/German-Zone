@@ -68,7 +68,7 @@ export default function EmployeesList() {
   const [formError, setFormError] = useState('')
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
 
-  // Live forecast for the current payroll period (feature: salary type per child) — what this
+  // Live forecast for the current payroll period (feature: salary type per student) — what this
   // employee has already earned this month plus a projection for their remaining scheduled
   // sessions. Read-only, computed on the fly; only meaningful for an existing employee.
   const [expectedSalary, setExpectedSalary] = useState<{ actual_to_date: number; projected_remaining: number; expected_total: number } | null>(null)

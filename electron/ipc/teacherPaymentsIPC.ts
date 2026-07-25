@@ -6,17 +6,17 @@ ipcMain.handle('teacherPayments:list', async (_event, filters) => {
   try {
     requireAdmin()
     const db = getDb()
-    const { teacher_id, child_id, month, year } = filters || {}
+    const { teacher_id, student_id, month, year } = filters || {}
     let query = `
-      SELECT tp.*, e.name as teacher_name, c.name as child_name
+      SELECT tp.*, e.name as teacher_name, c.name as student_name
       FROM teacher_payments tp
       JOIN employees e ON tp.teacher_id = e.id
-      JOIN children c ON tp.child_id = c.id
+      JOIN students c ON tp.student_id = c.id
       WHERE 1=1
     `
     const params: any[] = []
     if (teacher_id) { query += ' AND tp.teacher_id = ?'; params.push(teacher_id) }
-    if (child_id) { query += ' AND tp.child_id = ?'; params.push(child_id) }
+    if (student_id) { query += ' AND tp.student_id = ?'; params.push(student_id) }
     if (month && year) {
       const mm = String(month).padStart(2, '0')
       query += ' AND strftime(\'%Y-%m\', tp.attendance_date) = ?'

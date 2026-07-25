@@ -6,12 +6,12 @@ import { seedDatabase } from '../../electron/db/seed.js'
 // Mock Electron modules
 vi.mock('electron', () => {
   const handlers: Record<string, Function> = {};
-  (globalThis as any).__childrenHandlers = handlers
+  (globalThis as any).__studentsHandlers = handlers
 
   return {
     ipcMain: {
       handle: (channel: string, callback: Function) => {
-        ;(globalThis as any).__childrenHandlers[channel] = callback
+        ;(globalThis as any).__studentsHandlers[channel] = callback
       }
     },
     app: {
@@ -21,12 +21,12 @@ vi.mock('electron', () => {
 })
 
 // Import files to register handlers and manipulate session
-import '../../electron/ipc/childrenIPC.js'
+import '../../electron/ipc/studentsIPC.js'
 import { setCurrentUser } from '../../electron/ipc/authIPC.js'
 
-describe('Children IPC Contract tests', () => {
+describe('Students IPC Contract tests', () => {
   let db: any
-  const getHandlers = () => (globalThis as any).__childrenHandlers
+  const getHandlers = () => (globalThis as any).__studentsHandlers
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test'
@@ -36,8 +36,8 @@ describe('Children IPC Contract tests', () => {
   })
 
   beforeEach(() => {
-    // Clear children table before each test
-    db.prepare('DELETE FROM children').run()
+    // Clear students table before each test
+    db.prepare('DELETE FROM students').run()
     setCurrentUser(null)
   })
 
@@ -49,17 +49,17 @@ describe('Children IPC Contract tests', () => {
     setCurrentUser({ id: 2, username: 'emp1', role: 'employee', is_active: 1 })
   }
 
-  it('should allow anyone to read children list', async () => {
-    const getHandler = getHandlers()['children:get']
+  it('should allow anyone to read students list', async () => {
+    const getHandler = getHandlers()['students:get']
     expect(getHandler).toBeDefined()
 
-    // Add a child directly to DB
-    const insertChild = db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
-      VALUES ('طفل 1', 'ولي الأمر 1', '01000000000', 'حضانة', 'شهر', 2500, '2026-06-01', '2026-06-06T00:00:00Z', '2026-06-06T00:00:00Z', 1)
+    // Add a student directly to DB
+    const insertStudent = db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+      VALUES ('طالب 1', 'ولي الأمر 1', '01000000000', 'حضانة', 'شهر', 2500, '2026-06-01', '2026-06-06T00:00:00Z', '2026-06-06T00:00:00Z', 1)
     `).run()
-    db.prepare(`INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
-      insertChild.lastInsertRowid, 'حضانة', 'شهر', 2500, '2026-06-06T00:00:00Z', '2026-06-06T00:00:00Z'
+    db.prepare(`INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
+      insertStudent.lastInsertRowid, 'حضانة', 'شهر', 2500, '2026-06-06T00:00:00Z', '2026-06-06T00:00:00Z'
     )
 
     // Read as anonymous
@@ -69,7 +69,7 @@ describe('Children IPC Contract tests', () => {
     employeeSession()
     let list = await getHandler(null, {})
     expect(list.length).toBe(1)
-    expect(list[0].name).toBe('طفل 1')
+    expect(list[0].name).toBe('طالب 1')
 
     // Read as admin
     adminSession()
@@ -77,13 +77,13 @@ describe('Children IPC Contract tests', () => {
     expect(list.length).toBe(1)
   })
 
-  it('should allow employees to add children (feature 004, FR-012)', async () => {
-    const addHandler = getHandlers()['children:add']
+  it('should allow employees to add students (feature 004, FR-012)', async () => {
+    const addHandler = getHandlers()['students:add']
     expect(addHandler).toBeDefined()
 
     employeeSession()
     const created = await addHandler(null, {
-      name: 'طفل جديد',
+      name: 'طالب جديد',
       guardian: 'ولي أمر',
       guardian_phone: '01000000000',
       service: 'جلسة',
@@ -92,14 +92,14 @@ describe('Children IPC Contract tests', () => {
       reg_date: '2026-06-06'
     })
     expect(created.id).toBeDefined()
-    expect(created.name).toBe('طفل جديد')
+    expect(created.name).toBe('طالب جديد')
   })
 
-  it('should allow admins to add children and apply dates/defaults', async () => {
-    const addHandler = getHandlers()['children:add']
+  it('should allow admins to add students and apply dates/defaults', async () => {
+    const addHandler = getHandlers()['students:add']
     
     adminSession()
-    const childInput = {
+    const studentInput = {
       name: 'أحمد علي',
       guardian: 'علي أحمد',
       guardian_phone: '01111111111',
@@ -110,7 +110,7 @@ describe('Children IPC Contract tests', () => {
       notes: 'لا توجد ملاحظات'
     }
 
-    const created = await addHandler(null, childInput)
+    const created = await addHandler(null, studentInput)
     expect(created.id).toBeDefined()
     expect(created.name).toBe('أحمد علي')
     expect(created.is_active).toBe(1)
@@ -119,25 +119,25 @@ describe('Children IPC Contract tests', () => {
     expect(created.synced).toBe(0)
   })
 
-  it('should support search and status filters in children:get', async () => {
-    const getHandler = getHandlers()['children:get']
+  it('should support search and status filters in students:get', async () => {
+    const getHandler = getHandlers()['students:get']
     
-    // Seed test children
-    // Seed test children
-    const child1 = db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+    // Seed test students
+    // Seed test students
+    const student1 = db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
       VALUES ('محمد مصطفى', 'مصطفى', '0101', 'حضانة', 'شهر', 2500, '2026-06-01', '2026-06-06', '2026-06-06', 1)
     `).run()
-    db.prepare(`INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
-      child1.lastInsertRowid, 'حضانة', 'شهر', 2500, '2026-06-06', '2026-06-06'
+    db.prepare(`INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
+      student1.lastInsertRowid, 'حضانة', 'شهر', 2500, '2026-06-06', '2026-06-06'
     )
 
-    const child2 = db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+    const student2 = db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
       VALUES ('كريم أحمد', 'أحمد', '0102', 'جلسة', 'جلسة', 100, '2026-06-01', '2026-06-06', '2026-06-06', 0)
     `).run()
-    db.prepare(`INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
-      child2.lastInsertRowid, 'جلسة', 'جلسة', 100, '2026-06-06', '2026-06-06'
+    db.prepare(`INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
+      student2.lastInsertRowid, 'جلسة', 'جلسة', 100, '2026-06-06', '2026-06-06'
     )
 
     employeeSession()

@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
  * Baseline is FIXED at 8 sessions regardless of month length (clarification);
  * month-length variation is handled by manual extra lessons.
  * fee = (sessions_baseline + extra_lessons) * session_price.
- * Mirrors buildLessonFields() in electron/ipc/childrenIPC.ts.
+ * Mirrors buildLessonFields() in electron/ipc/studentsIPC.ts.
  */
 function monthlyFee(sessionsBaseline: number, extraLessons: number, sessionPrice: number): number {
   return Number(((sessionsBaseline + extraLessons) * sessionPrice).toFixed(2))

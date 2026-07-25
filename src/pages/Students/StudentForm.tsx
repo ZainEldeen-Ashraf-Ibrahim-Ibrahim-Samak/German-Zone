@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useChildrenStore } from '../../store/useChildrenStore.js'
+import { useStudentsStore } from '../../store/useStudentsStore.js'
 import { useServiceDefinitionsStore } from '../../store/useServiceDefinitionsStore.js'
 import { Button } from '../../components/ui/Button.js'
 import { Input } from '../../components/ui/Input.js'
@@ -14,7 +14,7 @@ import type { ServiceType, UnitType, Teacher } from '../../types/index.js'
 
 
 interface ServiceRow {
-  id?: number // child_services.id (present in edit mode)
+  id?: number // student_services.id (present in edit mode)
   service: ServiceType
   unit: UnitType
   price: number
@@ -22,7 +22,7 @@ interface ServiceRow {
   lesson_days: number[]
   extra_lessons: number
   session_price: number
-  // Per-child override of the teacher's per-session pay rate ("salary type per child"). Falls
+  // Per-student override of the teacher's per-session pay rate ("salary type per student"). Falls
   // back to the teacher's own rate, then their salary type's rate, when left blank.
   teacher_session_rate: number | ''
 }
@@ -105,13 +105,13 @@ function ScopedTeacherSelect({
   )
 }
 
-export default function ChildForm() {
+export default function StudentForm() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const isEdit = !!id
 
-  const { addChild, updateChild, fetchChildren, error, clearError } = useChildrenStore()
+  const { addStudent, updateStudent, fetchStudents, error, clearError } = useStudentsStore()
   const { fetchServices, services: serviceDefs } = useServiceDefinitionsStore()
 
   // Form states
@@ -119,7 +119,7 @@ export default function ChildForm() {
     name: '',
     guardian: '',
     guardian_phone: '',
-    child_phone: '',
+    student_phone: '',
     national_id: '',
     reg_date: new Date().toISOString().split('T')[0],
     notes: '',
@@ -133,7 +133,7 @@ export default function ChildForm() {
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   // Starts true in edit mode so the load effect never has to set it synchronously.
-  const [isLoadingChild, setIsLoadingChild] = useState(isEdit)
+  const [isLoadingStudent, setIsLoadingStudent] = useState(isEdit)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitStep, setSubmitStep] = useState<'idle' | 'uploading' | 'saving'>('idle')
   const [photoNotice, setPhotoNotice] = useState<string | null>(null)
@@ -198,76 +198,76 @@ export default function ChildForm() {
     loadTeachers()
   }, [])
 
-  // If in edit mode, load the child record
+  // If in edit mode, load the student record
   useEffect(() => {
     if (isEdit) {
-      const loadChild = async () => {
-        // Read from the store snapshot at call time (not a subscribed `children` prop) so this
-        // effect doesn't need `children` as a dependency — re-running it on every store refresh
+      const loadStudent = async () => {
+        // Read from the store snapshot at call time (not a subscribed `students` prop) so this
+        // effect doesn't need `students` as a dependency — re-running it on every store refresh
         // would clobber in-progress form edits.
-        let child = useChildrenStore.getState().children.find((c) => c.id === Number(id))
-        if (!child) {
-          await fetchChildren()
-          const currentStore = useChildrenStore.getState()
-          child = currentStore.children.find((c) => c.id === Number(id))
+        let student = useStudentsStore.getState().students.find((c) => c.id === Number(id))
+        if (!student) {
+          await fetchStudents()
+          const currentStore = useStudentsStore.getState()
+          student = currentStore.students.find((c) => c.id === Number(id))
         }
 
-        if (child) {
-          const loadedServices: ServiceRow[] = child.services && child.services.length > 0
-            ? child.services.map((s: any) => {
-                let days: number[] = []
-                if (Array.isArray(s.lesson_days)) days = s.lesson_days as number[]
-                else if (typeof s.lesson_days === 'string' && s.lesson_days) {
-                  try { days = JSON.parse(s.lesson_days) } catch { days = [] }
-                }
-                return {
-                  id: s.id,
-                  service: s.service,
-                  unit: s.unit,
-                  price: s.price,
-                  teacher_id: s.teacher_id != null ? String(s.teacher_id) : '',
-                  lesson_days: days,
-                  extra_lessons: s.extra_lessons ?? 0,
-                  session_price: s.session_price ?? 0,
-                  teacher_session_rate: s.teacher_session_rate ?? '',
-                }
-              })
+        if (student) {
+          const loadedServices: ServiceRow[] = student.services && student.services.length > 0
+            ? student.services.map((s: any) => {
+              let days: number[] = []
+              if (Array.isArray(s.lesson_days)) days = s.lesson_days as number[]
+              else if (typeof s.lesson_days === 'string' && s.lesson_days) {
+                try { days = JSON.parse(s.lesson_days) } catch { days = [] }
+              }
+              return {
+                id: s.id,
+                service: s.service,
+                unit: s.unit,
+                price: s.price,
+                teacher_id: s.teacher_id != null ? String(s.teacher_id) : '',
+                lesson_days: days,
+                extra_lessons: s.extra_lessons ?? 0,
+                session_price: s.session_price ?? 0,
+                teacher_session_rate: s.teacher_session_rate ?? '',
+              }
+            })
             : [{
-                id: undefined,
-                service: child.service,
-                unit: child.unit,
-                price: child.price,
-                teacher_id: child.teacher_id != null ? String(child.teacher_id) : '',
-                lesson_days: (() => {
-                  if (Array.isArray(child.lesson_days)) return child.lesson_days as number[]
-                  if (typeof child.lesson_days === 'string' && child.lesson_days) {
-                    try { return JSON.parse(child.lesson_days) } catch { return [] }
-                  }
-                  return []
-                })(),
-                extra_lessons: child.extra_lessons ?? 0,
-                session_price: child.session_price ?? 0,
-                teacher_session_rate: '',
-              }]
+              id: undefined,
+              service: student.service,
+              unit: student.unit,
+              price: student.price,
+              teacher_id: student.teacher_id != null ? String(student.teacher_id) : '',
+              lesson_days: (() => {
+                if (Array.isArray(student.lesson_days)) return student.lesson_days as number[]
+                if (typeof student.lesson_days === 'string' && student.lesson_days) {
+                  try { return JSON.parse(student.lesson_days) } catch { return [] }
+                }
+                return []
+              })(),
+              extra_lessons: student.extra_lessons ?? 0,
+              session_price: student.session_price ?? 0,
+              teacher_session_rate: '',
+            }]
 
           setFormData({
-            name: child.name,
-            guardian: child.guardian,
-            guardian_phone: child.guardian_phone,
-            child_phone: child.child_phone || '',
-            national_id: child.national_id || '',
-            reg_date: child.reg_date,
-            notes: child.notes || '',
+            name: student.name,
+            guardian: student.guardian,
+            guardian_phone: student.guardian_phone,
+            student_phone: student.student_phone || '',
+            national_id: student.national_id || '',
+            reg_date: student.reg_date,
+            notes: student.notes || '',
             services: loadedServices,
           })
-          setPhoto(child.photo_url || null)
+          setPhoto(student.photo_url || null)
           setPhotoChanged(false)
         }
-        setIsLoadingChild(false)
+        setIsLoadingStudent(false)
       }
-      loadChild()
+      loadStudent()
     }
-  }, [id, isEdit, fetchChildren])
+  }, [id, isEdit, fetchStudents])
 
   // A session-type service ("جلسة") should default to its per-session (hourly) price, not
   // whichever other price field (monthly/daily) also happens to be set on its
@@ -368,7 +368,7 @@ export default function ChildForm() {
   const validateForm = () => {
     const errors: Record<string, string> = {}
 
-    if (!formData.name.trim()) errors.name = i18n.language === 'ar' ? 'اسم الطفل مطلوب' : 'Child name is required'
+    if (!formData.name.trim()) errors.name = i18n.language === 'ar' ? 'اسم الطالب مطلوب' : 'Student name is required'
     if (!formData.guardian.trim()) errors.guardian = i18n.language === 'ar' ? 'اسم ولي الأمر مطلوب' : 'Guardian name is required'
     if (!formData.guardian_phone.trim()) {
       errors.guardian_phone = i18n.language === 'ar' ? 'رقم هاتف ولي الأمر مطلوب' : 'Guardian phone is required'
@@ -377,8 +377,8 @@ export default function ChildForm() {
         ? 'رقم هاتف غير صالح (مثال: 01012345678 أو +201012345678)'
         : 'Invalid phone format (e.g., 01012345678 or +201012345678)'
     }
-    if (formData.child_phone.trim() && !GUARDIAN_PHONE_RE.test(formData.child_phone.trim())) {
-      errors.child_phone = i18n.language === 'ar'
+    if (formData.student_phone.trim() && !GUARDIAN_PHONE_RE.test(formData.student_phone.trim())) {
+      errors.student_phone = i18n.language === 'ar'
         ? 'رقم هاتف غير صالح (مثال: 01012345678 أو +201012345678)'
         : 'Invalid phone format (e.g., 01012345678 or +201012345678)'
     }
@@ -413,12 +413,12 @@ export default function ChildForm() {
     setFormData((prev) => ({ ...prev, guardian_phone: finalVal.slice(0, 13) }))
   }
 
-  const handleChildPhoneChange = (raw: string) => {
+  const handleStudentPhoneChange = (raw: string) => {
     const cleaned = raw.replace(/[^\d+]/g, '')
     const startsWithPlus = cleaned.startsWith('+')
     const digitsOnly = cleaned.replace(/\+/g, '')
     const finalVal = (startsWithPlus ? '+' : '') + digitsOnly.slice(0, 12)
-    setFormData((prev) => ({ ...prev, child_phone: finalVal.slice(0, 13) }))
+    setFormData((prev) => ({ ...prev, student_phone: finalVal.slice(0, 13) }))
   }
 
   // Handle Form Submit
@@ -454,13 +454,13 @@ export default function ChildForm() {
         }
       }
 
-      // Step 2: save child record
+      // Step 2: save student record
       setSubmitStep('saving')
       const payload: any = {
         name: formData.name.trim(),
         guardian: formData.guardian.trim(),
         guardian_phone: formData.guardian_phone.trim(),
-        child_phone: formData.child_phone.trim() || null,
+        student_phone: formData.student_phone.trim() || null,
         national_id: formData.national_id.trim() || null,
         reg_date: formData.reg_date,
         notes: formData.notes.trim() || null,
@@ -489,10 +489,10 @@ export default function ChildForm() {
 
       let saved = false
       if (isEdit) {
-        const result = await updateChild(Number(id), payload)
+        const result = await updateStudent(Number(id), payload)
         if (result) saved = true
       } else {
-        const result = await addChild(payload)
+        const result = await addStudent(payload)
         if (result) saved = true
       }
 
@@ -502,17 +502,17 @@ export default function ChildForm() {
           setPhotoNotice(i18n.language === 'ar' ? 'فشل رفع الصورة — تم الحفظ محلياً' : 'Photo upload failed — saved locally')
           await new Promise(resolve => setTimeout(resolve, 2000))
         }
-        navigate('/children')
+        navigate('/students')
       }
     } catch (err) {
-      console.error('Submit child failed:', err)
+      console.error('Submit student failed:', err)
     } finally {
       setIsSubmitting(false)
       setSubmitStep('idle')
     }
   }
 
-  if (isLoadingChild) {
+  if (isLoadingStudent) {
     return (
       <div className="flex items-center justify-center min-h-100">
         <svg className="animate-spin h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24">
@@ -532,9 +532,9 @@ export default function ChildForm() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">
-          {isEdit ? t('edit_child') : t('add_child')}
+          {isEdit ? t('edit_student') : t('add_student')}
         </h1>
-        <Button variant="outline" onClick={() => navigate('/children')}>
+        <Button variant="outline" onClick={() => navigate('/students')}>
           {t('back_to_list')}
         </Button>
       </div>
@@ -562,13 +562,13 @@ export default function ChildForm() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700">
-                {t('child_name')} <span className="text-red-500">*</span>
+                {t('student_name')} <span className="text-red-500">*</span>
               </label>
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 error={formErrors.name}
-                placeholder={i18n.language === 'ar' ? 'أدخل اسم الطفل كاملاً' : 'Enter child\'s full name'}
+                placeholder={i18n.language === 'ar' ? 'أدخل اسم الطالب كاملاً' : 'Enter student\'s full name'}
               />
             </div>
 
@@ -600,15 +600,15 @@ export default function ChildForm() {
 
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700">
-                {t('child_phone')} <span className="text-xs text-slate-400 font-normal">({t('optional')})</span>
+                {t('student_phone')} <span className="text-xs text-slate-400 font-normal">({t('optional')})</span>
               </label>
               <Input
-                value={formData.child_phone}
-                onChange={(e) => handleChildPhoneChange(e.target.value)}
-                error={formErrors.child_phone}
+                value={formData.student_phone}
+                onChange={(e) => handleStudentPhoneChange(e.target.value)}
+                error={formErrors.student_phone}
                 inputMode="tel"
                 maxLength={13}
-                placeholder={t('child_phone_placeholder')}
+                placeholder={t('student_phone_placeholder')}
               />
             </div>
 
@@ -621,7 +621,7 @@ export default function ChildForm() {
                 onChange={(e) => setFormData((prev) => ({ ...prev, national_id: e.target.value }))}
                 error={formErrors.national_id}
                 maxLength={14}
-                placeholder={i18n.language === 'ar' ? 'الرقم القومي للطفل' : 'National ID'}
+                placeholder={i18n.language === 'ar' ? 'الرقم القومي للطالب' : 'National ID'}
               />
             </div>
 
@@ -758,14 +758,14 @@ export default function ChildForm() {
                         </div>
                       </div>
 
-                      {/* Row 2b: Salary type per child — overrides what THIS teacher earns for
-                          THIS child specifically (separate from session_price, which is what the
+                      {/* Row 2b: Salary type per student — overrides what THIS teacher earns for
+                          THIS student specifically (separate from session_price, which is what the
                           family is billed). Only meaningful once a teacher is assigned. */}
                       {row.teacher_id && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-slate-500">
-                              {ar ? 'تكلفة الجلسة لهذا المعلم (اختياري)' : "Teacher's Rate For This Child (optional)"}
+                              {ar ? 'تكلفة الجلسة لهذا المعلم (اختياري)' : "Teacher's Rate For This Student (optional)"}
                             </label>
                             <Input
                               type="number"
@@ -789,11 +789,10 @@ export default function ChildForm() {
                                 type="button"
                                 key={key}
                                 onClick={() => toggleServiceLessonDay(index, dayIdx)}
-                                className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                                  active
+                                className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${active
                                     ? 'bg-primary text-white border-primary'
                                     : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                                }`}
+                                  }`}
                               >
                                 {t(`days.${key}`)}
                               </button>
@@ -851,7 +850,7 @@ export default function ChildForm() {
               {i18n.language === 'ar' ? 'جارٍ الحفظ...' : 'Saving...'}
             </span>
           )}
-          <Button type="button" variant="outline" onClick={() => navigate('/children')} disabled={isSubmitting}>
+          <Button type="button" variant="outline" onClick={() => navigate('/students')} disabled={isSubmitting}>
             {t('cancel')}
           </Button>
           <Button type="submit" variant="primary" isLoading={isSubmitting}>

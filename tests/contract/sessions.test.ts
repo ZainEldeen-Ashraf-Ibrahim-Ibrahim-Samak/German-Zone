@@ -58,13 +58,13 @@ describe('sessions IPC contract', () => {
   it('sessions:delete cascades attendance records', async () => {
     const db = getDb()
     const now = new Date().toISOString()
-    const child = db.prepare(
-      "INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, is_active, created_at, updated_at) VALUES ('Cascade Kid', 'G', '0', 'svc', 'u', 0, ?, 1, ?, ?)"
+    const student = db.prepare(
+      "INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, is_active, created_at, updated_at) VALUES ('Cascade Kid', 'G', '0', 'svc', 'u', 0, ?, 1, ?, ?)"
     ).run(now, now, now)
     const sess = await h()['sessions:add']({}, { session_date: '2026-06-26' })
     db.prepare(
-      "INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at) VALUES (?, ?, 'attended', ?, ?)"
-    ).run(sess.id, Number(child.lastInsertRowid), now, now)
+      "INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at) VALUES (?, ?, 'attended', ?, ?)"
+    ).run(sess.id, Number(student.lastInsertRowid), now, now)
 
     const result = await h()['sessions:delete']({}, { id: sess.id })
     expect(result.ok).toBe(true)
@@ -88,30 +88,30 @@ describe('sessions IPC contract', () => {
       employeeId = Number(emp.lastInsertRowid)
     })
 
-    const makeSessionWithChild = async (date: string) => {
+    const makeSessionWithStudent = async (date: string) => {
       const db = getDb()
       const sess = await h()['sessions:add']({}, { session_date: date, employee_ids: [employeeId] })
-      const child = db.prepare(
-        "INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, is_active, created_at, updated_at) VALUES ('Kid', 'G', '0', 'svc', 'u', 0, ?, 1, ?, ?)"
+      const student = db.prepare(
+        "INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, is_active, created_at, updated_at) VALUES ('Kid', 'G', '0', 'svc', 'u', 0, ?, 1, ?, ?)"
       ).run(now, now, now)
-      return { sessionId: sess.id, childId: Number(child.lastInsertRowid) }
+      return { sessionId: sess.id, studentId: Number(student.lastInsertRowid) }
     }
 
-    it('credits per-session salary when a child attended', async () => {
-      const { sessionId, childId } = await makeSessionWithChild('2026-08-01')
+    it('credits per-session salary when a student attended', async () => {
+      const { sessionId, studentId } = await makeSessionWithStudent('2026-08-01')
       getDb().prepare(
-        "INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at) VALUES (?, ?, 'attended', ?, ?)"
-      ).run(sessionId, childId, now, now)
+        "INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at) VALUES (?, ?, 'attended', ?, ?)"
+      ).run(sessionId, studentId, now, now)
       const res = await h()['sessions:salaryCredit']({}, { session_id: sessionId })
       expect(res.payable).toBe(true)
       expect(res.credits).toEqual([{ employee_id: employeeId, name: 'Teacher Ahmed', amount: 150 }])
     })
 
     it('is not payable when the only attendance is excused, but still lists the teacher', async () => {
-      const { sessionId, childId } = await makeSessionWithChild('2026-08-02')
+      const { sessionId, studentId } = await makeSessionWithStudent('2026-08-02')
       getDb().prepare(
-        "INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at) VALUES (?, ?, 'absent_excused', ?, ?)"
-      ).run(sessionId, childId, now, now)
+        "INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at) VALUES (?, ?, 'absent_excused', ?, ?)"
+      ).run(sessionId, studentId, now, now)
       const res = await h()['sessions:salaryCredit']({}, { session_id: sessionId })
       expect(res.payable).toBe(false)
       expect(res.hasTeachers).toBe(true)
@@ -126,11 +126,11 @@ describe('sessions IPC contract', () => {
       expect(res.credits).toEqual([])
     })
 
-    it('credits when a child is absent without excuse', async () => {
-      const { sessionId, childId } = await makeSessionWithChild('2026-08-03')
+    it('credits when a student is absent without excuse', async () => {
+      const { sessionId, studentId } = await makeSessionWithStudent('2026-08-03')
       getDb().prepare(
-        "INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at) VALUES (?, ?, 'absent_unexcused', ?, ?)"
-      ).run(sessionId, childId, now, now)
+        "INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at) VALUES (?, ?, 'absent_unexcused', ?, ?)"
+      ).run(sessionId, studentId, now, now)
       const res = await h()['sessions:salaryCredit']({}, { session_id: sessionId })
       expect(res.payable).toBe(true)
       expect(res.credits[0].amount).toBe(150)

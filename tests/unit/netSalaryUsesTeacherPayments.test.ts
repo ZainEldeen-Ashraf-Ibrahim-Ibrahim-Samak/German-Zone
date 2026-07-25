@@ -22,7 +22,7 @@ function getHandler(channel: string) {
 describe('Net Salary on the Salaries page reflects the teacher\'s own rate (30), not a shared salary-type rate (40)', () => {
   let db: any
   let teacherId: number
-  let childId: number
+  let studentId: number
 
   const record = getHandler('attendance:record')
   const salaryGet = getHandler('salary:get')
@@ -47,16 +47,16 @@ describe('Net Salary on the Salaries page reflects the teacher\'s own rate (30),
       VALUES ('Ahmed', 'Teacher', 0, 0, 1, ?, 30, ?)
     `).run(now, salaryTypeId).lastInsertRowid)
 
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
       VALUES ('Sami', 'Guardian', '0100', 'جلسة', 'جلسة', 100, '2026-01-01', ?, ?, ?)
     `).run(now, now, teacherId).lastInsertRowid)
 
     const session1 = Number(db.prepare(`INSERT INTO scheduled_sessions (session_date, created_at, updated_at) VALUES ('2026-07-04', ?, ?)`).run(now, now).lastInsertRowid)
     const session2 = Number(db.prepare(`INSERT INTO scheduled_sessions (session_date, created_at, updated_at) VALUES ('2026-07-06', ?, ?)`).run(now, now).lastInsertRowid)
 
-    await record(null, { session_id: session1, records: [{ child_id: childId, status: 'attended', teacher_status: 'present' }] })
-    await record(null, { session_id: session2, records: [{ child_id: childId, status: 'attended', teacher_status: 'present' }] })
+    await record(null, { session_id: session1, records: [{ student_id: studentId, status: 'attended', teacher_status: 'present' }] })
+    await record(null, { session_id: session2, records: [{ student_id: studentId, status: 'attended', teacher_status: 'present' }] })
   })
 
   it('Net Salary is 2 sessions × 30 = 60, not 2 × 40 = 80', async () => {

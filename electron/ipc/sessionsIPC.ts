@@ -100,7 +100,7 @@ ipcMain.handle('sessions:delete', async (_event, { id }) => {
 // Reports the per-session salary for a session's teachers, used to show a live banner in the
 // attendance sheet and confirm after saving. Always returns the per-session teachers and their
 // per-session amount (so the user can see who earns what); `payable` indicates whether the
-// session currently qualifies — i.e. at least one child attended or was absent without excuse.
+// session currently qualifies — i.e. at least one student attended or was absent without excuse.
 // Only teachers on a per-session salary mode (per_session_fixed / hybrid) earn from a single
 // session; fixed-monthly teachers are unaffected and are omitted from `credits`.
 ipcMain.handle('sessions:salaryCredit', async (_event, { session_id }) => {
@@ -156,12 +156,12 @@ ipcMain.handle('sessions:assignTeachers', async (_event, { session_id, employee_
   }
 })
 
-// Returns active children who have a given weekday (0=Sun…6=Sat) in their lesson_days
-ipcMain.handle('sessions:childrenForDay', async (_event, { day_of_week }) => {
+// Returns active students who have a given weekday (0=Sun…6=Sat) in their lesson_days
+ipcMain.handle('sessions:studentsForDay', async (_event, { day_of_week }) => {
   try {
     checkAuth()
     const db = getDb()
-    const all = db.prepare(`SELECT id, name, lesson_days FROM children WHERE is_active = 1 AND lesson_days IS NOT NULL AND lesson_days != '[]' AND lesson_days != ''`).all() as any[]
+    const all = db.prepare(`SELECT id, name, lesson_days FROM students WHERE is_active = 1 AND lesson_days IS NOT NULL AND lesson_days != '[]' AND lesson_days != ''`).all() as any[]
     return all.filter(c => {
       try {
         const days: number[] = JSON.parse(c.lesson_days)
@@ -169,7 +169,7 @@ ipcMain.handle('sessions:childrenForDay', async (_event, { day_of_week }) => {
       } catch { return false }
     }).map(c => ({ id: c.id, name: c.name }))
   } catch (error: any) {
-    throw new Error(error.message || 'Failed to get children for day')
+    throw new Error(error.message || 'Failed to get students for day')
   }
 })
 
@@ -178,15 +178,15 @@ ipcMain.handle('sessions:proRateCalc', async (_event, args) => {
     checkAuth()
     const db = getDb()
 
-    // Support both direct reg_date/price and child_id lookup
+    // Support both direct reg_date/price and student_id lookup
     let reg_date: string = args.reg_date
     let pricePerSession: number = args.price_per_session ?? 0
 
-    if (!reg_date && args.child_id) {
-      const child = db.prepare('SELECT reg_date, session_price FROM children WHERE id = ?').get(args.child_id) as any
-      if (!child) throw new Error('الطفل غير موجود / Child not found')
-      reg_date = child.reg_date
-      pricePerSession = child.session_price ?? 0
+    if (!reg_date && args.student_id) {
+      const student = db.prepare('SELECT reg_date, session_price FROM students WHERE id = ?').get(args.student_id) as any
+      if (!student) throw new Error('الطالب غير موجود / Student not found')
+      reg_date = student.reg_date
+      pricePerSession = student.session_price ?? 0
     }
 
     if (!reg_date) throw new Error('reg_date is required')

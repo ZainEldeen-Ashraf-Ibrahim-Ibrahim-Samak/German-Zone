@@ -9,7 +9,7 @@ import { ipcMain } from 'electron'
 import { initDb } from '../../electron/db/connection.js'
 import { runMigrations } from '../../electron/db/migrations/index.js'
 import { setCurrentUser } from '../../electron/ipc/authIPC.js'
-import '../../electron/ipc/childServicesIPC.js'
+import '../../electron/ipc/studentServicesIPC.js'
 import '../../electron/ipc/salariesIPC.js'
 
 function getHandler(channel: string) {
@@ -19,7 +19,7 @@ function getHandler(channel: string) {
   return found[1]
 }
 
-describe('childServices:previewTeacherCost — remaining-sessions/cost preview (US2, FR-002/FR-003)', () => {
+describe('studentServices:previewTeacherCost — remaining-sessions/cost preview (US2, FR-002/FR-003)', () => {
   let db: any
   let teacherId: number
 
@@ -30,7 +30,7 @@ describe('childServices:previewTeacherCost — remaining-sessions/cost preview (
   })
 
   const add = getHandler('employees:add')
-  const preview = getHandler('childServices:previewTeacherCost')
+  const preview = getHandler('studentServices:previewTeacherCost')
 
   it('computes the remaining sessions (today through month end) and expected cost from lesson_days and the teacher rate', async () => {
     const emp = await add(null, { name: 'Ahmed', base_salary: 0, teacher_session_rate: 200 })
@@ -72,7 +72,7 @@ describe('childServices:previewTeacherCost — remaining-sessions/cost preview (
     expect(result.teacher_session_rate).toBe(80)
   })
 
-  it('a per-child rate passed by the caller wins over the teacher\'s own rate', async () => {
+  it('a per-student rate passed by the caller wins over the teacher\'s own rate', async () => {
     const result = await preview(null, { teacher_id: teacherId, lesson_days: [1], teacher_session_rate: 350 })
     expect(result.teacher_session_rate).toBe(350)
   })

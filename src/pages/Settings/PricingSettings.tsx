@@ -208,7 +208,7 @@ export default function PricingSettings() {
               error={fieldErrors.target_profit_pct}
             />
             <Input
-              label={isAr ? 'القدرة الاستيعابية القصوى (طفل)' : 'Maximum Capacity (Children)'}
+              label={isAr ? 'القدرة الاستيعابية القصوى (طالب)' : 'Maximum Capacity (Students)'}
               type="number"
               value={settings.max_capacity}
               onChange={(e) => handleChange('max_capacity', e.target.value)}

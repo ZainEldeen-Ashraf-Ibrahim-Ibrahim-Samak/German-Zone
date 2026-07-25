@@ -22,7 +22,7 @@ function getHandler(channel: string) {
 describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () => {
   let db: any
   let teacherId: number
-  let childId: number
+  let studentId: number
   let sessionId: number
   let attendanceRecordId: number
 
@@ -48,8 +48,8 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
       VALUES ('Ahmed', 'teacher', 0, 0, 0, 0, 1, ?, ?, 0, ?)
     `).run(now, now, salaryTypeId).lastInsertRowid)
 
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
       VALUES ('Sami', 'Guardian', '0100', 'جلسة', 'جلسة', 100, '2026-01-01', ?, ?, ?)
     `).run(now, now, teacherId).lastInsertRowid)
 
@@ -57,11 +57,11 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
       INSERT INTO scheduled_sessions (session_date, created_at, updated_at) VALUES ('2026-07-04', ?, ?)
     `).run(now, now).lastInsertRowid)
 
-    // Employee saves attendance: teacher present, child absent_excused → NOT payable.
+    // Employee saves attendance: teacher present, student absent_excused → NOT payable.
     setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
     const res = await record(null, {
       session_id: sessionId,
-      records: [{ child_id: childId, teacher_id: teacherId, status: 'absent_excused', teacher_status: 'present' }]
+      records: [{ student_id: studentId, teacher_id: teacherId, status: 'absent_excused', teacher_status: 'present' }]
     })
     attendanceRecordId = res[0].id
   })
@@ -117,8 +117,8 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
     expect(updatedRecord.status).toBe('attended')
 
     const payment = db.prepare(
-      `SELECT * FROM teacher_payments WHERE teacher_id = ? AND child_id = ? AND attendance_date = '2026-07-04'`
-    ).get(teacherId, childId) as any
+      `SELECT * FROM teacher_payments WHERE teacher_id = ? AND student_id = ? AND attendance_date = '2026-07-04'`
+    ).get(teacherId, studentId) as any
     expect(payment.status).toBe('pending')
     expect(payment.session_cost).toBe(50)
 
@@ -150,7 +150,7 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
     setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
     const res = await record(null, {
       session_id: session2,
-      records: [{ child_id: childId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
+      records: [{ student_id: studentId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
     })
     const recId = res[0].id
 
@@ -184,11 +184,11 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
     setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
     const res = await record(null, {
       session_id: session3,
-      records: [{ child_id: childId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
+      records: [{ student_id: studentId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
     })
     const recId = res[0].id
 
-    const delRes = await deleteAttendance(null, { session_id: session3, child_ids: [{ child_id: childId, teacher_id: teacherId }] })
+    const delRes = await deleteAttendance(null, { session_id: session3, student_ids: [{ student_id: studentId, teacher_id: teacherId }] })
     expect(delRes.deleted).toBe(0)
     expect(delRes.requested).toBe(1)
 
@@ -217,11 +217,11 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
     setCurrentUser({ id: 1, username: 'admin', role: 'admin', is_active: 1 })
     const res = await record(null, {
       session_id: session4,
-      records: [{ child_id: childId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
+      records: [{ student_id: studentId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
     })
     const recId = res[0].id
 
-    const delRes = await deleteAttendance(null, { session_id: session4, child_ids: [{ child_id: childId, teacher_id: teacherId }] })
+    const delRes = await deleteAttendance(null, { session_id: session4, student_ids: [{ student_id: studentId, teacher_id: teacherId }] })
     expect(delRes.deleted).toBe(1)
     expect(delRes.requested).toBe(0)
     expect(db.prepare('SELECT * FROM attendance_records WHERE id = ?').get(recId)).toBeFalsy()

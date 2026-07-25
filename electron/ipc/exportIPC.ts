@@ -16,7 +16,7 @@ function checkAuth() {
 
 // Utility to handle export build logic depending on format
 async function executeExport(
-  type: 'full' | 'month' | 'child' | 'childReport' | 'salaries' | 'expenses' | 'employees' | 'payrollReport',
+  type: 'full' | 'month' | 'student' | 'studentReport' | 'salaries' | 'expenses' | 'employees' | 'payrollReport',
   params: any,
   defaultFilename: string
 ) {
@@ -42,7 +42,7 @@ async function executeExport(
   if (params.format === 'xlsx') {
     await buildExcelFile(type, params, savePath)
   } else if (params.format === 'csv') {
-    await buildCsvFile(type as 'payrollReport' | 'expenses' | 'childReport' | 'month', params, savePath)
+    await buildCsvFile(type as 'payrollReport' | 'expenses' | 'studentReport' | 'month', params, savePath)
   } else {
     await buildPdfFile(type, params, savePath)
   }
@@ -80,31 +80,31 @@ ipcMain.handle('export:month', async (_event, { month, year, format, lang, payme
   }
 })
 
-// 3. Child account statement export (All authenticated users - employees can export statement)
-ipcMain.handle('export:child', async (_event, { childId, format, lang }) => {
+// 3. Student account statement export (All authenticated users - employees can export statement)
+ipcMain.handle('export:student', async (_event, { studentId, format, lang }) => {
   try {
     checkAuth()
     const filename = lang === 'ar'
-      ? `كشف_حساب_طفل_${childId}.${format}`
-      : `child_statement_${childId}.${format}`
-    return await executeExport('child', { childId, format, lang }, filename)
+      ? `كشف_حساب_طالب_${studentId}.${format}`
+      : `student_statement_${studentId}.${format}`
+    return await executeExport('student', { studentId, format, lang }, filename)
   } catch (error: any) {
-    console.error('Failed to run child statement export:', error)
-    throw new Error(error.message || 'Failed to export child statement')
+    console.error('Failed to run student statement export:', error)
+    throw new Error(error.message || 'Failed to export student statement')
   }
 })
 
-// 3b. Full Child Report export — feature 007, FR-007 (All authenticated users, matches export:child access)
-ipcMain.handle('export:childReport', async (_event, { childId, format, lang }) => {
+// 3b. Full Student Report export — feature 007, FR-007 (All authenticated users, matches export:student access)
+ipcMain.handle('export:studentReport', async (_event, { studentId, format, lang }) => {
   try {
     checkAuth()
     const filename = lang === 'ar'
-      ? `تقرير_طفل_شامل_${childId}.${format}`
-      : `child_report_${childId}.${format}`
-    return await executeExport('childReport', { childId, format, lang }, filename)
+      ? `تقرير_طالب_شامل_${studentId}.${format}`
+      : `student_report_${studentId}.${format}`
+    return await executeExport('studentReport', { studentId, format, lang }, filename)
   } catch (error: any) {
-    console.error('Failed to run child report export:', error)
-    throw new Error(error.message || 'Failed to export child report')
+    console.error('Failed to run student report export:', error)
+    throw new Error(error.message || 'Failed to export student report')
   }
 })
 

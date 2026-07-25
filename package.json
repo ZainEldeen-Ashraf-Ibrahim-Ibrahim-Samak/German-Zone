@@ -1,7 +1,7 @@
 {
   "name": "nursery-management-system",
   "private": true,
-  "version": "2.0.5",
+  "version": "1.0.0",
   "description": "Nursery & Autism Center Management System",
   "author": "Nursery Management",
   "main": "dist-electron/main.js",

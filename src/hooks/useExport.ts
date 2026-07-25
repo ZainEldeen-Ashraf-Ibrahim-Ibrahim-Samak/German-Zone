@@ -7,7 +7,7 @@ export function useExport() {
   const [error, setError] = useState<string | null>(null)
 
   const handleExport = async (
-    type: 'full' | 'month' | 'child' | 'salaries' | 'expenses' | 'employees',
+    type: 'full' | 'month' | 'student' | 'salaries' | 'expenses' | 'employees',
     params: any
   ) => {
     setIsExporting(true)
@@ -23,8 +23,8 @@ export function useExport() {
         result = await window.api.export.full(exportParams)
       } else if (type === 'month') {
         result = await window.api.export.month(exportParams)
-      } else if (type === 'child') {
-        result = await window.api.export.child(exportParams)
+      } else if (type === 'student') {
+        result = await window.api.export.student(exportParams)
       } else if (type === 'salaries') {
         result = await window.api.export.salaries(exportParams)
       } else if (type === 'expenses') {
@@ -53,7 +53,7 @@ export function useExport() {
     exportFull: (year: number, format: 'xlsx' | 'pdf') => handleExport('full', { year, format }),
     exportMonth: (month: string, year: number, format: 'xlsx' | 'pdf' | 'csv', paymentIds?: number[]) =>
       handleExport('month', { month, year, format, paymentIds }),
-    exportChild: (childId: number, format: 'xlsx' | 'pdf' | 'csv') => handleExport('child', { childId, format }),
+    exportStudent: (studentId: number, format: 'xlsx' | 'pdf' | 'csv') => handleExport('student', { studentId, format }),
     exportSalaries: (month: string, year: number, format: 'xlsx' | 'pdf') => handleExport('salaries', { month, year, format }),
     exportExpenses: (year: number, format: 'xlsx' | 'pdf' | 'csv') => handleExport('expenses', { year, format }),
     exportEmployees: (format: 'xlsx' | 'pdf') => handleExport('employees', { format }),

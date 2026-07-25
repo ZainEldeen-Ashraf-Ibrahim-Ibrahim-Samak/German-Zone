@@ -13,34 +13,34 @@ interface CalendarEntry {
   date: string
   user_id: number
   user_name: string
-  user_type: 'child' | 'teacher' | 'session'
+  user_type: 'student' | 'teacher' | 'session'
   service_id: number | null
   service_name: string | null
   teacher_id: number | null
   teacher_name: string | null
   // Set only for entries derived from an actual scheduled_sessions row — lets the UI open that
-  // session's attendance sheet on click. Recurring child_services timetable slots have no
+  // session's attendance sheet on click. Recurring student_services timetable slots have no
   // corresponding session (they're a schedule, not a taken attendance record), so this is null there.
   session_id: number | null
 }
 
-// Aggregates schedule data at read time from child_services (lesson_days/teacher_id) and
+// Aggregates schedule data at read time from student_services (lesson_days/teacher_id) and
 // scheduled_sessions/session_teachers — no persisted calendar table (research.md #6). Identical
 // result for every role: admin and employee both see the full aggregated schedule (Clarifications).
 function buildMonthEntries(db: any, year: number, month: number): CalendarEntry[] {
   const daysInMonth = new Date(year, month, 0).getDate()
   const entries: CalendarEntry[] = []
 
-  // Child-services-based recurring lessons. lesson_days is a JSON array of weekday numbers 0-6
+  // Student-services-based recurring lessons. lesson_days is a JSON array of weekday numbers 0-6
   // when the enrollment has specific scheduled days; enrollments with no lesson_days set have no
   // day restriction, so — rather than disappearing from the calendar until someone manually
   // creates a scheduled_sessions row — they are shown on every day of the month (an enrollment is
   // always "on the calendar", created or not; see spec.md FR-011…FR-013).
   const enrollments = db.prepare(`
-    SELECT cs.id as service_row_id, cs.child_id, c.name as child_name, cs.service, cs.teacher_id,
+    SELECT cs.id as service_row_id, cs.student_id, c.name as student_name, cs.service, cs.teacher_id,
            e.name as teacher_name, cs.lesson_days
-    FROM child_services cs
-    JOIN children c ON c.id = cs.child_id
+    FROM student_services cs
+    JOIN students c ON c.id = cs.student_id
     LEFT JOIN employees e ON e.id = cs.teacher_id
     WHERE c.is_active = 1
   `).all() as any[]
@@ -67,9 +67,9 @@ function buildMonthEntries(db: any, year: number, month: number): CalendarEntry[
 
       entries.push({
         date: iso,
-        user_id: en.child_id,
-        user_name: en.child_name,
-        user_type: 'child',
+        user_id: en.student_id,
+        user_name: en.student_name,
+        user_type: 'student',
         service_id: en.service_row_id,
         service_name: en.service,
         teacher_id: en.teacher_id ?? null,

@@ -7,48 +7,48 @@ import type { Db } from '../db/connection.js'
 
 /**
  * Pure payment-eligibility rule (spec.md FR-008…FR-011):
- *   teacher present + child attended            → payable
- *   teacher present + child absent (unexcused)   → payable
- *   teacher present + child absent (excused)     → not payable
- *   teacher absent (any child status)            → not payable
+ *   teacher present + student attended            → payable
+ *   teacher present + student absent (unexcused)   → payable
+ *   teacher present + student absent (excused)     → not payable
+ *   teacher absent (any student status)            → not payable
  * Exported for direct unit testing without touching the database.
  */
-export function isPaymentEligible(teacherStatus: 'present' | 'absent' | null | undefined, childStatus: string): boolean {
+export function isPaymentEligible(teacherStatus: 'present' | 'absent' | null | undefined, studentStatus: string): boolean {
   if (teacherStatus !== 'present') return false
-  return childStatus === 'attended' || childStatus === 'absent_unexcused'
+  return studentStatus === 'attended' || studentStatus === 'absent_unexcused'
 }
 
 /**
- * The price of this child's service, preferring the enrollment linked to this teacher, then the
- * child's most recent enrollment, then the child record's own price. This is `price` — what the
+ * The price of this student's service, preferring the enrollment linked to this teacher, then the
+ * student's most recent enrollment, then the student record's own price. This is `price` — what the
  * service itself costs — NEVER the enrollment's session_price field.
  */
-function getChildServicePrice(db: Db, child_id: number, childRow: any): number | null {
-  if (childRow?.price != null) return childRow.price
+function getStudentServicePrice(db: Db, student_id: number, studentRow: any): number | null {
+  if (studentRow?.price != null) return studentRow.price
   const anyEnrollment = db.prepare(`
-    SELECT price FROM child_services WHERE child_id = ? ORDER BY id DESC LIMIT 1
-  `).get(child_id) as any
+    SELECT price FROM student_services WHERE student_id = ? ORDER BY id DESC LIMIT 1
+  `).get(student_id) as any
   if (anyEnrollment?.price != null) return anyEnrollment.price
-  const childRec = db.prepare('SELECT price FROM children WHERE id = ?').get(child_id) as any
-  return childRec?.price ?? null
+  const studentRec = db.prepare('SELECT price FROM students WHERE id = ?').get(student_id) as any
+  return studentRec?.price ?? null
 }
 
 /**
- * Resolves the per-session rate to pay a teacher for one child.
+ * Resolves the per-session rate to pay a teacher for one student.
  *
- * `per_child_session` salary type mode (pay comes from the salary type itself, NEVER the
- * child's service/section price, NEVER the teacher's flat "Per Session Cost" and NEVER the
+ * `per_student_session` salary type mode (pay comes from the salary type itself, NEVER the
+ * student's service/section price, NEVER the teacher's flat "Per Session Cost" and NEVER the
  * enrollment's session_price):
- *   1. that child's own override (`child_services.teacher_session_rate` — salary type per child)
+ *   1. that student's own override (`student_services.teacher_session_rate` — salary type per student)
  *   2. the salary type's own `session_rate`
  *
- * `per_session_pct` salary type mode (percentage OF the child's service price — a 100%
+ * `per_session_pct` salary type mode (percentage OF the student's service price — a 100%
  * percentage pays exactly the service price; nothing is ever hardcoded to 100 EGP):
- *   1. that child's own override, if set (absolute amount)
- *   2. `salary_types.session_pct` × the child's service price
+ *   1. that student's own override, if set (absolute amount)
+ *   2. `salary_types.session_pct` × the student's service price
  *
  * All other modes:
- *   1. the child's own override, if set
+ *   1. the student's own override, if set
  *   2. the teacher's own flat rate (`employees.teacher_session_rate`)
  *   3. the effective salary type's per-session rate (`salary_types.session_rate`)
  *
@@ -56,15 +56,15 @@ function getChildServicePrice(db: Db, child_id: number, childRow: any): number |
  * simply generates no payment, so misconfiguration is visible rather than silently paid at a
  * stale default.
  */
-export function resolveTeacherSessionRate(db: Db, teacher_id: number, child_id: number): number | null {
+export function resolveTeacherSessionRate(db: Db, teacher_id: number, student_id: number): number | null {
   // Prefer an enrollment row with an explicit override; otherwise the most recent enrollment
-  // linking this child to this teacher (its price feeds the child-price modes below).
-  const childRow = db.prepare(`
-    SELECT teacher_session_rate, price FROM child_services
-    WHERE child_id = ? AND teacher_id = ?
+  // linking this student to this teacher (its price feeds the student-price modes below).
+  const studentRow = db.prepare(`
+    SELECT teacher_session_rate, price FROM student_services
+    WHERE student_id = ? AND teacher_id = ?
     ORDER BY (teacher_session_rate IS NOT NULL) DESC, id DESC LIMIT 1
-  `).get(child_id, teacher_id) as any
-  if (childRow?.teacher_session_rate != null) return childRow.teacher_session_rate
+  `).get(student_id, teacher_id) as any
+  if (studentRow?.teacher_session_rate != null) return studentRow.teacher_session_rate
 
   const salaryTypeRow = db.prepare(`
     SELECT st.mode as mode, st.session_rate as session_rate, st.session_pct as session_pct
@@ -74,12 +74,12 @@ export function resolveTeacherSessionRate(db: Db, teacher_id: number, child_id: 
     WHERE e.id = ?
   `).get(teacher_id) as any
 
-  if (salaryTypeRow?.mode === 'per_child_session') {
+  if (salaryTypeRow?.mode === 'per_student_session') {
     return salaryTypeRow?.session_rate ?? null
   }
 
   if (salaryTypeRow?.mode === 'per_session_pct') {
-    const price = getChildServicePrice(db, child_id, childRow)
+    const price = getStudentServicePrice(db, student_id, studentRow)
     if (price != null && salaryTypeRow.session_pct != null) {
       return Number((price * salaryTypeRow.session_pct).toFixed(2))
     }
@@ -96,18 +96,18 @@ export function resolveTeacherSessionRate(db: Db, teacher_id: number, child_id: 
 
 /**
  * Re-snapshots every still-Pending payment of one teacher to the rate that CURRENTLY resolves
- * for its child — so a salary-type switch (e.g. to per_child_session), a per-child override, or
+ * for its student — so a salary-type switch (e.g. to per_student_session), a per-student override, or
  * a rate correction is reflected in salary views immediately, without waiting for each
  * attendance record to be re-saved. Paid/Void rows are never touched (research.md #7).
  */
 export function resnapshotPendingTeacherPayments(db: Db, teacher_id: number): void {
   const pending = db.prepare(`
-    SELECT id, child_id, session_cost FROM teacher_payments WHERE teacher_id = ? AND status = 'pending'
+    SELECT id, student_id, session_cost FROM teacher_payments WHERE teacher_id = ? AND status = 'pending'
   `).all(teacher_id) as any[]
   if (pending.length === 0) return
   const now = new Date().toISOString()
   for (const p of pending) {
-    const rate = resolveTeacherSessionRate(db, teacher_id, p.child_id)
+    const rate = resolveTeacherSessionRate(db, teacher_id, p.student_id)
     if (rate != null && rate !== p.session_cost) {
       db.prepare(`UPDATE teacher_payments SET session_cost = ?, updated_at = ?, synced = 0 WHERE id = ?`)
         .run(rate, now, p.id)
@@ -116,7 +116,7 @@ export function resnapshotPendingTeacherPayments(db: Db, teacher_id: number): vo
 }
 
 /**
- * Recomputes the teacher_payments row for one (teacher, child, date) combination given the
+ * Recomputes the teacher_payments row for one (teacher, student, date) combination given the
  * attendance values that now apply — voiding a stale pending payment or (re)generating one, per
  * the same five payment-eligibility cases used since feature 006. Extracted so both the direct
  * attendance:record write path AND the edit-request approval path (feature 007) call one shared
@@ -124,35 +124,35 @@ export function resnapshotPendingTeacherPayments(db: Db, teacher_id: number): vo
  */
 export function recalculateAttendancePayment(db: Db, params: {
   teacher_id: number
-  child_id: number
+  student_id: number
   attendance_record_id: number
   attendance_date: string
   status: string
   teacher_status: 'present' | 'absent' | null | undefined
   now: string
 }): void {
-  const { teacher_id, child_id, attendance_record_id, attendance_date, status, teacher_status, now } = params
+  const { teacher_id, student_id, attendance_record_id, attendance_date, status, teacher_status, now } = params
   const existing = db.prepare(`
-    SELECT * FROM teacher_payments WHERE teacher_id = ? AND child_id = ? AND attendance_date = ?
-  `).get(teacher_id, child_id, attendance_date) as any
+    SELECT * FROM teacher_payments WHERE teacher_id = ? AND student_id = ? AND attendance_date = ?
+  `).get(teacher_id, student_id, attendance_date) as any
 
   const payable = isPaymentEligible(teacher_status, status)
 
-  const effectiveRate = resolveTeacherSessionRate(db, teacher_id, child_id)
+  const effectiveRate = resolveTeacherSessionRate(db, teacher_id, student_id)
   const hasEffectiveRate = effectiveRate != null
 
   if (payable && hasEffectiveRate) {
     if (!existing || existing.status === 'void' || existing.status === 'pending') {
       db.prepare(`
-        INSERT INTO teacher_payments (teacher_id, child_id, attendance_record_id, attendance_date, session_cost, status, created_at, updated_at, synced)
+        INSERT INTO teacher_payments (teacher_id, student_id, attendance_record_id, attendance_date, session_cost, status, created_at, updated_at, synced)
         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, 0)
-        ON CONFLICT(teacher_id, child_id, attendance_date) DO UPDATE SET
+        ON CONFLICT(teacher_id, student_id, attendance_date) DO UPDATE SET
           attendance_record_id = excluded.attendance_record_id,
           session_cost = excluded.session_cost,
           status = 'pending',
           updated_at = excluded.updated_at,
           synced = 0
-      `).run(teacher_id, child_id, attendance_record_id, attendance_date, effectiveRate, now, now)
+      `).run(teacher_id, student_id, attendance_record_id, attendance_date, effectiveRate, now, now)
     }
     // existing.status === 'paid': left untouched — a settled payment is never auto-mutated.
   } else if ((!payable || !hasEffectiveRate) && existing && existing.status === 'pending') {
@@ -174,41 +174,41 @@ ipcMain.handle('attendance:getSheet', async (_event, { session_id }) => {
       dayOfWeek = new Date(y, m - 1, d).getDay()
     }
 
-    // A child can have more than one teacher — one per service enrollment in child_services
+    // A student can have more than one teacher — one per service enrollment in student_services
     // (e.g. Speech Therapy with Ahmed, Occupational Therapy with Sara). Build one candidate
-    // row per distinct (child, teacher) pair so each teacher gets their own attendance/payment
-    // for that child, instead of collapsing onto a single flattened teacher.
-    const activeChildren = db.prepare(`
-      SELECT id as child_id, name as child_name, photo_url as child_photo_url, lesson_days
-      FROM children WHERE is_active = 1
+    // row per distinct (student, teacher) pair so each teacher gets their own attendance/payment
+    // for that student, instead of collapsing onto a single flattened teacher.
+    const activeStudents = db.prepare(`
+      SELECT id as student_id, name as student_name, photo_url as student_photo_url, lesson_days
+      FROM students WHERE is_active = 1
     `).all() as any[]
 
     const enrollments = db.prepare(`
-      SELECT DISTINCT cs.child_id, cs.teacher_id, cs.lesson_days as enrollment_lesson_days
-      FROM child_services cs
+      SELECT DISTINCT cs.student_id, cs.teacher_id, cs.lesson_days as enrollment_lesson_days
+      FROM student_services cs
       WHERE cs.teacher_id IS NOT NULL
     `).all() as any[]
-    const enrollmentsByChild = new Map<number, any[]>()
+    const enrollmentsByStudent = new Map<number, any[]>()
     for (const en of enrollments) {
-      if (!enrollmentsByChild.has(en.child_id)) enrollmentsByChild.set(en.child_id, [])
-      enrollmentsByChild.get(en.child_id)!.push(en)
+      if (!enrollmentsByStudent.has(en.student_id)) enrollmentsByStudent.set(en.student_id, [])
+      enrollmentsByStudent.get(en.student_id)!.push(en)
     }
 
-    type Candidate = { child_id: number; child_name: string; child_photo_url: string | null; teacher_id: number | null; lesson_days: string | null }
+    type Candidate = { student_id: number; student_name: string; student_photo_url: string | null; teacher_id: number | null; lesson_days: string | null }
     const candidates: Candidate[] = []
-    for (const c of activeChildren) {
-      const childEnrollments = enrollmentsByChild.get(c.child_id) ?? []
-      if (childEnrollments.length === 0) {
-        candidates.push({ child_id: c.child_id, child_name: c.child_name, child_photo_url: c.child_photo_url, teacher_id: null, lesson_days: c.lesson_days })
+    for (const c of activeStudents) {
+      const studentEnrollments = enrollmentsByStudent.get(c.student_id) ?? []
+      if (studentEnrollments.length === 0) {
+        candidates.push({ student_id: c.student_id, student_name: c.student_name, student_photo_url: c.student_photo_url, teacher_id: null, lesson_days: c.lesson_days })
       } else {
-        // Distinct teachers only — the same teacher across two services for one child still
+        // Distinct teachers only — the same teacher across two services for one student still
         // produces a single row, per the spec's "one row per teacher" (not per enrollment).
         const seenTeachers = new Set<number>()
-        for (const en of childEnrollments) {
+        for (const en of studentEnrollments) {
           if (seenTeachers.has(en.teacher_id)) continue
           seenTeachers.add(en.teacher_id)
           candidates.push({
-            child_id: c.child_id, child_name: c.child_name, child_photo_url: c.child_photo_url,
+            student_id: c.student_id, student_name: c.student_name, student_photo_url: c.student_photo_url,
             teacher_id: en.teacher_id, lesson_days: en.enrollment_lesson_days || c.lesson_days
           })
         }
@@ -227,20 +227,20 @@ ipcMain.handle('attendance:getSheet', async (_event, { session_id }) => {
     const allRows = candidates.map((cand) => {
       const teacher = cand.teacher_id != null ? teachersById.get(cand.teacher_id) : null
       const ar = cand.teacher_id != null
-        ? db.prepare(`SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id = ?`).get(session_id, cand.child_id, cand.teacher_id) as any
-        : db.prepare(`SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id IS NULL`).get(session_id, cand.child_id) as any
+        ? db.prepare(`SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?`).get(session_id, cand.student_id, cand.teacher_id) as any
+        : db.prepare(`SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL`).get(session_id, cand.student_id) as any
       const tp = ar ? db.prepare(`SELECT * FROM teacher_payments WHERE attendance_record_id = ?`).get(ar.id) as any : null
 
       return {
-        child_id: cand.child_id,
-        child_name: cand.child_name,
-        child_photo_url: cand.child_photo_url,
+        student_id: cand.student_id,
+        student_name: cand.student_name,
+        student_photo_url: cand.student_photo_url,
         lesson_days: cand.lesson_days,
         teacher_id: cand.teacher_id,
         teacher_name: teacher?.name ?? null,
         // Same resolution the payment engine actually applies (recalculateAttendancePayment):
-        // this child's own rate override → the teacher's flat rate → their salary type's rate.
-        teacher_session_rate: cand.teacher_id != null ? resolveTeacherSessionRate(db, cand.teacher_id, cand.child_id) : null,
+        // this student's own rate override → the teacher's flat rate → their salary type's rate.
+        teacher_session_rate: cand.teacher_id != null ? resolveTeacherSessionRate(db, cand.teacher_id, cand.student_id) : null,
         attendance_id: ar?.id ?? null,
         // Locked the moment the row exists (feature 007, research.md #4) — non-admin callers
         // must route further changes through attendance:requestEdit.
@@ -272,7 +272,7 @@ ipcMain.handle('attendance:getSheet', async (_event, { session_id }) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     }).map(({ lesson_days, ...rest }) => rest)
 
-    rows.sort((a, b) => a.child_name.localeCompare(b.child_name))
+    rows.sort((a, b) => a.student_name.localeCompare(b.student_name))
     return rows
   } catch (error: any) {
     throw new Error(error.message || 'Failed to get attendance sheet')
@@ -292,40 +292,40 @@ ipcMain.handle('attendance:record', async (_event, args) => {
     const sessionId = args?.session_id
     const records: any[] = Array.isArray(args) ? args : (args?.records ?? [])
 
-    // Teachers whose per-child row this save made payable-relevant; auto-linked to the session
+    // Teachers whose per-student row this save made payable-relevant; auto-linked to the session
     // so they show up in salariesIPC's session_teachers-based payroll views.
     const payableTeachersBySession = new Map<number, Set<number>>()
 
     const upsert = db.transaction(() => {
       for (const rec of records) {
         const session_id = sessionId ?? rec.session_id
-        const { child_id, status, excuse_notes = null, teacher_status = 'present' } = rec
+        const { student_id, status, excuse_notes = null, teacher_status = 'present' } = rec
         const validStatuses = ['attended', 'absent_excused', 'absent_unexcused']
         if (!validStatuses.includes(status)) throw new Error(`Invalid status: ${status}`)
         if (teacher_status !== 'present' && teacher_status !== 'absent') {
           throw new Error(`Invalid teacher_status: ${teacher_status}`)
         }
 
-        // A child can have more than one teacher (one per service enrollment), so the caller
+        // A student can have more than one teacher (one per service enrollment), so the caller
         // must say which teacher's row this is — attendance:getSheet returns teacher_id per
-        // row precisely so the UI can send it back here. Fall back to the child's single
+        // row precisely so the UI can send it back here. Fall back to the student's single
         // flattened teacher_id only for older callers that don't yet pass it explicitly.
         let attended_teacher_id: number | null
         if ('teacher_id' in rec) {
           attended_teacher_id = rec.teacher_id ?? null
         } else {
-          const child = db.prepare('SELECT teacher_id FROM children WHERE id = ?').get(child_id) as any
-          attended_teacher_id = child?.teacher_id ?? null
+          const student = db.prepare('SELECT teacher_id FROM students WHERE id = ?').get(student_id) as any
+          attended_teacher_id = student?.teacher_id ?? null
         }
         const sessionRow = db.prepare('SELECT session_date FROM scheduled_sessions WHERE id = ?').get(session_id) as any
         const attendanceDate: string | undefined = sessionRow?.session_date
 
         // SQLite treats NULL as distinct in a UNIQUE index, so ON CONFLICT never matches a
-        // NULL attended_teacher_id — look up any existing no-teacher row for this child/session
+        // NULL attended_teacher_id — look up any existing no-teacher row for this student/session
         // explicitly and update it in place instead of inserting a second one.
         const existingRecord = attended_teacher_id == null
-          ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id IS NULL').get(session_id, child_id) as any
-          : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id = ?').get(session_id, child_id, attended_teacher_id) as any
+          ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL').get(session_id, student_id) as any
+          : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?').get(session_id, student_id, attended_teacher_id) as any
 
         // Attendance locking (feature 007, FR-011/FR-012): a row that already exists is
         // "locked" — the moment it was first saved. Non-admins can no longer overwrite it
@@ -344,21 +344,21 @@ ipcMain.handle('attendance:record', async (_event, args) => {
           `).run(status, excuse_notes, user?.id ?? null, now, teacher_status, existingRecord.id)
         } else {
           db.prepare(`
-            INSERT INTO attendance_records (session_id, child_id, status, excuse_notes, recorded_by, recorded_at, updated_at, synced, attended_teacher_id, teacher_status)
+            INSERT INTO attendance_records (session_id, student_id, status, excuse_notes, recorded_by, recorded_at, updated_at, synced, attended_teacher_id, teacher_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-            ON CONFLICT(session_id, child_id, attended_teacher_id) DO UPDATE SET
+            ON CONFLICT(session_id, student_id, attended_teacher_id) DO UPDATE SET
               status = excluded.status,
               excuse_notes = excluded.excuse_notes,
               recorded_by = excluded.recorded_by,
               updated_at = excluded.updated_at,
               teacher_status = excluded.teacher_status,
               synced = 0
-          `).run(session_id, child_id, status, excuse_notes, user?.id ?? null, now, now, attended_teacher_id, teacher_status)
+          `).run(session_id, student_id, status, excuse_notes, user?.id ?? null, now, now, attended_teacher_id, teacher_status)
         }
 
         const savedRecord = attended_teacher_id == null
-          ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id IS NULL').get(session_id, child_id) as any
-          : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id = ?').get(session_id, child_id, attended_teacher_id) as any
+          ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL').get(session_id, student_id) as any
+          : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?').get(session_id, student_id, attended_teacher_id) as any
 
         // A direct admin edit to a row that already existed is itself an attendance
         // modification and must be audit-logged (FR-021), same as an approved edit request.
@@ -381,12 +381,12 @@ ipcMain.handle('attendance:record', async (_event, args) => {
 
         // Evaluate the five payment-eligibility cases (FR-008…FR-011) and keep the
         // teacher_payments ledger in sync, with duplicate protection via the UNIQUE
-        // constraint on (teacher_id, child_id, attendance_date) and a paid row never
+        // constraint on (teacher_id, student_id, attendance_date) and a paid row never
         // being auto-mutated (research.md #7).
         if (attended_teacher_id && attendanceDate) {
           recalculateAttendancePayment(db, {
             teacher_id: attended_teacher_id,
-            child_id,
+            student_id,
             attendance_record_id: savedRecord.id,
             attendance_date: attendanceDate,
             status,
@@ -403,9 +403,9 @@ ipcMain.handle('attendance:record', async (_event, args) => {
         results.push(savedRecord)
       }
 
-      // Auto-assign teachers: each payable (child, teacher) row contributes that teacher to
+      // Auto-assign teachers: each payable (student, teacher) row contributes that teacher to
       // the session, so per-session salary is credited without any manual teacher assignment —
-      // now correctly covering every teacher a child has, not just the child's single
+      // now correctly covering every teacher a student has, not just the student's single
       // flattened teacher_id.
       for (const [session_id, teacherIds] of payableTeachersBySession) {
         for (const teacher_id of teacherIds) {
@@ -421,23 +421,23 @@ ipcMain.handle('attendance:record', async (_event, args) => {
   }
 })
 
-// Removes attendance records for the given (child, teacher) pairs in a session. Used when a
+// Removes attendance records for the given (student, teacher) pairs in a session. Used when a
 // status is cleared in the sheet so the previously-saved record does not linger and reappear.
-// Each item may be a plain child_id (legacy — deletes every teacher row for that child) or
-// { child_id, teacher_id } (precise — deletes only that child's row for that specific teacher,
-// since a child can now have more than one teacher's row in the same session).
+// Each item may be a plain student_id (legacy — deletes every teacher row for that student) or
+// { student_id, teacher_id } (precise — deletes only that student's row for that specific teacher,
+// since a student can now have more than one teacher's row in the same session).
 // Admins delete immediately. Employees do NOT delete — each matched record becomes a pending
 // 'delete' request in attendance_edit_requests for an admin to approve (recording NEW
 // attendance stays direct for employees; only removing a saved record needs approval).
-ipcMain.handle('attendance:delete', async (_event, { session_id, child_ids, reason }) => {
+ipcMain.handle('attendance:delete', async (_event, { session_id, student_ids, reason }) => {
   try {
     checkAuth()
     const db = getDb()
     const user = getCurrentUser()!
     const isAdmin = user.role === 'admin'
-    const rawItems: any[] = Array.isArray(child_ids) ? child_ids : []
-    const items: { child_id: number; teacher_id: number | null | undefined }[] = rawItems.map((it) =>
-      typeof it === 'object' ? { child_id: it.child_id, teacher_id: it.teacher_id } : { child_id: it, teacher_id: undefined }
+    const rawItems: any[] = Array.isArray(student_ids) ? student_ids : []
+    const items: { student_id: number; teacher_id: number | null | undefined }[] = rawItems.map((it) =>
+      typeof it === 'object' ? { student_id: it.student_id, teacher_id: it.teacher_id } : { student_id: it, teacher_id: undefined }
     )
     if (items.length === 0) return { ok: true, deleted: 0, requested: 0 }
     let deleted = 0
@@ -448,9 +448,9 @@ ipcMain.handle('attendance:delete', async (_event, { session_id, child_ids, reas
         const matchTeacher = item.teacher_id !== undefined
         const records = (matchTeacher
           ? (item.teacher_id == null
-              ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id IS NULL').all(session_id, item.child_id)
-              : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ? AND attended_teacher_id = ?').all(session_id, item.child_id, item.teacher_id))
-          : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND child_id = ?').all(session_id, item.child_id)
+              ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL').all(session_id, item.student_id)
+              : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?').all(session_id, item.student_id, item.teacher_id))
+          : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ?').all(session_id, item.student_id)
         ) as any[]
 
         if (!isAdmin) {
@@ -463,13 +463,13 @@ ipcMain.handle('attendance:delete', async (_event, { session_id, child_ids, reas
             const session = db.prepare('SELECT session_date FROM scheduled_sessions WHERE id = ?').get(record.session_id) as any
             db.prepare(`
               INSERT INTO attendance_edit_requests
-                (attendance_record_id, child_id, teacher_id, attendance_date,
+                (attendance_record_id, student_id, teacher_id, attendance_date,
                  original_status, original_excuse_notes, original_teacher_status,
                  requested_status, requested_excuse_notes, requested_teacher_status,
                  reason, requested_by, requested_at, status, synced)
               VALUES (?, ?, ?, ?, ?, ?, ?, 'deleted', NULL, NULL, ?, ?, ?, 'pending', 0)
             `).run(
-              record.id, record.child_id, record.attended_teacher_id, session?.session_date ?? now.slice(0, 10),
+              record.id, record.student_id, record.attended_teacher_id, session?.session_date ?? now.slice(0, 10),
               record.status, record.excuse_notes, record.teacher_status,
               (reason && String(reason).trim()) || 'حذف تسجيل حضور / Delete attendance record',
               user.id, now
@@ -515,9 +515,9 @@ ipcMain.handle('attendance:delete', async (_event, { session_id, child_ids, reas
   }
 })
 
-// Full attendance history for one child (FR-019), admin-only per the access-control
+// Full attendance history for one student (FR-019), admin-only per the access-control
 // clarification (payments/payroll are never visible to non-admins, even a teacher's own).
-ipcMain.handle('attendance:getChildHistory', async (_event, { child_id }) => {
+ipcMain.handle('attendance:getStudentHistory', async (_event, { student_id }) => {
   try {
     requireAdmin()
     const db = getDb()
@@ -527,7 +527,7 @@ ipcMain.handle('attendance:getChildHistory', async (_event, { child_id }) => {
         ar.attended_teacher_id as teacher_id,
         e.name as teacher_name,
         ar.teacher_status,
-        ar.status as child_status,
+        ar.status as student_status,
         CASE WHEN tp.status IN ('pending','paid') THEN 1 ELSE 0 END as payment_generated,
         tp.status as payment_status,
         tp.session_cost
@@ -535,9 +535,9 @@ ipcMain.handle('attendance:getChildHistory', async (_event, { child_id }) => {
       JOIN scheduled_sessions ss ON ss.id = ar.session_id
       LEFT JOIN employees e ON e.id = ar.attended_teacher_id
       LEFT JOIN teacher_payments tp ON tp.attendance_record_id = ar.id
-      WHERE ar.child_id = ?
+      WHERE ar.student_id = ?
       ORDER BY ss.session_date DESC
-    `).all(child_id).map((row: any) => ({ ...row, payment_generated: !!row.payment_generated }))
+    `).all(student_id).map((row: any) => ({ ...row, payment_generated: !!row.payment_generated }))
   } catch (error: any) {
     throw new Error(error.message || 'Failed to get attendance history')
   }
@@ -646,13 +646,13 @@ ipcMain.handle('attendance:requestEdit', async (_event, args) => {
 
     const result = db.prepare(`
       INSERT INTO attendance_edit_requests
-        (attendance_record_id, child_id, teacher_id, attendance_date,
+        (attendance_record_id, student_id, teacher_id, attendance_date,
          original_status, original_excuse_notes, original_teacher_status,
          requested_status, requested_excuse_notes, requested_teacher_status,
          reason, requested_by, requested_at, status, synced)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)
     `).run(
-      attendance_record_id, record.child_id, record.attended_teacher_id, session?.session_date ?? null,
+      attendance_record_id, record.student_id, record.attended_teacher_id, session?.session_date ?? null,
       record.status, record.excuse_notes, record.teacher_status,
       requested_status, requested_excuse_notes, requested_teacher_status,
       reason, user.id, now
@@ -698,9 +698,9 @@ ipcMain.handle('attendance:listEditRequests', async (_event, args) => {
       conditions.push('status = ?')
       params.push(status)
     }
-    if (args?.child_id) {
-      conditions.push('child_id = ?')
-      params.push(args.child_id)
+    if (args?.student_id) {
+      conditions.push('student_id = ?')
+      params.push(args.student_id)
     }
     if (args?.teacher_id) {
       conditions.push('teacher_id = ?')
@@ -799,7 +799,7 @@ ipcMain.handle('attendance:decideEditRequest', async (_event, args) => {
           if (record.attended_teacher_id && request.attendance_date) {
             recalculateAttendancePayment(db, {
               teacher_id: record.attended_teacher_id,
-              child_id: record.child_id,
+              student_id: record.student_id,
               attendance_record_id: record.id,
               attendance_date: request.attendance_date,
               status: request.requested_status,

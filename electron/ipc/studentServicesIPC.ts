@@ -12,52 +12,52 @@ function checkAuth() {
   }
 }
 
-ipcMain.handle('childServices:list', async (_event, { childId }) => {
+ipcMain.handle('studentServices:list', async (_event, { studentId }) => {
   try {
     checkAuth()
     const db = getDb()
-    if (!childId) throw new Error('childId is required')
-    return db.prepare('SELECT * FROM child_services WHERE child_id = ?').all(childId) as ServiceEnrollment[]
+    if (!studentId) throw new Error('studentId is required')
+    return db.prepare('SELECT * FROM student_services WHERE student_id = ?').all(studentId) as ServiceEnrollment[]
   } catch (error: any) {
-    console.error('Failed to get child services:', error)
-    throw new Error(error.message || 'Failed to get child services')
+    console.error('Failed to get student services:', error)
+    throw new Error(error.message || 'Failed to get student services')
   }
 })
 
-ipcMain.handle('childServices:add', async (_event, { childId, service, unit, price, teacher_session_rate = null }) => {
+ipcMain.handle('studentServices:add', async (_event, { studentId, service, unit, price, teacher_session_rate = null }) => {
   try {
     requireAdmin()
     const db = getDb()
-    if (!childId || !service || !unit || price === undefined) {
+    if (!studentId || !service || !unit || price === undefined) {
       throw new Error('جميع الحقول الإلزامية مطلوبة / Missing required fields')
     }
 
     // Check duplicate
-    const existing = db.prepare('SELECT id FROM child_services WHERE child_id = ? AND service = ?').get(childId, service)
+    const existing = db.prepare('SELECT id FROM student_services WHERE student_id = ? AND service = ?').get(studentId, service)
     if (existing) {
-      throw new Error('هذه الخدمة مضافة بالفعل للطفل / Service already enrolled')
+      throw new Error('هذه الخدمة مضافة بالفعل للطالب / Service already enrolled')
     }
 
     const now = new Date().toISOString()
     const result = db.prepare(`
-      INSERT INTO child_services (child_id, service, unit, price, teacher_session_rate, created_at, updated_at, synced)
+      INSERT INTO student_services (student_id, service, unit, price, teacher_session_rate, created_at, updated_at, synced)
       VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-    `).run(childId, service, unit, price, teacher_session_rate !== null ? Number(teacher_session_rate) : null, now, now)
+    `).run(studentId, service, unit, price, teacher_session_rate !== null ? Number(teacher_session_rate) : null, now, now)
 
-    return db.prepare('SELECT * FROM child_services WHERE id = ?').get(result.lastInsertRowid) as ServiceEnrollment
+    return db.prepare('SELECT * FROM student_services WHERE id = ?').get(result.lastInsertRowid) as ServiceEnrollment
   } catch (error: any) {
-    console.error('Failed to add child service:', error)
-    throw new Error(error.message || 'Failed to add child service')
+    console.error('Failed to add student service:', error)
+    throw new Error(error.message || 'Failed to add student service')
   }
 })
 
-ipcMain.handle('childServices:update', async (_event, { id, patch }) => {
+ipcMain.handle('studentServices:update', async (_event, { id, patch }) => {
   try {
     requireAdmin()
     const db = getDb()
     if (!id || !patch) throw new Error('ID and patch are required')
 
-    let query = 'UPDATE child_services SET '
+    let query = 'UPDATE student_services SET '
     const params: any[] = []
     
     const allowed = ['unit', 'price', 'teacher_session_rate']
@@ -68,16 +68,16 @@ ipcMain.handle('childServices:update', async (_event, { id, patch }) => {
       }
     }
 
-    if (params.length === 0) return db.prepare('SELECT * FROM child_services WHERE id = ?').get(id)
+    if (params.length === 0) return db.prepare('SELECT * FROM student_services WHERE id = ?').get(id)
 
     query += 'updated_at = ?, synced = 0 WHERE id = ?'
     params.push(new Date().toISOString(), id)
 
     db.prepare(query).run(...params)
-    return db.prepare('SELECT * FROM child_services WHERE id = ?').get(id) as ServiceEnrollment
+    return db.prepare('SELECT * FROM student_services WHERE id = ?').get(id) as ServiceEnrollment
   } catch (error: any) {
-    console.error('Failed to update child service:', error)
-    throw new Error(error.message || 'Failed to update child service')
+    console.error('Failed to update student service:', error)
+    throw new Error(error.message || 'Failed to update student service')
   }
 })
 
@@ -85,13 +85,13 @@ ipcMain.handle('childServices:update', async (_event, { id, patch }) => {
 // `lesson_days` (0=Sun…6=Sat) from today (inclusive) through the end of the current calendar
 // month, and multiplies by the teacher's per-session rate. Never writes anything — pure
 // computation for the enrollment UI.
-ipcMain.handle('childServices:previewTeacherCost', async (_event, { teacher_id, lesson_days, teacher_session_rate = null }) => {
+ipcMain.handle('studentServices:previewTeacherCost', async (_event, { teacher_id, lesson_days, teacher_session_rate = null }) => {
   try {
     checkAuth()
     const db = getDb()
     const teacher = db.prepare('SELECT teacher_session_rate FROM employees WHERE id = ?').get(teacher_id) as any
-    // Fallback order mirrors resolveTeacherSessionRate in attendanceIPC.ts — the child-level
-    // override (this enrollment's own input, since the child may not exist yet to look up) wins
+    // Fallback order mirrors resolveTeacherSessionRate in attendanceIPC.ts — the student-level
+    // override (this enrollment's own input, since the student may not exist yet to look up) wins
     // over the teacher's own rate, which wins over their assigned salary type's session rate.
     // There is no org-wide default fallback anymore.
     let rate = teacher_session_rate !== null && teacher_session_rate !== '' ? Number(teacher_session_rate) : (teacher?.teacher_session_rate ?? null)
@@ -131,20 +131,20 @@ ipcMain.handle('childServices:previewTeacherCost', async (_event, { teacher_id, 
   }
 })
 
-// Feature 009: child details timetable — derived from existing child_services columns
+// Feature 009: student details timetable — derived from existing student_services columns
 // (teacher_id, lesson_days) rather than a new table (research.md #4).
-ipcMain.handle('childServices:getTimetable', async (_event, { child_id }) => {
+ipcMain.handle('studentServices:getTimetable', async (_event, { student_id }) => {
   try {
     checkAuth()
-    if (!child_id) throw new Error('child_id is required')
+    if (!student_id) throw new Error('student_id is required')
     const db = getDb()
 
     const enrollments = db.prepare(`
       SELECT cs.id as service_row_id, cs.service, cs.teacher_id, cs.lesson_days, e.name as teacher_name
-      FROM child_services cs
+      FROM student_services cs
       LEFT JOIN employees e ON e.id = cs.teacher_id
-      WHERE cs.child_id = ?
-    `).all(child_id) as any[]
+      WHERE cs.student_id = ?
+    `).all(student_id) as any[]
 
     const slots: { service_row_id: number; service: string; day: number; teacher_id: number | null; teacher_name: string | null }[] = []
     for (const en of enrollments) {
@@ -169,22 +169,22 @@ ipcMain.handle('childServices:getTimetable', async (_event, { child_id }) => {
 
     return slots
   } catch (error: any) {
-    console.error('Failed to get child timetable:', error)
-    throw new Error(error.message || 'Failed to get child timetable')
+    console.error('Failed to get student timetable:', error)
+    throw new Error(error.message || 'Failed to get student timetable')
   }
 })
 
-ipcMain.handle('childServices:remove', async (_event, { id }) => {
+ipcMain.handle('studentServices:remove', async (_event, { id }) => {
   try {
     requireAdmin()
     const db = getDb()
     if (!id) throw new Error('ID is required')
 
-    db.prepare('DELETE FROM child_services WHERE id = ?').run(id)
-    recordLocalTombstone(db, 'child_services', id)
+    db.prepare('DELETE FROM student_services WHERE id = ?').run(id)
+    recordLocalTombstone(db, 'student_services', id)
     return { ok: true }
   } catch (error: any) {
-    console.error('Failed to remove child service:', error)
-    throw new Error(error.message || 'Failed to remove child service')
+    console.error('Failed to remove student service:', error)
+    throw new Error(error.message || 'Failed to remove student service')
   }
 })

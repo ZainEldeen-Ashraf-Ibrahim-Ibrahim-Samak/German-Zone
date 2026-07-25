@@ -40,7 +40,7 @@ describe('Salaries IPC Contract tests', () => {
     db.prepare('DELETE FROM attendance_records').run()
     db.prepare('DELETE FROM session_teachers').run()
     db.prepare('DELETE FROM scheduled_sessions').run()
-    db.prepare('DELETE FROM children').run()
+    db.prepare('DELETE FROM students').run()
     db.prepare('DELETE FROM employees').run()
     setCurrentUser(null)
   })
@@ -173,12 +173,12 @@ describe('Salaries IPC Contract tests', () => {
         "INSERT INTO scheduled_sessions (session_date, created_at, updated_at, synced) VALUES ('2026-01-10', ?, ?, 0)"
       ).run(now, now)
       const sid = Number(sres.lastInsertRowid)
-      const child = db.prepare(
-        "INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, teacher_id, is_active, created_at, updated_at) VALUES ('K','G','0','s','u',0,?,?,1,?,?)"
+      const student = db.prepare(
+        "INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, teacher_id, is_active, created_at, updated_at) VALUES ('K','G','0','s','u',0,?,?,1,?,?)"
       ).run(now, emp.id, now, now)
-      const cid = Number(child.lastInsertRowid)
+      const cid = Number(student.lastInsertRowid)
       db.prepare(
-        "INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at) VALUES (?,?, 'attended', ?, ?)"
+        "INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at) VALUES (?,?, 'attended', ?, ?)"
       ).run(sid, cid, now, now)
       db.prepare('INSERT INTO session_teachers (session_id, employee_id, synced) VALUES (?, ?, 0)').run(sid, emp.id)
 
@@ -204,11 +204,11 @@ describe('Salaries IPC Contract tests', () => {
         "INSERT INTO scheduled_sessions (session_date, created_at, updated_at, synced) VALUES ('2026-02-05', ?, ?, 0)"
       ).run(now, now)
       const sid = Number(sres.lastInsertRowid)
-      const child = db.prepare(
-        "INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, teacher_id, is_active, created_at, updated_at) VALUES ('K2','G','0','s','u',0,?,?,1,?,?)"
+      const student = db.prepare(
+        "INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, teacher_id, is_active, created_at, updated_at) VALUES ('K2','G','0','s','u',0,?,?,1,?,?)"
       ).run(now, emp.id, now, now)
-      db.prepare("INSERT INTO attendance_records (session_id, child_id, status, recorded_at, updated_at) VALUES (?,?, 'attended', ?, ?)")
-        .run(sid, Number(child.lastInsertRowid), now, now)
+      db.prepare("INSERT INTO attendance_records (session_id, student_id, status, recorded_at, updated_at) VALUES (?,?, 'attended', ?, ?)")
+        .run(sid, Number(student.lastInsertRowid), now, now)
       db.prepare('INSERT INTO session_teachers (session_id, employee_id, synced) VALUES (?, ?, 0)').run(sid, emp.id)
 
       // Saving payroll must persist the per-session amount (200), not net_salary (0)

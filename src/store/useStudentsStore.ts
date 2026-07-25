@@ -1,36 +1,36 @@
 import { create } from 'zustand'
 import { friendlyError } from '../utils/errors.js'
-import type { Child } from '../types/index.js'
+import type { Student } from '../types/index.js'
 
-interface ChildrenFilters {
+interface StudentsFilters {
   search: string
   service: string
   activeOnly: boolean
 }
 
-interface ChildrenState {
-  children: Child[]
+interface StudentsState {
+  students: Student[]
   isLoading: boolean
   error: string | null
-  filters: ChildrenFilters
-  setFilters: (filters: Partial<ChildrenFilters>) => void
+  filters: StudentsFilters
+  setFilters: (filters: Partial<StudentsFilters>) => void
   resetFilters: () => void
-  fetchChildren: () => Promise<void>
-  addChild: (childInput: Omit<Child, 'id' | 'created_at' | 'updated_at' | 'synced' | 'is_active'>) => Promise<Child | null>
-  updateChild: (id: number, patch: Partial<Omit<Child, 'id' | 'created_at' | 'updated_at' | 'synced'>>) => Promise<Child | null>
-  deactivateChild: (id: number) => Promise<boolean>
-  deleteChild: (id: number) => Promise<boolean>
+  fetchStudents: () => Promise<void>
+  addStudent: (studentInput: Omit<Student, 'id' | 'created_at' | 'updated_at' | 'synced' | 'is_active'>) => Promise<Student | null>
+  updateStudent: (id: number, patch: Partial<Omit<Student, 'id' | 'created_at' | 'updated_at' | 'synced'>>) => Promise<Student | null>
+  deactivateStudent: (id: number) => Promise<boolean>
+  deleteStudent: (id: number) => Promise<boolean>
   clearError: () => void
 }
 
-const initialFilters: ChildrenFilters = {
+const initialFilters: StudentsFilters = {
   search: '',
   service: '',
   activeOnly: true,
 }
 
-export const useChildrenStore = create<ChildrenState>((set, get) => ({
-  children: [],
+export const useStudentsStore = create<StudentsState>((set, get) => ({
+  students: [],
   isLoading: false,
   error: null,
   filters: { ...initialFilters },
@@ -39,100 +39,100 @@ export const useChildrenStore = create<ChildrenState>((set, get) => ({
     set((state) => ({
       filters: { ...state.filters, ...newFilters },
     }))
-    get().fetchChildren()
+    get().fetchStudents()
   },
 
   resetFilters: () => {
     set({ filters: { ...initialFilters } })
-    get().fetchChildren()
+    get().fetchStudents()
   },
 
-  fetchChildren: async () => {
+  fetchStudents: async () => {
     set({ isLoading: true, error: null })
     try {
       const { search, service, activeOnly } = get().filters
-      const results = await window.api.children.get({
+      const results = await window.api.students.get({
         search,
         service: service || undefined,
         activeOnly,
       })
-      set({ children: results, isLoading: false })
+      set({ students: results, isLoading: false })
     } catch (err: any) {
-      const errorMsg = friendlyError(err, 'Failed to fetch children')
+      const errorMsg = friendlyError(err, 'Failed to fetch students')
       set({ error: errorMsg, isLoading: false })
     }
   },
 
-  addChild: async (childInput) => {
+  addStudent: async (studentInput) => {
     set({ isLoading: true, error: null })
     try {
-      const result = await window.api.children.add(childInput)
+      const result = await window.api.students.add(studentInput)
       set((state) => ({
-        children: [...state.children, result].sort((a, b) => a.name.localeCompare(b.name)),
+        students: [...state.students, result].sort((a, b) => a.name.localeCompare(b.name)),
         isLoading: false,
       }))
       return result
     } catch (err: any) {
-      const errorMsg = friendlyError(err, 'Failed to add child')
+      const errorMsg = friendlyError(err, 'Failed to add student')
       set({ error: errorMsg, isLoading: false })
       return null
     }
   },
 
-  updateChild: async (id, patch) => {
+  updateStudent: async (id, patch) => {
     set({ isLoading: true, error: null })
     try {
-      const result = await window.api.children.update({ id, patch })
+      const result = await window.api.students.update({ id, patch })
       set((state) => ({
-        children: state.children.map((child) => (child.id === id ? result : child)),
+        students: state.students.map((student) => (student.id === id ? result : student)),
         isLoading: false,
       }))
       return result
     } catch (err: any) {
-      const errorMsg = friendlyError(err, 'Failed to update child')
+      const errorMsg = friendlyError(err, 'Failed to update student')
       set({ error: errorMsg, isLoading: false })
       return null
     }
   },
 
-  deactivateChild: async (id) => {
+  deactivateStudent: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      await window.api.children.deactivate({ id })
+      await window.api.students.deactivate({ id })
       // Refresh list or update status locally
       const { activeOnly } = get().filters
       if (activeOnly) {
         set((state) => ({
-          children: state.children.filter((child) => child.id !== id),
+          students: state.students.filter((student) => student.id !== id),
           isLoading: false,
         }))
       } else {
         set((state) => ({
-          children: state.children.map((child) =>
-            child.id === id ? { ...child, is_active: 0 } : child
+          students: state.students.map((student) =>
+            student.id === id ? { ...student, is_active: 0 } : student
           ),
           isLoading: false,
         }))
       }
       return true
     } catch (err: any) {
-      const errorMsg = friendlyError(err, 'Failed to deactivate child')
+      const errorMsg = friendlyError(err, 'Failed to deactivate student')
       set({ error: errorMsg, isLoading: false })
       return false
     }
   },
 
-  deleteChild: async (id) => {
+  deleteStudent: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      await window.api.children.delete({ id })
+      await window.api.students.delete({ id })
       set((state) => ({
-        children: state.children.filter((child) => child.id !== id),
+        students: state.students.filter((student) => student.id !== id),
         isLoading: false,
       }))
       return true
     } catch (err: any) {
-      const errorMsg = friendlyError(err, 'Failed to delete child')
+      const errorMsg = friendlyError(err, 'Failed to delete student')
       set({ error: errorMsg, isLoading: false })
       return false
     }

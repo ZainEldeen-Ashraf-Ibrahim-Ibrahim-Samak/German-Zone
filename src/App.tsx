@@ -14,10 +14,10 @@ import { useBranding } from './hooks/useBranding.js'
 // Import Pages
 import Dashboard from './pages/Dashboard.js'
 import Login from './pages/Login.js'
-import ChildrenList from './pages/Children/ChildrenList.js'
-import ChildForm from './pages/Children/ChildForm.js'
-import ChildStatement from './pages/Children/ChildStatement.js'
-import ChildDetails from './pages/Children/ChildDetails.js'
+import StudentsList from './pages/Students/StudentsList.js'
+import StudentForm from './pages/Students/StudentForm.js'
+import StudentStatement from './pages/Students/StudentStatement.js'
+import StudentDetails from './pages/Students/StudentDetails.js'
 import MonthlyPayments from './pages/Payments/MonthlyPayments.js'
 import SalariesList from './pages/Salaries/SalariesList.js'
 import PayrollReport from './pages/Salaries/PayrollReport.js'
@@ -87,12 +87,12 @@ export default function App() {
           {/* Dashboard - Both admin and employee */}
           <Route index element={<Dashboard />} />
 
-          {/* Children Roster - all read & add (feature 004 FR-012); edit is admin-only */}
-          <Route path="children" element={<ChildrenList />} />
-          <Route path="children/new" element={<RoleGuard allowedRoles={['admin', 'employee']}><ChildForm /></RoleGuard>} />
-          <Route path="children/:id/edit" element={<RoleGuard allowedRoles={['admin']}><ChildForm /></RoleGuard>} />
-          <Route path="children/:id/statement" element={<ChildStatement />} />
-          <Route path="children/:id/details" element={<ChildDetails />} />
+          {/* Students Roster - all read & add (feature 004 FR-012); edit is admin-only */}
+          <Route path="students" element={<StudentsList />} />
+          <Route path="students/new" element={<RoleGuard allowedRoles={['admin', 'employee']}><StudentForm /></RoleGuard>} />
+          <Route path="students/:id/edit" element={<RoleGuard allowedRoles={['admin']}><StudentForm /></RoleGuard>} />
+          <Route path="students/:id/statement" element={<StudentStatement />} />
+          <Route path="students/:id/details" element={<StudentDetails />} />
 
           {/* Payments - Both read/write */}
           <Route path="payments" element={<MonthlyPayments />} />

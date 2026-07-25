@@ -95,7 +95,7 @@ export default function PaymentInstallmentsModal({ payment, paymentMethods, onCl
       isOpen
       onClose={onClose}
       size="lg"
-      title={`${isAr ? 'الدفعات الجزئية' : 'Partial Payments'} — ${payment.child_name || ''}`}
+      title={`${isAr ? 'الدفعات الجزئية' : 'Partial Payments'} — ${payment.student_name || ''}`}
       footer={<Button variant="outline" onClick={onClose}>{isAr ? 'إغلاق' : 'Close'}</Button>}
     >
       <div className="space-y-4">

@@ -11,7 +11,7 @@ import { Alert } from '../../components/ui/Alert.js'
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner.js'
 import { useAuthStore } from '../../store/useAuthStore.js'
 import { ReportActions } from '../../components/reports/ReportActions.js'
-import type { ChildStatement as ChildStatementType, ChildStatementRow, AttendanceHistoryRow } from '../../types/index.js'
+import type { StudentStatement as StudentStatementType, StudentStatementRow, AttendanceHistoryRow } from '../../types/index.js'
 
 const arabicMonths = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -23,16 +23,16 @@ const englishMonths = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
-export default function ChildStatement() {
+export default function StudentStatement() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { t, i18n } = useTranslation()
-  const { exportChild } = useExport()
+  const { exportStudent } = useExport()
 
-  const [statement, setStatement] = useState<ChildStatementType | null>(null)
+  const [statement, setStatement] = useState<StudentStatementType | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+
 
   // Attendance history (FR-019) — admin-only, per the access-control clarification.
   const { user } = useAuthStore()
@@ -41,7 +41,7 @@ export default function ChildStatement() {
 
   useEffect(() => {
     if (!id || !isAdmin) return
-    window.api.attendance.getChildHistory(Number(id)).then(setAttendanceHistory).catch(() => setAttendanceHistory([]))
+    window.api.attendance.getStudentHistory(Number(id)).then(setAttendanceHistory).catch(() => setAttendanceHistory([]))
   }, [id, isAdmin])
 
   // Fetch statement data
@@ -50,11 +50,11 @@ export default function ChildStatement() {
     setIsLoading(true)
     setError(null)
     try {
-      const data = await window.api.children.statement({ childId: Number(id) })
+      const data = await window.api.students.statement({ studentId: Number(id) })
       setStatement(data)
     } catch (err: any) {
       console.error(err)
-      setError(err.message || 'Failed to load child statement')
+      setError(err.message || 'Failed to load student statement')
     } finally {
       setIsLoading(false)
     }
@@ -83,7 +83,7 @@ export default function ChildStatement() {
   const handleExport = async (format: 'xlsx' | 'pdf' | 'csv') => {
     if (!id) return
     try {
-      const result = await exportChild(Number(id), format)
+      const result = await exportStudent(Number(id), format)
       if (result && result.filePath) {
         console.log(`Statement exported successfully to: ${result.filePath}`)
       }
@@ -94,7 +94,7 @@ export default function ChildStatement() {
 
   const handlePrint = async () => {
     if (!id) return
-    const { html } = await window.api.print.preview({ reportType: 'child', childId: Number(id), lang: i18n.language })
+    const { html } = await window.api.print.preview({ reportType: 'student', studentId: Number(id), lang: i18n.language })
     const win = window.open('', '_blank')
     if (!win) return
     win.document.write(html)
@@ -103,14 +103,14 @@ export default function ChildStatement() {
     win.print()
   }
 
-  const handleChildReportExport = async (format: 'pdf' | 'xlsx' | 'csv') => {
+  const handleStudentReportExport = async (format: 'pdf' | 'xlsx' | 'csv') => {
     if (!id) return
-    await window.api.export.childReport({ childId: Number(id), format, lang: i18n.language })
+    await window.api.export.studentReport({ studentId: Number(id), format, lang: i18n.language })
   }
 
-  const handleChildReportPrint = async () => {
+  const handleStudentReportPrint = async () => {
     if (!id) return
-    const { html } = await window.api.print.preview({ reportType: 'childReport', childId: Number(id), lang: i18n.language })
+    const { html } = await window.api.print.preview({ reportType: 'studentReport', studentId: Number(id), lang: i18n.language })
     const win = window.open('', '_blank')
     if (!win) return
     win.document.write(html)
@@ -124,7 +124,7 @@ export default function ChildStatement() {
     {
       key: 'period',
       header: i18n.language === 'ar' ? 'الفترة' : 'Billing Period',
-      render: (row: ChildStatementRow) => (
+      render: (row: StudentStatementRow) => (
         <span className="font-semibold text-slate-900">
           {formatMonth(row.month)} {row.year}
         </span>
@@ -133,26 +133,26 @@ export default function ChildStatement() {
     {
       key: 'service',
       header: t('service'),
-      render: (row: ChildStatementRow) => (
+      render: (row: StudentStatementRow) => (
         <span>{row.service} ({row.unit})</span>
       )
     },
     {
       key: 'quantity',
       header: i18n.language === 'ar' ? 'الكمية' : 'Qty',
-      render: (row: ChildStatementRow) => <span>{row.quantity}</span>,
+      render: (row: StudentStatementRow) => <span>{row.quantity}</span>,
       className: 'text-center'
     },
     {
       key: 'price',
       header: t('price'),
-      render: (row: ChildStatementRow) => <span>{formatCurrency(row.price)}</span>,
+      render: (row: StudentStatementRow) => <span>{formatCurrency(row.price)}</span>,
       className: 'text-end'
     },
     {
       key: 'total',
       header: t('invoiced'),
-      render: (row: ChildStatementRow) => (
+      render: (row: StudentStatementRow) => (
         <span className="font-medium">{formatCurrency(row.total)}</span>
       ),
       className: 'text-end'
@@ -160,7 +160,7 @@ export default function ChildStatement() {
     {
       key: 'paid',
       header: t('collected'),
-      render: (row: ChildStatementRow) => (
+      render: (row: StudentStatementRow) => (
         <span className="text-emerald-600 font-medium">{formatCurrency(row.paid)}</span>
       ),
       className: 'text-end'
@@ -168,7 +168,7 @@ export default function ChildStatement() {
     {
       key: 'balance',
       header: t('arrears'),
-      render: (row: ChildStatementRow) => {
+      render: (row: StudentStatementRow) => {
         if (row.balance < 0) {
           // Credit
           return (
@@ -191,16 +191,16 @@ export default function ChildStatement() {
     {
       key: 'status',
       header: t('status'),
-      render: (row: ChildStatementRow) => {
+      render: (row: StudentStatementRow) => {
         let variant: 'success' | 'warning' | 'danger' = 'warning'
         if (row.status === 'paid') variant = 'success'
         else if (row.status === 'unpaid') variant = 'danger'
-        
+
         return (
           <Badge variant={variant}>
-            {row.status === 'paid' 
-              ? (i18n.language === 'ar' ? 'تم السداد' : 'Paid') 
-              : row.status === 'partial' 
+            {row.status === 'paid'
+              ? (i18n.language === 'ar' ? 'تم السداد' : 'Paid')
+              : row.status === 'partial'
                 ? (i18n.language === 'ar' ? 'سداد جزئي' : 'Partial')
                 : (i18n.language === 'ar' ? 'غير مسدد' : 'Unpaid')}
           </Badge>
@@ -211,7 +211,7 @@ export default function ChildStatement() {
     {
       key: 'notes',
       header: t('notes'),
-      render: (row: ChildStatementRow) => (
+      render: (row: StudentStatementRow) => (
         <span className="text-slate-500 max-w-xs block truncate" title={row.notes}>
           {row.notes || '—'}
         </span>
@@ -231,16 +231,16 @@ export default function ChildStatement() {
     return (
       <div className="p-6">
         <Alert variant="danger" title={t('error')}>
-          {error || 'Child statement not found'}
+          {error || 'Student statement not found'}
         </Alert>
-        <Button onClick={() => navigate('/children')} className="mt-4">
-          {i18n.language === 'ar' ? 'العودة لقائمة الأطفال' : 'Back to Children'}
+        <Button onClick={() => navigate('/students')} className="mt-4">
+          {i18n.language === 'ar' ? 'العودة لقائمة الطلاب' : 'Back to Students'}
         </Button>
       </div>
     )
   }
 
-  const { child, rows, summary } = statement
+  const { student, rows, summary } = statement
 
   return (
     <div className="p-6 space-y-6">
@@ -251,7 +251,7 @@ export default function ChildStatement() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate('/children')}
+              onClick={() => navigate('/students')}
             >
               {i18n.language === 'ar' ? '← عودة' : '← Back'}
             </Button>
@@ -260,19 +260,19 @@ export default function ChildStatement() {
           </div>
           <div className="flex items-center gap-3 mt-2">
             <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-              {child.photo_url ? (
-                <img src={child.photo_url} alt={child.name} className="w-full h-full object-cover" />
+              {student.photo_url ? (
+                <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xl text-slate-300">🧒</span>
               )}
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">
-                {i18n.language === 'ar' ? `كشف حساب: ${child.name}` : `Statement: ${child.name}`}
+                {i18n.language === 'ar' ? `كشف حساب: ${student.name}` : `Statement: ${student.name}`}
               </h1>
-              {child.teacher_name && (
+              {student.teacher_name && (
                 <p className="text-sm text-slate-500">
-                  {t('teacher')}: <span className="font-semibold text-slate-700">{child.teacher_name}</span>
+                  {t('teacher')}: <span className="font-semibold text-slate-700">{student.teacher_name}</span>
                 </p>
               )}
             </div>
@@ -294,22 +294,22 @@ export default function ChildStatement() {
           </div>
           <div className="flex items-center gap-2 w-full md:w-auto flex-wrap justify-end">
             <span className="text-xs text-slate-400 self-center">
-              {i18n.language === 'ar' ? 'تقرير الطفل الشامل:' : 'Full Child Report:'}
+              {i18n.language === 'ar' ? 'تقرير الطالب الشامل:' : 'Full Student Report:'}
             </span>
             <ReportActions
-              onPrint={handleChildReportPrint}
-              onExportPdf={() => handleChildReportExport('pdf')}
-              onExportExcel={() => handleChildReportExport('xlsx')}
-              onExportCsv={() => handleChildReportExport('csv')}
+              onPrint={handleStudentReportPrint}
+              onExportPdf={() => handleStudentReportExport('pdf')}
+              onExportExcel={() => handleStudentReportExport('xlsx')}
+              onExportCsv={() => handleStudentReportExport('csv')}
             />
           </div>
         </div>
       </div>
 
-      {/* Child Information Header Card */}
+      {/* Student Information Header Card */}
       <Card className="p-6 bg-slate-50/50">
         <h2 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-3 mb-4">
-          👤 {i18n.language === 'ar' ? 'بيانات الطفل والاشتراك الأساسي' : 'Child & Primary Service Info'}
+          👤 {i18n.language === 'ar' ? 'بيانات الطالب والاشتراك الأساسي' : 'Student & Primary Service Info'}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
@@ -317,7 +317,7 @@ export default function ChildStatement() {
               {t('guardian')}
             </span>
             <span className="text-slate-800 font-medium mt-1 block">
-              {child.guardian}
+              {student.guardian}
             </span>
           </div>
           <div>
@@ -325,7 +325,7 @@ export default function ChildStatement() {
               {t('guardian_phone')}
             </span>
             <span className="text-slate-800 font-medium font-mono mt-1 block">
-              {child.guardian_phone}
+              {student.guardian_phone}
             </span>
           </div>
           <div>
@@ -333,7 +333,7 @@ export default function ChildStatement() {
               {i18n.language === 'ar' ? 'الخدمة والسعر المتفق عليه' : 'Service & Agreed Price'}
             </span>
             <span className="text-slate-800 font-medium mt-1 block">
-              {child.service} — {formatCurrency(child.price)} / {child.unit}
+              {student.service} — {formatCurrency(student.price)} / {student.unit}
             </span>
           </div>
           <div>
@@ -341,7 +341,7 @@ export default function ChildStatement() {
               {t('reg_date')}
             </span>
             <span className="text-slate-800 font-medium font-mono mt-1 block">
-              {child.reg_date}
+              {student.reg_date}
             </span>
           </div>
         </div>
@@ -377,12 +377,12 @@ export default function ChildStatement() {
         <h3 className="text-lg font-bold text-slate-800">
           📋 {i18n.language === 'ar' ? 'سجل المطالبات والدفعات الشهرية تفصيلياً' : 'Detailed Monthly Invoices & Payments'}
         </h3>
-        
+
         <Table
           columns={columns}
           data={rows}
           keyExtractor={(row, index) => `${row.year}-${row.month}-${index}`}
-          emptyMessage={i18n.language === 'ar' ? 'لا يوجد سجل مطالبات لهذا الطفل بعد.' : 'No payment records for this child.'}
+          emptyMessage={i18n.language === 'ar' ? 'لا يوجد سجل مطالبات لهذا الطالب بعد.' : 'No payment records for this student.'}
         />
       </div>
 
@@ -397,13 +397,13 @@ export default function ChildStatement() {
               { key: 'attendance_date', header: i18n.language === 'ar' ? 'التاريخ' : 'Date', render: (r: AttendanceHistoryRow) => r.attendance_date },
               { key: 'teacher_name', header: i18n.language === 'ar' ? 'المعلم' : 'Teacher', render: (r: AttendanceHistoryRow) => r.teacher_name || '—' },
               { key: 'teacher_status', header: i18n.language === 'ar' ? 'حالة المعلم' : 'Teacher Status', render: (r: AttendanceHistoryRow) => r.teacher_status === 'present' ? (i18n.language === 'ar' ? 'حاضر' : 'Present') : r.teacher_status === 'absent' ? (i18n.language === 'ar' ? 'غائب' : 'Absent') : '—' },
-              { key: 'child_status', header: i18n.language === 'ar' ? 'حالة الطفل' : 'Child Status', render: (r: AttendanceHistoryRow) => r.child_status === 'attended' ? (i18n.language === 'ar' ? 'حاضر' : 'Attended') : r.child_status === 'absent_excused' ? (i18n.language === 'ar' ? 'غائب بعذر' : 'Excused') : (i18n.language === 'ar' ? 'غائب بدون عذر' : 'Unexcused') },
+              { key: 'student_status', header: i18n.language === 'ar' ? 'حالة الطالب' : 'Student Status', render: (r: AttendanceHistoryRow) => r.student_status === 'attended' ? (i18n.language === 'ar' ? 'حاضر' : 'Attended') : r.student_status === 'absent_excused' ? (i18n.language === 'ar' ? 'غائب بعذر' : 'Excused') : (i18n.language === 'ar' ? 'غائب بدون عذر' : 'Unexcused') },
               { key: 'payment_generated', header: i18n.language === 'ar' ? 'تم الدفع' : 'Payment', render: (r: AttendanceHistoryRow) => r.payment_generated ? <Badge variant="success">{i18n.language === 'ar' ? 'نعم' : 'Yes'}</Badge> : <Badge variant="neutral">{i18n.language === 'ar' ? 'لا' : 'No'}</Badge> },
               { key: 'session_cost', header: i18n.language === 'ar' ? 'تكلفة الجلسة' : 'Session Cost', render: (r: AttendanceHistoryRow) => r.session_cost != null ? formatCurrency(r.session_cost) : '—' },
             ]}
             data={attendanceHistory}
             keyExtractor={(row, index) => `${row.attendance_date}-${index}`}
-            emptyMessage={i18n.language === 'ar' ? 'لا يوجد سجل حضور لهذا الطفل بعد.' : 'No attendance history for this child yet.'}
+            emptyMessage={i18n.language === 'ar' ? 'لا يوجد سجل حضور لهذا الطالب بعد.' : 'No attendance history for this student yet.'}
           />
         </div>
       )}

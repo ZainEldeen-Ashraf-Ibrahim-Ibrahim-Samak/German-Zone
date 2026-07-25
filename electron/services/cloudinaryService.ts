@@ -24,9 +24,9 @@ export function signParams(params: Record<string, string | number>, apiSecret: s
  * `file` field) to Cloudinary via a signed REST request. Runs in the main
  * process only; the API secret never leaves here. Throws a descriptive error
  * when Cloudinary is not configured or the request fails — the caller (renderer)
- * catches it and proceeds to save the child without a photo (offline-safe).
+ * catches it and proceeds to save the student without a photo (offline-safe).
  */
-export async function uploadImage(dataUrl: string, folder = 'nursery/children'): Promise<UploadedImage> {
+export async function uploadImage(dataUrl: string, folder = 'nursery/students'): Promise<UploadedImage> {
   const config = getCloudinaryConfig()
   if (!config) {
     throw new Error('Cloudinary is not configured / لم يتم إعداد Cloudinary')
@@ -66,10 +66,10 @@ export async function uploadImage(dataUrl: string, folder = 'nursery/children'):
 /**
  * Upload any file (data URL) to Cloudinary via a signed REST request, targeting the
  * `/auto/upload` endpoint so Cloudinary detects the resource type itself (image, video,
- * or raw for documents/audio/anything else). Used by the child activity diary, which
+ * or raw for documents/audio/anything else). Used by the student activity diary, which
  * accepts attachments of any type.
  */
-export async function uploadFile(dataUrl: string, folder = 'nursery/children'): Promise<UploadedImage> {
+export async function uploadFile(dataUrl: string, folder = 'nursery/students'): Promise<UploadedImage> {
   const config = getCloudinaryConfig()
   if (!config) {
     throw new Error('Cloudinary is not configured / لم يتم إعداد Cloudinary')
@@ -109,9 +109,9 @@ export async function uploadFile(dataUrl: string, folder = 'nursery/children'): 
 /**
  * Upload a video (data URL or remote URL) to Cloudinary via a signed REST request,
  * identical in shape to `uploadImage` but targeting the `/video/upload` endpoint with
- * `resource_type=video` (feature 009 — child activity/diary media).
+ * `resource_type=video` (feature 009 — student activity/diary media).
  */
-export async function uploadVideo(dataUrl: string, folder = 'nursery/children'): Promise<UploadedImage> {
+export async function uploadVideo(dataUrl: string, folder = 'nursery/students'): Promise<UploadedImage> {
   const config = getCloudinaryConfig()
   if (!config) {
     throw new Error('Cloudinary is not configured / لم يتم إعداد Cloudinary')

@@ -21,7 +21,7 @@ function getHandler(channel: string) {
 describe('Teacher rate priority: own rate (30) must win from the very first save', () => {
   let db: any
   let teacherId: number
-  let childId: number
+  let studentId: number
   let sessionId: number
 
   beforeAll(() => {
@@ -37,8 +37,8 @@ describe('Teacher rate priority: own rate (30) must win from the very first save
       VALUES ('Ahmed', 'Teacher', 0, 0, 1, ?, 30)
     `).run(now).lastInsertRowid)
 
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, teacher_id)
       VALUES ('Sami', 'Guardian', '0100', 'جلسة', 'جلسة', 100, '2026-01-01', ?, ?, ?)
     `).run(now, now, teacherId).lastInsertRowid)
 
@@ -50,8 +50,8 @@ describe('Teacher rate priority: own rate (30) must win from the very first save
   const record = getHandler('attendance:record')
 
   it('uses the teacher\'s own rate (30) on the very first payment', async () => {
-    await record(null, { session_id: sessionId, records: [{ child_id: childId, status: 'attended', teacher_status: 'present' }] })
-    const row = db.prepare('SELECT * FROM teacher_payments WHERE teacher_id = ? AND child_id = ?').get(teacherId, childId) as any
+    await record(null, { session_id: sessionId, records: [{ student_id: studentId, status: 'attended', teacher_status: 'present' }] })
+    const row = db.prepare('SELECT * FROM teacher_payments WHERE teacher_id = ? AND student_id = ?').get(teacherId, studentId) as any
     expect(row).toBeDefined()
     expect(row.session_cost).toBe(30)
   })

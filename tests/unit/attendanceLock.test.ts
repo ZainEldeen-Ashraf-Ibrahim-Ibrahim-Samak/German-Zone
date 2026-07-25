@@ -21,7 +21,7 @@ function getHandler(channel: string) {
 
 describe('Attendance lock (feature 007, FR-011/FR-012): existing row blocks non-admin direct writes, admin bypasses', () => {
   let db: any
-  let childId: number
+  let studentId: number
   let sessionId: number
 
   const record = getHandler('attendance:record')
@@ -34,8 +34,8 @@ describe('Attendance lock (feature 007, FR-011/FR-012): existing row blocks non-
     db.prepare(`INSERT INTO users (id, username, password, role, is_active, created_at) VALUES (1, 'admin', 'x', 'admin', 1, ?)`).run(now)
     db.prepare(`INSERT INTO users (id, username, password, role, is_active, created_at) VALUES (2, 'emp', 'x', 'employee', 1, ?)`).run(now)
 
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
       VALUES ('Sami', 'Guardian', '0100', 'حضانة', 'شهر', 100, '2026-01-01', ?, ?)
     `).run(now, now).lastInsertRowid)
 
@@ -46,14 +46,14 @@ describe('Attendance lock (feature 007, FR-011/FR-012): existing row blocks non-
 
   it('employee first save succeeds (no existing row yet)', async () => {
     setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
-    const res = await record(null, { session_id: sessionId, records: [{ child_id: childId, status: 'attended' }] })
+    const res = await record(null, { session_id: sessionId, records: [{ student_id: studentId, status: 'attended' }] })
     expect(res[0].locked).toBeFalsy()
     expect(res[0].status).toBe('attended')
   })
 
   it('employee direct re-edit of the same row is blocked and marked locked', async () => {
     setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
-    const res = await record(null, { session_id: sessionId, records: [{ child_id: childId, status: 'absent_excused' }] })
+    const res = await record(null, { session_id: sessionId, records: [{ student_id: studentId, status: 'absent_excused' }] })
     expect(res[0].locked).toBe(true)
     // Value must remain unchanged
     expect(res[0].status).toBe('attended')
@@ -61,13 +61,13 @@ describe('Attendance lock (feature 007, FR-011/FR-012): existing row blocks non-
 
   it('attendance:getSheet reports locked: true for the existing row', async () => {
     const sheet = await getSheet(null, { session_id: sessionId })
-    const row = sheet.find((r: any) => r.child_id === childId)
+    const row = sheet.find((r: any) => r.student_id === studentId)
     expect(row.locked).toBe(true)
   })
 
   it('admin direct re-edit of the same row succeeds and is audit-logged', async () => {
     setCurrentUser({ id: 1, username: 'admin', role: 'admin', is_active: 1 })
-    const res = await record(null, { session_id: sessionId, records: [{ child_id: childId, status: 'absent_unexcused' }] })
+    const res = await record(null, { session_id: sessionId, records: [{ student_id: studentId, status: 'absent_unexcused' }] })
     expect(res[0].locked).toBeFalsy()
     expect(res[0].status).toBe('absent_unexcused')
 

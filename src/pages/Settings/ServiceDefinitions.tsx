@@ -27,7 +27,7 @@ export default function ServiceDefinitions() {
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<number[]>([])
 
   useEffect(() => { fetchServices() }, [])
-  useEffect(() => { window.api.teachers.list({}).then(setAllTeachers).catch(() => {}) }, [])
+  useEffect(() => { window.api.teachers.list({}).then(setAllTeachers).catch(() => { }) }, [])
 
   const openCreate = () => {
     setEditing(null); setName(''); setPriceMonthly(''); setPriceDaily(''); setPriceHourly(''); setFormError('')
@@ -138,9 +138,8 @@ export default function ServiceDefinitions() {
                     type="button"
                     key={tch.id}
                     onClick={() => toggleTeacher(tch.id)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                      active ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                    }`}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${active ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                      }`}
                   >
                     {tch.name}
                   </button>
@@ -155,7 +154,7 @@ export default function ServiceDefinitions() {
       <Modal isOpen={!!toDelete} onClose={() => setToDelete(null)} title={isAr ? 'حذف الخدمة' : 'Delete Service'}
         footer={<div className="flex gap-2"><Button variant="outline" onClick={() => setToDelete(null)}>{isAr ? 'إلغاء' : 'Cancel'}</Button><Button variant="danger" onClick={handleDelete}>{isAr ? 'حذف' : 'Delete'}</Button></div>}
       >
-        <p className="text-sm text-slate-600">{isAr ? `حذف "${toDelete?.name}"؟ يجب إعادة تسجيل الأطفال المشتركين فيها أولاً.` : `Delete "${toDelete?.name}"? Children enrolled in it must be re-enrolled first.`}</p>
+        <p className="text-sm text-slate-600">{isAr ? `حذف "${toDelete?.name}"؟ يجب إعادة تسجيل الطلاب المشتركين فيها أولاً.` : `Delete "${toDelete?.name}"? Students enrolled in it must be re-enrolled first.`}</p>
       </Modal>
     </div>
   )

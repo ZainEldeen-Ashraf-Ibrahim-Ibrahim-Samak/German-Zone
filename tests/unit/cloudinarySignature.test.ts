@@ -9,11 +9,11 @@ import { signParams } from '../../electron/services/cloudinaryService.js'
  */
 describe('cloudinary signParams', () => {
   it('computes sha1 of sorted params + secret', () => {
-    const params = { folder: 'nursery/children', timestamp: 1700000000 }
+    const params = { folder: 'nursery/students', timestamp: 1700000000 }
     const secret = 'test_secret'
     const expected = crypto
       .createHash('sha1')
-      .update('folder=nursery/children&timestamp=1700000000' + secret)
+      .update('folder=nursery/students&timestamp=1700000000' + secret)
       .digest('hex')
     expect(signParams(params, secret)).toBe(expected)
   })

@@ -39,8 +39,8 @@ export async function seedDatabase(db: Db): Promise<void> {
 
       // Branding Settings
       { key: 'brand_app_name', value: seedSetting('SEED_BRAND_APP_NAME', 'أكاديمية مهند الليثي') },
-      { key: 'brand_org_name', value: seedSetting('SEED_BRAND_ORG_NAME', 'مركز مهند الليثي للتوحد ونمو الطفل') },
-      { key: 'brand_tagline', value: 'رعاية متميزة وتنمية مهارات طفلك' },
+      { key: 'brand_org_name', value: seedSetting('SEED_BRAND_ORG_NAME', 'مركز مهند الليثي للتوحد ونمو الطالب') },
+      { key: 'brand_tagline', value: 'رعاية متميزة وتنمية مهارات طالبك' },
       { key: 'brand_primary_color', value: seedSetting('SEED_BRAND_PRIMARY_COLOR', '#0f766e') }, // Teal 700
       { key: 'brand_accent_color', value: seedSetting('SEED_BRAND_ACCENT_COLOR', '#f59e0b') },  // Amber 500
       { key: 'brand_phone', value: seedSetting('SEED_BRAND_PHONE', '+20 123 456 7890') },

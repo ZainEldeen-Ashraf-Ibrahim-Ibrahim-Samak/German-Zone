@@ -20,31 +20,31 @@ import '../../electron/ipc/dashboardIPC.js'
 import { setCurrentUser } from '../../electron/ipc/authIPC.js'
 
 // ── helpers ────────────────────────────────────────────────────────────────
-function insertChild(db: any, overrides: Record<string, any> = {}) {
+function insertStudent(db: any, overrides: Record<string, any> = {}) {
   const res = db.prepare(`
-    INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
+    INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at, is_active)
     VALUES (?, ?, '01000000000', 'حضانة', 'شهر', ?, '2026-01-01', '2026-06-01', '2026-06-01', 1)
   `).run(
-    overrides.name ?? 'طفل',
+    overrides.name ?? 'طالب',
     overrides.guardian ?? 'ولي',
     overrides.price ?? 3000
   )
   return Number(res.lastInsertRowid)
 }
 
-function insertService(db: any, childId: number, price = 3000) {
+function insertService(db: any, studentId: number, price = 3000) {
   const res = db.prepare(`
-    INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at)
+    INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at)
     VALUES (?, 'حضانة', 'شهر', ?, '2026-06-01', '2026-06-01')
-  `).run(childId, price)
+  `).run(studentId, price)
   return Number(res.lastInsertRowid)
 }
 
-function insertPayment(db: any, childId: number, svcId: number, opts: any) {
+function insertPayment(db: any, studentId: number, svcId: number, opts: any) {
   db.prepare(`
-    INSERT INTO payments (child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
+    INSERT INTO payments (student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, created_at, updated_at, synced)
     VALUES (?, ?, ?, ?, 'حضانة', 'شهر', 1, ?, ?, ?, ?, ?, '2026-06-01', '2026-06-01', 0)
-  `).run(childId, svcId, opts.month, opts.year, opts.price, opts.total, opts.paid, opts.balance, opts.status)
+  `).run(studentId, svcId, opts.month, opts.year, opts.price, opts.total, opts.paid, opts.balance, opts.status)
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -61,8 +61,8 @@ describe('dashboard:get IPC contract', () => {
 
   beforeEach(() => {
     db.prepare('DELETE FROM payments').run()
-    db.prepare('DELETE FROM child_services').run()
-    db.prepare('DELETE FROM children').run()
+    db.prepare('DELETE FROM student_services').run()
+    db.prepare('DELETE FROM students').run()
     db.prepare('DELETE FROM expenses').run()
     db.prepare('DELETE FROM salary_payments').run()
     db.prepare('DELETE FROM employees').run()
@@ -98,7 +98,7 @@ describe('dashboard:get IPC contract', () => {
 
   it('aggregates payment KPIs correctly', async () => {
     admin()
-    const cid = insertChild(db, { price: 3000 })
+    const cid = insertStudent(db, { price: 3000 })
     const sid = insertService(db, cid, 3000)
     insertPayment(db, cid, sid, { month: 'يونيو', year: 2026, price: 3000, total: 3000, paid: 1500, balance: 1500, status: 'partial' })
 
@@ -111,7 +111,7 @@ describe('dashboard:get IPC contract', () => {
 
   it('computes netProfit subtracting expenses and salaries', async () => {
     admin()
-    const cid = insertChild(db, { price: 3000 })
+    const cid = insertStudent(db, { price: 3000 })
     const sid = insertService(db, cid, 3000)
     insertPayment(db, cid, sid, { month: 'مارس', year: 2026, price: 3000, total: 3000, paid: 3000, balance: 0, status: 'paid' })
 
@@ -153,10 +153,10 @@ describe('dashboard:get IPC contract', () => {
   it('breaks down collected amounts by payment method', async () => {
     admin()
     const addPaid = (paid: number, method: string | null) => {
-      const cid = insertChild(db, { name: `طفل ${method ?? 'بدون'} ${paid}`, price: 3000 })
+      const cid = insertStudent(db, { name: `طالب ${method ?? 'بدون'} ${paid}`, price: 3000 })
       const sid = insertService(db, cid, 3000)
       db.prepare(`
-        INSERT INTO payments (child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, payment_method_name, created_at, updated_at, synced)
+        INSERT INTO payments (student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, payment_method_name, created_at, updated_at, synced)
         VALUES (?, ?, 'يونيو', 2026, 'حضانة', 'شهر', 1, 3000, 3000, ?, ?, 'paid', ?, '2026-06-01', '2026-06-01', 0)
       `).run(cid, sid, paid, 3000 - paid, method)
     }
@@ -179,7 +179,7 @@ describe('dashboard:get IPC contract', () => {
 
   it('emits an arrears alert when arrears > 0', async () => {
     admin()
-    const cid = insertChild(db, { price: 2000 })
+    const cid = insertStudent(db, { price: 2000 })
     const sid = insertService(db, cid, 2000)
     insertPayment(db, cid, sid, { month: 'أبريل', year: 2026, price: 2000, total: 2000, paid: 0, balance: 2000, status: 'unpaid' })
 
@@ -190,7 +190,7 @@ describe('dashboard:get IPC contract', () => {
 
   it('emits a low-collection-rate info alert when rate < 80%', async () => {
     admin()
-    const cid = insertChild(db, { price: 5000 })
+    const cid = insertStudent(db, { price: 5000 })
     const sid = insertService(db, cid, 5000)
     insertPayment(db, cid, sid, { month: 'مايو', year: 2026, price: 5000, total: 5000, paid: 1000, balance: 4000, status: 'partial' })
 
@@ -203,7 +203,7 @@ describe('dashboard:get IPC contract', () => {
     admin()
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('target_profit_pct', '0.2')").run()
 
-    const cid = insertChild(db, { price: 3000 })
+    const cid = insertStudent(db, { price: 3000 })
     const sid = insertService(db, cid, 3000)
     insertPayment(db, cid, sid, { month: 'فبراير', year: 2026, price: 3000, total: 3000, paid: 500, balance: 2500, status: 'partial' })
     db.prepare(`INSERT INTO expenses (item, month, year, amount, created_at) VALUES ('إيجار', 'فبراير', 2026, 10000, '2026-06-01')`).run()

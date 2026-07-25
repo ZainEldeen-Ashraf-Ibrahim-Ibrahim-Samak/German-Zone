@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 
-import { getChildStatement } from '../../electron/services/statementService.js'
+import { getStudentStatement } from '../../electron/services/statementService.js'
 
-describe('Child Statement Builder Unit Tests', () => {
-  const mockChild = {
+describe('Student Statement Builder Unit Tests', () => {
+  const mockStudent = {
     id: 1,
     name: 'أحمد علي',
     guardian: 'علي أحمد',
@@ -20,7 +20,7 @@ describe('Child Statement Builder Unit Tests', () => {
     const currentDate = new Date('2026-06-15')
     const existingPayments: any[] = []
 
-    const statement = getChildStatement(mockChild, existingPayments, currentDate)
+    const statement = getStudentStatement(mockStudent, existingPayments, currentDate)
 
     expect(statement.summary.activeMonths).toBe(5) // Feb, Mar, Apr, May, Jun
     expect(statement.rows.length).toBe(5)
@@ -71,7 +71,7 @@ describe('Child Statement Builder Unit Tests', () => {
       }
     ]
 
-    const statement = getChildStatement(mockChild, existingPayments, currentDate)
+    const statement = getStudentStatement(mockStudent, existingPayments, currentDate)
 
     expect(statement.summary.activeMonths).toBe(3) // Feb, Mar, Apr
     expect(statement.rows.length).toBe(3)
@@ -103,12 +103,12 @@ describe('Child Statement Builder Unit Tests', () => {
 
   it('should handle registration date in the future gracefully', () => {
     const currentDate = new Date('2026-02-01')
-    const futureChild = {
-      ...mockChild,
+    const futureStudent = {
+      ...mockStudent,
       reg_date: '2026-05-15'
     }
 
-    const statement = getChildStatement(futureChild, [], currentDate)
+    const statement = getStudentStatement(futureStudent, [], currentDate)
     // If registered in future compared to currentDate, we fallback to just the registration month
     expect(statement.summary.activeMonths).toBe(1)
     expect(statement.rows[0].month).toBe('مايو')
@@ -116,12 +116,12 @@ describe('Child Statement Builder Unit Tests', () => {
 
   it('should fallback to current date if reg_date is invalid', () => {
     const currentDate = new Date('2026-06-15')
-    const invalidChild = {
-      ...mockChild,
+    const invalidStudent = {
+      ...mockStudent,
       reg_date: 'invalid-date'
     }
 
-    const statement = getChildStatement(invalidChild, [], currentDate)
+    const statement = getStudentStatement(invalidStudent, [], currentDate)
     expect(statement.summary.activeMonths).toBe(1)
     expect(statement.rows[0].month).toBe('يونيو')
     expect(statement.rows[0].year).toBe(2026)

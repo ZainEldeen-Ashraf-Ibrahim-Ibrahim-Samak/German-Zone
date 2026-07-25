@@ -58,9 +58,9 @@ ipcMain.handle('serviceDefinitions:delete', async (_event, { id }) => {
     const svc = db.prepare('SELECT * FROM service_definitions WHERE id = ?').get(id) as any
     if (!svc) throw new Error('الخدمة غير موجودة / Service not found')
     if (svc.is_custom === 0) throw new Error('لا يمكن حذف الخدمات الافتراضية / Cannot delete built-in services')
-    const enrolled = db.prepare("SELECT COUNT(*) as cnt FROM child_services WHERE service = ?").get(svc.name) as { cnt: number }
+    const enrolled = db.prepare("SELECT COUNT(*) as cnt FROM student_services WHERE service = ?").get(svc.name) as { cnt: number }
     if (enrolled.cnt > 0) {
-      throw new Error(`لا يمكن الحذف — ${enrolled.cnt} طفل مسجل في هذه الخدمة / Cannot delete — ${enrolled.cnt} child(ren) enrolled`)
+      throw new Error(`لا يمكن الحذف — ${enrolled.cnt} طالب مسجل في هذه الخدمة / Cannot delete — ${enrolled.cnt} student(ren) enrolled`)
     }
     db.prepare('DELETE FROM service_definitions WHERE id = ?').run(id)
     return { ok: true }

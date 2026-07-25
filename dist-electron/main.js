@@ -393,7 +393,7 @@ try {
 		import_main$1.default.config({ path: envPath });
 		import_main$1.default.config({ path: envExamplePath });
 	}
-} catch {}
+} catch { }
 var DEV_SECRET = "dev_insecure_jwt_secret_do_not_use_in_production";
 function isProduction() {
 	try {
@@ -475,8 +475,8 @@ function getCloudinaryConfig() {
 //#endregion
 //#region node_modules/universalify/index.js
 var require_universalify = /* @__PURE__ */ __commonJSMin(((exports) => {
-	exports.fromCallback = function(fn) {
-		return Object.defineProperty(function(...args) {
+	exports.fromCallback = function (fn) {
+		return Object.defineProperty(function (...args) {
 			if (typeof args[args.length - 1] === "function") fn.apply(this, args);
 			else return new Promise((resolve, reject) => {
 				args.push((err, res) => err != null ? reject(err) : resolve(res));
@@ -484,8 +484,8 @@ var require_universalify = /* @__PURE__ */ __commonJSMin(((exports) => {
 			});
 		}, "name", { value: fn.name });
 	};
-	exports.fromPromise = function(fn) {
-		return Object.defineProperty(function(...args) {
+	exports.fromPromise = function (fn) {
+		return Object.defineProperty(function (...args) {
 			const cb = args[args.length - 1];
 			if (typeof cb !== "function") return fn.apply(this, args);
 			else {
@@ -502,16 +502,16 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var origCwd = process.cwd;
 	var cwd = null;
 	var platform = process.env.GRACEFUL_FS_PLATFORM || process.platform;
-	process.cwd = function() {
+	process.cwd = function () {
 		if (!cwd) cwd = origCwd.call(process);
 		return cwd;
 	};
 	try {
 		process.cwd();
-	} catch (er) {}
+	} catch (er) { }
 	if (typeof process.chdir === "function") {
 		var chdir = process.chdir;
-		process.chdir = function(d) {
+		process.chdir = function (d) {
 			cwd = null;
 			chdir.call(process, d);
 		};
@@ -540,25 +540,25 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		fs.fstatSync = statFixSync(fs.fstatSync);
 		fs.lstatSync = statFixSync(fs.lstatSync);
 		if (fs.chmod && !fs.lchmod) {
-			fs.lchmod = function(path, mode, cb) {
+			fs.lchmod = function (path, mode, cb) {
 				if (cb) process.nextTick(cb);
 			};
-			fs.lchmodSync = function() {};
+			fs.lchmodSync = function () { };
 		}
 		if (fs.chown && !fs.lchown) {
-			fs.lchown = function(path, uid, gid, cb) {
+			fs.lchown = function (path, uid, gid, cb) {
 				if (cb) process.nextTick(cb);
 			};
-			fs.lchownSync = function() {};
+			fs.lchownSync = function () { };
 		}
-		if (platform === "win32") fs.rename = typeof fs.rename !== "function" ? fs.rename : (function(fs$rename) {
+		if (platform === "win32") fs.rename = typeof fs.rename !== "function" ? fs.rename : (function (fs$rename) {
 			function rename(from, to, cb) {
 				var start = Date.now();
 				var backoff = 0;
 				fs$rename(from, to, function CB(er) {
 					if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
-						setTimeout(function() {
-							fs.stat(to, function(stater, st) {
+						setTimeout(function () {
+							fs.stat(to, function (stater, st) {
 								if (stater && stater.code === "ENOENT") fs$rename(from, to, CB);
 								else cb(er);
 							});
@@ -572,12 +572,12 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (Object.setPrototypeOf) Object.setPrototypeOf(rename, fs$rename);
 			return rename;
 		})(fs.rename);
-		fs.read = typeof fs.read !== "function" ? fs.read : (function(fs$read) {
+		fs.read = typeof fs.read !== "function" ? fs.read : (function (fs$read) {
 			function read(fd, buffer, offset, length, position, callback_) {
 				var callback;
 				if (callback_ && typeof callback_ === "function") {
 					var eagCounter = 0;
-					callback = function(er, _, __) {
+					callback = function (er, _, __) {
 						if (er && er.code === "EAGAIN" && eagCounter < 10) {
 							eagCounter++;
 							return fs$read.call(fs, fd, buffer, offset, length, position, callback);
@@ -590,8 +590,8 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
 			return read;
 		})(fs.read);
-		fs.readSync = typeof fs.readSync !== "function" ? fs.readSync : (function(fs$readSync) {
-			return function(fd, buffer, offset, length, position) {
+		fs.readSync = typeof fs.readSync !== "function" ? fs.readSync : (function (fs$readSync) {
+			return function (fd, buffer, offset, length, position) {
 				var eagCounter = 0;
 				while (true) try {
 					return fs$readSync.call(fs, fd, buffer, offset, length, position);
@@ -605,20 +605,20 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			};
 		})(fs.readSync);
 		function patchLchmod(fs) {
-			fs.lchmod = function(path, mode, callback) {
-				fs.open(path, constants.O_WRONLY | constants.O_SYMLINK, mode, function(err, fd) {
+			fs.lchmod = function (path, mode, callback) {
+				fs.open(path, constants.O_WRONLY | constants.O_SYMLINK, mode, function (err, fd) {
 					if (err) {
 						if (callback) callback(err);
 						return;
 					}
-					fs.fchmod(fd, mode, function(err) {
-						fs.close(fd, function(err2) {
+					fs.fchmod(fd, mode, function (err) {
+						fs.close(fd, function (err2) {
 							if (callback) callback(err || err2);
 						});
 					});
 				});
 			};
-			fs.lchmodSync = function(path, mode) {
+			fs.lchmodSync = function (path, mode) {
 				var fd = fs.openSync(path, constants.O_WRONLY | constants.O_SYMLINK, mode);
 				var threw = true;
 				var ret;
@@ -628,7 +628,7 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 				} finally {
 					if (threw) try {
 						fs.closeSync(fd);
-					} catch (er) {}
+					} catch (er) { }
 					else fs.closeSync(fd);
 				}
 				return ret;
@@ -636,20 +636,20 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function patchLutimes(fs) {
 			if (constants.hasOwnProperty("O_SYMLINK") && fs.futimes) {
-				fs.lutimes = function(path, at, mt, cb) {
-					fs.open(path, constants.O_SYMLINK, function(er, fd) {
+				fs.lutimes = function (path, at, mt, cb) {
+					fs.open(path, constants.O_SYMLINK, function (er, fd) {
 						if (er) {
 							if (cb) cb(er);
 							return;
 						}
-						fs.futimes(fd, at, mt, function(er) {
-							fs.close(fd, function(er2) {
+						fs.futimes(fd, at, mt, function (er) {
+							fs.close(fd, function (er2) {
 								if (cb) cb(er || er2);
 							});
 						});
 					});
 				};
-				fs.lutimesSync = function(path, at, mt) {
+				fs.lutimesSync = function (path, at, mt) {
 					var fd = fs.openSync(path, constants.O_SYMLINK);
 					var ret;
 					var threw = true;
@@ -659,22 +659,22 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 					} finally {
 						if (threw) try {
 							fs.closeSync(fd);
-						} catch (er) {}
+						} catch (er) { }
 						else fs.closeSync(fd);
 					}
 					return ret;
 				};
 			} else if (fs.futimes) {
-				fs.lutimes = function(_a, _b, _c, cb) {
+				fs.lutimes = function (_a, _b, _c, cb) {
 					if (cb) process.nextTick(cb);
 				};
-				fs.lutimesSync = function() {};
+				fs.lutimesSync = function () { };
 			}
 		}
 		function chmodFix(orig) {
 			if (!orig) return orig;
-			return function(target, mode, cb) {
-				return orig.call(fs, target, mode, function(er) {
+			return function (target, mode, cb) {
+				return orig.call(fs, target, mode, function (er) {
 					if (chownErOk(er)) er = null;
 					if (cb) cb.apply(this, arguments);
 				});
@@ -682,7 +682,7 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function chmodFixSync(orig) {
 			if (!orig) return orig;
-			return function(target, mode) {
+			return function (target, mode) {
 				try {
 					return orig.call(fs, target, mode);
 				} catch (er) {
@@ -692,8 +692,8 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function chownFix(orig) {
 			if (!orig) return orig;
-			return function(target, uid, gid, cb) {
-				return orig.call(fs, target, uid, gid, function(er) {
+			return function (target, uid, gid, cb) {
+				return orig.call(fs, target, uid, gid, function (er) {
 					if (chownErOk(er)) er = null;
 					if (cb) cb.apply(this, arguments);
 				});
@@ -701,7 +701,7 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function chownFixSync(orig) {
 			if (!orig) return orig;
-			return function(target, uid, gid) {
+			return function (target, uid, gid) {
 				try {
 					return orig.call(fs, target, uid, gid);
 				} catch (er) {
@@ -711,7 +711,7 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function statFix(orig) {
 			if (!orig) return orig;
-			return function(target, options, cb) {
+			return function (target, options, cb) {
 				if (typeof options === "function") {
 					cb = options;
 					options = null;
@@ -728,7 +728,7 @@ var require_polyfills = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function statFixSync(orig) {
 			if (!orig) return orig;
-			return function(target, options) {
+			return function (target, options) {
 				var stats = options ? orig.call(fs, target, options) : orig.call(fs, target);
 				if (stats) {
 					if (stats.uid < 0) stats.uid += 4294967296;
@@ -783,12 +783,12 @@ var require_legacy_streams = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 				this.pos = this.start;
 			}
 			if (this.fd !== null) {
-				process.nextTick(function() {
+				process.nextTick(function () {
 					self._read();
 				});
 				return;
 			}
-			fs.open(this.path, this.flags, this.mode, function(err, fd) {
+			fs.open(this.path, this.flags, this.mode, function (err, fd) {
 				if (err) {
 					self.emit("error", err);
 					self.readable = false;
@@ -840,14 +840,14 @@ var require_legacy_streams = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 //#region node_modules/graceful-fs/clone.js
 var require_clone = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = clone;
-	var getPrototypeOf = Object.getPrototypeOf || function(obj) {
+	var getPrototypeOf = Object.getPrototypeOf || function (obj) {
 		return obj.__proto__;
 	};
 	function clone(obj) {
 		if (obj === null || typeof obj !== "object") return obj;
 		if (obj instanceof Object) var copy = { __proto__: getPrototypeOf(obj) };
 		else var copy = Object.create(null);
-		Object.getOwnPropertyNames(obj).forEach(function(key) {
+		Object.getOwnPropertyNames(obj).forEach(function (key) {
 			Object.defineProperty(copy, key, Object.getOwnPropertyDescriptor(obj, key));
 		});
 		return copy;
@@ -872,24 +872,26 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		gracefulQueue = "___graceful-fs.queue";
 		previousSymbol = "___graceful-fs.previous";
 	}
-	function noop() {}
+	function noop() { }
 	function publishQueue(context, queue) {
-		Object.defineProperty(context, gracefulQueue, { get: function() {
-			return queue;
-		} });
+		Object.defineProperty(context, gracefulQueue, {
+			get: function () {
+				return queue;
+			}
+		});
 	}
 	var debug = noop;
 	if (util$6.debuglog) debug = util$6.debuglog("gfs4");
-	else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) debug = function() {
+	else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) debug = function () {
 		var m = util$6.format.apply(util$6, arguments);
 		m = "GFS4: " + m.split(/\n/).join("\nGFS4: ");
 		console.error(m);
 	};
 	if (!fs$1[gracefulQueue]) {
 		publishQueue(fs$1, global[gracefulQueue] || []);
-		fs$1.close = (function(fs$close) {
+		fs$1.close = (function (fs$close) {
 			function close(fd, cb) {
-				return fs$close.call(fs$1, fd, function(err) {
+				return fs$close.call(fs$1, fd, function (err) {
 					if (!err) resetQueue();
 					if (typeof cb === "function") cb.apply(this, arguments);
 				});
@@ -897,7 +899,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			Object.defineProperty(close, previousSymbol, { value: fs$close });
 			return close;
 		})(fs$1.close);
-		fs$1.closeSync = (function(fs$closeSync) {
+		fs$1.closeSync = (function (fs$closeSync) {
 			function closeSync(fd) {
 				fs$closeSync.apply(fs$1, arguments);
 				resetQueue();
@@ -905,7 +907,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			Object.defineProperty(closeSync, previousSymbol, { value: fs$closeSync });
 			return closeSync;
 		})(fs$1.closeSync);
-		if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) process.on("exit", function() {
+		if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) process.on("exit", function () {
 			debug(fs$1[gracefulQueue]);
 			__require("assert").equal(fs$1[gracefulQueue].length, 0);
 		});
@@ -927,7 +929,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (typeof options === "function") cb = options, options = null;
 			return go$readFile(path, options, cb);
 			function go$readFile(path, options, cb, startTime) {
-				return fs$readFile(path, options, function(err) {
+				return fs$readFile(path, options, function (err) {
 					if (err && (err.code === "EMFILE" || err.code === "ENFILE")) enqueue([
 						go$readFile,
 						[
@@ -949,7 +951,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (typeof options === "function") cb = options, options = null;
 			return go$writeFile(path, data, options, cb);
 			function go$writeFile(path, data, options, cb, startTime) {
-				return fs$writeFile(path, data, options, function(err) {
+				return fs$writeFile(path, data, options, function (err) {
 					if (err && (err.code === "EMFILE" || err.code === "ENFILE")) enqueue([
 						go$writeFile,
 						[
@@ -972,7 +974,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (typeof options === "function") cb = options, options = null;
 			return go$appendFile(path, data, options, cb);
 			function go$appendFile(path, data, options, cb, startTime) {
-				return fs$appendFile(path, data, options, function(err) {
+				return fs$appendFile(path, data, options, function (err) {
 					if (err && (err.code === "EMFILE" || err.code === "ENFILE")) enqueue([
 						go$appendFile,
 						[
@@ -998,7 +1000,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			}
 			return go$copyFile(src, dest, flags, cb);
 			function go$copyFile(src, dest, flags, cb, startTime) {
-				return fs$copyFile(src, dest, flags, function(err) {
+				return fs$copyFile(src, dest, flags, function (err) {
 					if (err && (err.code === "EMFILE" || err.code === "ENFILE")) enqueue([
 						go$copyFile,
 						[
@@ -1027,7 +1029,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			};
 			return go$readdir(path, options, cb);
 			function fs$readdirCallback(path, options, cb, startTime) {
-				return function(err, files) {
+				return function (err, files) {
 					if (err && (err.code === "EMFILE" || err.code === "ENFILE")) enqueue([
 						go$readdir,
 						[
@@ -1062,20 +1064,20 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			WriteStream.prototype.open = WriteStream$open;
 		}
 		Object.defineProperty(fs, "ReadStream", {
-			get: function() {
+			get: function () {
 				return ReadStream;
 			},
-			set: function(val) {
+			set: function (val) {
 				ReadStream = val;
 			},
 			enumerable: true,
 			configurable: true
 		});
 		Object.defineProperty(fs, "WriteStream", {
-			get: function() {
+			get: function () {
 				return WriteStream;
 			},
-			set: function(val) {
+			set: function (val) {
 				WriteStream = val;
 			},
 			enumerable: true,
@@ -1083,10 +1085,10 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		});
 		var FileReadStream = ReadStream;
 		Object.defineProperty(fs, "FileReadStream", {
-			get: function() {
+			get: function () {
 				return FileReadStream;
 			},
-			set: function(val) {
+			set: function (val) {
 				FileReadStream = val;
 			},
 			enumerable: true,
@@ -1094,10 +1096,10 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		});
 		var FileWriteStream = WriteStream;
 		Object.defineProperty(fs, "FileWriteStream", {
-			get: function() {
+			get: function () {
 				return FileWriteStream;
 			},
-			set: function(val) {
+			set: function (val) {
 				FileWriteStream = val;
 			},
 			enumerable: true,
@@ -1109,7 +1111,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function ReadStream$open() {
 			var that = this;
-			open(that.path, that.flags, that.mode, function(err, fd) {
+			open(that.path, that.flags, that.mode, function (err, fd) {
 				if (err) {
 					if (that.autoClose) that.destroy();
 					that.emit("error", err);
@@ -1126,7 +1128,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		function WriteStream$open() {
 			var that = this;
-			open(that.path, that.flags, that.mode, function(err, fd) {
+			open(that.path, that.flags, that.mode, function (err, fd) {
 				if (err) {
 					that.destroy();
 					that.emit("error", err);
@@ -1148,7 +1150,7 @@ var require_graceful_fs = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (typeof mode === "function") cb = mode, mode = null;
 			return go$open(path, flags, mode, cb);
 			function go$open(path, flags, mode, cb, startTime) {
-				return fs$open(path, flags, mode, function(err, fd) {
+				return fs$open(path, flags, mode, function (err, fd) {
 					if (err && (err.code === "EMFILE" || err.code === "ENFILE")) enqueue([
 						go$open,
 						[
@@ -1256,13 +1258,13 @@ var require_fs = /* @__PURE__ */ __commonJSMin(((exports) => {
 	api.forEach((method) => {
 		exports[method] = u(fs[method]);
 	});
-	exports.exists = function(filename, callback) {
+	exports.exists = function (filename, callback) {
 		if (typeof callback === "function") return fs.exists(filename, callback);
 		return new Promise((resolve) => {
 			return fs.exists(filename, resolve);
 		});
 	};
-	exports.read = function(fd, buffer, offset, length, position, callback) {
+	exports.read = function (fd, buffer, offset, length, position, callback) {
 		if (typeof callback === "function") return fs.read(fd, buffer, offset, length, position, callback);
 		return new Promise((resolve, reject) => {
 			fs.read(fd, buffer, offset, length, position, (err, bytesRead, buffer) => {
@@ -1274,7 +1276,7 @@ var require_fs = /* @__PURE__ */ __commonJSMin(((exports) => {
 			});
 		});
 	};
-	exports.write = function(fd, buffer, ...args) {
+	exports.write = function (fd, buffer, ...args) {
 		if (typeof args[args.length - 1] === "function") return fs.write(fd, buffer, ...args);
 		return new Promise((resolve, reject) => {
 			fs.write(fd, buffer, ...args, (err, bytesWritten, buffer) => {
@@ -1286,7 +1288,7 @@ var require_fs = /* @__PURE__ */ __commonJSMin(((exports) => {
 			});
 		});
 	};
-	if (typeof fs.writev === "function") exports.writev = function(fd, buffers, ...args) {
+	if (typeof fs.writev === "function") exports.writev = function (fd, buffers, ...args) {
 		if (typeof args[args.length - 1] === "function") return fs.writev(fd, buffers, ...args);
 		return new Promise((resolve, reject) => {
 			fs.writev(fd, buffers, ...args, (err, bytesWritten, buffers) => {
@@ -1537,7 +1539,7 @@ var require_copy$1 = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			cb = opts;
 			opts = {};
 		} else if (typeof opts === "function") opts = { filter: opts };
-		cb = cb || function() {};
+		cb = cb || function () { };
 		opts = opts || {};
 		opts.clobber = "clobber" in opts ? !!opts.clobber : true;
 		opts.overwrite = "overwrite" in opts ? !!opts.overwrite : opts.clobber;
@@ -1980,7 +1982,7 @@ var require_rimraf = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			do
 				try {
 					return options.rmdirSync(p, options);
-				} catch {}
+				} catch { }
 			while (Date.now() - startTime < 500);
 		} else return options.rmdirSync(p, options);
 	}
@@ -2084,7 +2086,7 @@ var require_file = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		let stats;
 		try {
 			stats = fs.statSync(file);
-		} catch {}
+		} catch { }
 		if (stats && stats.isFile()) return;
 		const dir = path$18.dirname(file);
 		try {
@@ -2139,7 +2141,7 @@ var require_link = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		let dstStat;
 		try {
 			dstStat = fs.lstatSync(dstpath);
-		} catch {}
+		} catch { }
 		try {
 			const srcStat = fs.lstatSync(srcpath);
 			if (dstStat && areIdentical(srcStat, dstStat)) return;
@@ -2328,7 +2330,7 @@ var require_symlink = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		let stats;
 		try {
 			stats = fs.lstatSync(dstpath);
-		} catch {}
+		} catch { }
 		if (stats && stats.isSymbolicLink()) {
 			if (areIdentical(fs.statSync(srcpath), fs.statSync(dstpath))) return;
 		}
@@ -2699,7 +2701,7 @@ var require_CancellationToken = /* @__PURE__ */ __commonJSMin(((exports) => {
 				if (cancelHandler != null) try {
 					this.removeListener("cancel", cancelHandler);
 					cancelHandler = null;
-				} catch (_ignore) {}
+				} catch (_ignore) { }
 			};
 			let cancelHandler = null;
 			return new Promise((resolve, reject) => {
@@ -2790,7 +2792,7 @@ var require_ms = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	* @return {String|Number}
 	* @api public
 	*/
-	module.exports = function(val, options) {
+	module.exports = function (val, options) {
 		options = options || {};
 		var type = typeof val;
 		if (type === "string" && val.length > 0) return parse(val);
@@ -3226,7 +3228,7 @@ var require_browser = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	*
 	* @api public
 	*/
-	exports.log = console.debug || console.log || (() => {});
+	exports.log = console.debug || console.log || (() => { });
 	/**
 	* Save `namespaces`.
 	*
@@ -3237,7 +3239,7 @@ var require_browser = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		try {
 			if (namespaces) exports.storage.setItem("debug", namespaces);
 			else exports.storage.removeItem("debug");
-		} catch (error) {}
+		} catch (error) { }
 	}
 	/**
 	* Load `namespaces`.
@@ -3249,7 +3251,7 @@ var require_browser = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		let r;
 		try {
 			r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
-		} catch (error) {}
+		} catch (error) { }
 		if (!r && typeof process !== "undefined" && "env" in process) r = process.env.DEBUG;
 		return r;
 	}
@@ -3266,14 +3268,14 @@ var require_browser = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function localstorage() {
 		try {
 			return localStorage;
-		} catch (error) {}
+		} catch (error) { }
 	}
 	module.exports = require_common$1()(exports);
 	var { formatters } = module.exports;
 	/**
 	* Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
 	*/
-	formatters.j = function(v) {
+	formatters.j = function (v) {
 		try {
 			return JSON.stringify(v);
 		} catch (error) {
@@ -3376,7 +3378,7 @@ var require_node = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	exports.save = save;
 	exports.load = load;
 	exports.useColors = useColors;
-	exports.destroy = util$4.deprecate(() => {}, "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
+	exports.destroy = util$4.deprecate(() => { }, "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
 	/**
 	* Colors.
 	*/
@@ -3468,7 +3470,7 @@ var require_node = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			220,
 			221
 		];
-	} catch (error) {}
+	} catch (error) { }
 	/**
 	* Build up the default `inspectOpts` object from the environment variables.
 	*
@@ -3554,14 +3556,14 @@ var require_node = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	/**
 	* Map %o to `util.inspect()`, all on a single line.
 	*/
-	formatters.o = function(v) {
+	formatters.o = function (v) {
 		this.inspectOpts.colors = this.useColors;
 		return util$4.inspect(v, this.inspectOpts).split("\n").map((str) => str.trim()).join(" ");
 	};
 	/**
 	* Map %O to `util.inspect()`, allowing multiple lines if needed.
 	*/
-	formatters.O = function(v) {
+	formatters.O = function (v) {
 		this.inspectOpts.colors = this.useColors;
 		return util$4.inspect(v, this.inspectOpts);
 	};
@@ -3773,7 +3775,7 @@ var require_httpExecutor = /* @__PURE__ */ __commonJSMin(((exports) => {
 				onCancel(() => request.abort());
 			});
 		}
-		addRedirectHandlers(request, options, reject, redirectCount, handler) {}
+		addRedirectHandlers(request, options, reject, redirectCount, handler) { }
 		addErrorAndTimeoutHandlers(request, reject, timeout = 60 * 1e3) {
 			this.addTimeOutHandler(request, reject, timeout);
 			request.on("error", reject);
@@ -3922,7 +3924,7 @@ Please double check that your authentication token is correct. Due to security r
 			return originalUrl.port !== redirectUrl.port;
 		}
 		static async retryOnServerError(task, maxRetries = 3) {
-			for (let attemptNumber = 0;; attemptNumber++) try {
+			for (let attemptNumber = 0; ; attemptNumber++) try {
 				return await task();
 			} catch (e) {
 				if (attemptNumber < maxRetries && (e instanceof HttpError && e.isServerError() || e.code === "EPIPE")) {
@@ -4317,7 +4319,7 @@ var require_uuid = /* @__PURE__ */ __commonJSMin(((exports) => {
 		}
 	}
 	var UuidEncoding;
-	(function(UuidEncoding) {
+	(function (UuidEncoding) {
 		UuidEncoding[UuidEncoding["ASCII"] = 0] = "ASCII";
 		UuidEncoding[UuidEncoding["BINARY"] = 1] = "BINARY";
 		UuidEncoding[UuidEncoding["OBJECT"] = 2] = "OBJECT";
@@ -4354,8 +4356,8 @@ var require_uuid = /* @__PURE__ */ __commonJSMin(((exports) => {
 //#endregion
 //#region node_modules/sax/lib/sax.js
 var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
-	(function(sax) {
-		sax.parser = function(strict, opt) {
+	(function (sax) {
+		sax.parser = function (strict, opt) {
 			return new SAXParser(strict, opt);
 		};
 		sax.SAXParser = SAXParser;
@@ -4424,12 +4426,12 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			if (parser.trackPosition) parser.position = parser.line = parser.column = 0;
 			emit(parser, "onready");
 		}
-		if (!Object.create) Object.create = function(o) {
-			function F() {}
+		if (!Object.create) Object.create = function (o) {
+			function F() { }
 			F.prototype = o;
 			return new F();
 		};
-		if (!Object.keys) Object.keys = function(o) {
+		if (!Object.keys) Object.keys = function (o) {
 			var a = [];
 			for (var i in o) if (o.hasOwnProperty(i)) a.push(i);
 			return a;
@@ -4472,18 +4474,18 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			}
 		}
 		SAXParser.prototype = {
-			end: function() {
+			end: function () {
 				end(this);
 			},
 			write,
-			resume: function() {
+			resume: function () {
 				this.error = null;
 				return this;
 			},
-			close: function() {
+			close: function () {
 				return this.write(null);
 			},
-			flush: function() {
+			flush: function () {
 				flushBuffers(this);
 			}
 		};
@@ -4491,10 +4493,10 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 		try {
 			Stream = __require("stream").Stream;
 		} catch (ex) {
-			Stream = function() {};
+			Stream = function () { };
 		}
-		if (!Stream) Stream = function() {};
-		var streamWraps = sax.EVENTS.filter(function(ev) {
+		if (!Stream) Stream = function () { };
+		var streamWraps = sax.EVENTS.filter(function (ev) {
 			return ev !== "error" && ev !== "end";
 		});
 		function createStream(strict, opt) {
@@ -4520,21 +4522,21 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			this.writable = true;
 			this.readable = true;
 			var me = this;
-			this._parser.onend = function() {
+			this._parser.onend = function () {
 				me.emit("end");
 			};
-			this._parser.onerror = function(er) {
+			this._parser.onerror = function (er) {
 				me.emit("error", er);
 				me._parser.error = null;
 			};
 			this._decoder = null;
 			this._decoderBuffer = null;
-			streamWraps.forEach(function(ev) {
+			streamWraps.forEach(function (ev) {
 				Object.defineProperty(me, "on" + ev, {
-					get: function() {
+					get: function () {
 						return me._parser["on" + ev];
 					},
-					set: function(h) {
+					set: function (h) {
 						if (!h) {
 							me.removeAllListeners(ev);
 							me._parser["on" + ev] = h;
@@ -4548,7 +4550,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			});
 		}
 		SAXStream.prototype = Object.create(Stream.prototype, { constructor: { value: SAXStream } });
-		SAXStream.prototype._decodeBuffer = function(data, isEnd) {
+		SAXStream.prototype._decodeBuffer = function (data, isEnd) {
 			if (this._decoderBuffer) {
 				data = Buffer.concat([this._decoderBuffer, data]);
 				this._decoderBuffer = null;
@@ -4564,7 +4566,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			}
 			return this._decoder.decode(data, { stream: !isEnd });
 		};
-		SAXStream.prototype.write = function(data) {
+		SAXStream.prototype.write = function (data) {
 			if (typeof Buffer === "function" && typeof Buffer.isBuffer === "function" && Buffer.isBuffer(data)) data = this._decodeBuffer(data, false);
 			else if (this._decoderBuffer) {
 				var remaining = this._decodeBuffer(Buffer.alloc(0), true);
@@ -4577,7 +4579,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			this.emit("data", data);
 			return true;
 		};
-		SAXStream.prototype.end = function(chunk) {
+		SAXStream.prototype.end = function (chunk) {
 			if (chunk && chunk.length) this.write(chunk);
 			if (this._decoderBuffer) {
 				var finalChunk = this._decodeBuffer(Buffer.alloc(0), true);
@@ -4595,9 +4597,9 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			this._parser.end();
 			return true;
 		};
-		SAXStream.prototype.on = function(ev, handler) {
+		SAXStream.prototype.on = function (ev, handler) {
 			var me = this;
-			if (!me._parser["on" + ev] && streamWraps.indexOf(ev) !== -1) me._parser["on" + ev] = function() {
+			if (!me._parser["on" + ev] && streamWraps.indexOf(ev) !== -1) me._parser["on" + ev] = function () {
 				var args = arguments.length === 1 ? [arguments[0]] : Array.apply(null, arguments);
 				args.splice(0, 0, ev);
 				me.emit.apply(me, args);
@@ -4932,7 +4934,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 			hearts: 9829,
 			diams: 9830
 		};
-		Object.keys(sax.ENTITIES).forEach(function(key) {
+		Object.keys(sax.ENTITIES).forEach(function (key) {
 			var e = sax.ENTITIES[key];
 			var s = typeof e === "number" ? String.fromCharCode(e) : e;
 			sax.ENTITIES[key] = s;
@@ -5062,7 +5064,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 					tag.uri = qn.prefix;
 				}
 				var parent = parser.tags[parser.tags.length - 1] || parser;
-				if (tag.ns && parent.ns !== tag.ns) Object.keys(tag.ns).forEach(function(p) {
+				if (tag.ns && parent.ns !== tag.ns) Object.keys(tag.ns).forEach(function (p) {
 					emitNode(parser, "onopennamespace", {
 						prefix: p,
 						uri: tag.ns[p]
@@ -5143,7 +5145,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 				var x = {};
 				for (var i in tag.ns) x[i] = tag.ns[i];
 				var parent = parser.tags[parser.tags.length - 1] || parser;
-				if (parser.opt.xmlns && tag.ns !== parent.ns) Object.keys(tag.ns).forEach(function(p) {
+				if (parser.opt.xmlns && tag.ns !== parent.ns) Object.keys(tag.ns).forEach(function (p) {
 					var n = tag.ns[p];
 					emitNode(parser, "onclosenamespace", {
 						prefix: p,
@@ -5262,7 +5264,7 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 						if (c === "!") {
 							parser.state = S.SGML_DECL;
 							parser.sgmlDecl = "";
-						} else if (isWhitespace(c)) {} else if (isMatch(nameStart, c)) {
+						} else if (isWhitespace(c)) { } else if (isMatch(nameStart, c)) {
 							parser.state = S.OPEN_TAG;
 							parser.tagName = c;
 						} else if (c === "/") {
@@ -5619,10 +5621,10 @@ var require_sax = /* @__PURE__ */ __commonJSMin(((exports) => {
 		}
 		/*! http://mths.be/fromcodepoint v0.1.0 by @mathias */
 		/* istanbul ignore next */
-		if (!String.fromCodePoint) (function() {
+		if (!String.fromCodePoint) (function () {
 			var stringFromCharCode = String.fromCharCode;
 			var floor = Math.floor;
-			var fromCodePoint = function() {
+			var fromCodePoint = function () {
 				var MAX_SIZE = 16384;
 				var codeUnits = [];
 				var highSurrogate;
@@ -5824,191 +5826,191 @@ var require_out = /* @__PURE__ */ __commonJSMin(((exports) => {
 	var CancellationToken_1 = require_CancellationToken();
 	Object.defineProperty(exports, "CancellationError", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return CancellationToken_1.CancellationError;
 		}
 	});
 	Object.defineProperty(exports, "CancellationToken", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return CancellationToken_1.CancellationToken;
 		}
 	});
 	var error_1 = require_error();
 	Object.defineProperty(exports, "newError", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return error_1.newError;
 		}
 	});
 	var httpExecutor_1 = require_httpExecutor();
 	Object.defineProperty(exports, "configureRequestOptions", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.configureRequestOptions;
 		}
 	});
 	Object.defineProperty(exports, "configureRequestOptionsFromUrl", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.configureRequestOptionsFromUrl;
 		}
 	});
 	Object.defineProperty(exports, "configureRequestUrl", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.configureRequestUrl;
 		}
 	});
 	Object.defineProperty(exports, "createHttpError", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.createHttpError;
 		}
 	});
 	Object.defineProperty(exports, "DigestTransform", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.DigestTransform;
 		}
 	});
 	Object.defineProperty(exports, "HttpError", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.HttpError;
 		}
 	});
 	Object.defineProperty(exports, "hashSensitiveValue", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.hashSensitiveValue;
 		}
 	});
 	Object.defineProperty(exports, "HttpExecutor", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.HttpExecutor;
 		}
 	});
 	Object.defineProperty(exports, "isSensitiveFieldName", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.isSensitiveFieldName;
 		}
 	});
 	Object.defineProperty(exports, "parseJson", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.parseJson;
 		}
 	});
 	Object.defineProperty(exports, "safeGetHeader", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.safeGetHeader;
 		}
 	});
 	Object.defineProperty(exports, "safeStringifyJson", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return httpExecutor_1.safeStringifyJson;
 		}
 	});
 	var MemoLazy_1 = require_MemoLazy();
 	Object.defineProperty(exports, "MemoLazy", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return MemoLazy_1.MemoLazy;
 		}
 	});
 	var ProgressCallbackTransform_1 = require_ProgressCallbackTransform();
 	Object.defineProperty(exports, "ProgressCallbackTransform", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return ProgressCallbackTransform_1.ProgressCallbackTransform;
 		}
 	});
 	var publishOptions_1 = require_publishOptions();
 	Object.defineProperty(exports, "getS3LikeProviderBaseUrl", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return publishOptions_1.getS3LikeProviderBaseUrl;
 		}
 	});
 	Object.defineProperty(exports, "githubUrl", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return publishOptions_1.githubUrl;
 		}
 	});
 	Object.defineProperty(exports, "githubTagPrefix", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return publishOptions_1.githubTagPrefix;
 		}
 	});
 	var retry_1 = require_retry();
 	Object.defineProperty(exports, "retry", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return retry_1.retry;
 		}
 	});
 	var rfc2253Parser_1 = require_rfc2253Parser();
 	Object.defineProperty(exports, "parseDn", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return rfc2253Parser_1.parseDn;
 		}
 	});
 	var uuid_1 = require_uuid();
 	Object.defineProperty(exports, "UUID", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return uuid_1.UUID;
 		}
 	});
 	var xml_1 = require_xml();
 	Object.defineProperty(exports, "parseXml", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return xml_1.parseXml;
 		}
 	});
 	Object.defineProperty(exports, "XElement", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return xml_1.XElement;
 		}
 	});
 	var objects_1 = require_objects();
 	Object.defineProperty(exports, "isValidKey", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return objects_1.isValidKey;
 		}
 	});
 	Object.defineProperty(exports, "mapToObject", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return objects_1.mapToObject;
 		}
 	});
 	Object.defineProperty(exports, "asArray", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return objects_1.asArray;
 		}
 	});
 	Object.defineProperty(exports, "deepAssign", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return objects_1.deepAssign;
 		}
 	});
 	Object.defineProperty(exports, "objectToArgs", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return objects_1.objectToArgs;
 		}
 	});
@@ -6167,8 +6169,8 @@ var require_type = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	];
 	function compileStyleAliases(map) {
 		const result = {};
-		if (map !== null) Object.keys(map).forEach(function(style) {
-			map[style].forEach(function(alias) {
+		if (map !== null) Object.keys(map).forEach(function (style) {
+			map[style].forEach(function (alias) {
 				result[String(alias)] = style;
 			});
 		});
@@ -6176,16 +6178,16 @@ var require_type = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}
 	function Type(tag, options) {
 		options = options || {};
-		Object.keys(options).forEach(function(name) {
+		Object.keys(options).forEach(function (name) {
 			if (TYPE_CONSTRUCTOR_OPTIONS.indexOf(name) === -1) throw new YAMLException("Unknown option \"" + name + "\" is met in definition of \"" + tag + "\" YAML type.");
 		});
 		this.options = options;
 		this.tag = tag;
 		this.kind = options["kind"] || null;
-		this.resolve = options["resolve"] || function() {
+		this.resolve = options["resolve"] || function () {
 			return true;
 		};
-		this.construct = options["construct"] || function(data) {
+		this.construct = options["construct"] || function (data) {
 			return data;
 		};
 		this.instanceOf = options["instanceOf"] || null;
@@ -6206,9 +6208,9 @@ var require_schema = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var Type = require_type();
 	function compileList(schema, name) {
 		const result = [];
-		schema[name].forEach(function(currentType) {
+		schema[name].forEach(function (currentType) {
 			let newIndex = result.length;
-			result.forEach(function(previousType, previousIndex) {
+			result.forEach(function (previousType, previousIndex) {
 				if (previousType.tag === currentType.tag && previousType.kind === currentType.kind && previousType.multi === currentType.multi) newIndex = previousIndex;
 			});
 			result[newIndex] = currentType;
@@ -6249,12 +6251,12 @@ var require_schema = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (definition.implicit) implicit = implicit.concat(definition.implicit);
 			if (definition.explicit) explicit = explicit.concat(definition.explicit);
 		} else throw new YAMLException("Schema.extend argument should be a Type, [ Type ], or a schema definition ({ implicit: [...], explicit: [...] })");
-		implicit.forEach(function(type) {
+		implicit.forEach(function (type) {
 			if (!(type instanceof Type)) throw new YAMLException("Specified list of YAML types (or a single Type object) contains a non-Type object.");
 			if (type.loadKind && type.loadKind !== "scalar") throw new YAMLException("There is a non-scalar type in the implicit list of a schema. Implicit resolving of such types is not supported.");
 			if (type.multi) throw new YAMLException("There is a multi type in the implicit list of a schema. Multi tags can only be listed as explicit.");
 		});
-		explicit.forEach(function(type) {
+		explicit.forEach(function (type) {
 			if (!(type instanceof Type)) throw new YAMLException("Specified list of YAML types (or a single Type object) contains a non-Type object.");
 		});
 		const result = Object.create(Schema.prototype);
@@ -6272,7 +6274,7 @@ var require_schema = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 var require_str = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = new (require_type())("tag:yaml.org,2002:str", {
 		kind: "scalar",
-		construct: function(data) {
+		construct: function (data) {
 			return data !== null ? data : "";
 		}
 	});
@@ -6282,7 +6284,7 @@ var require_str = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 var require_seq = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = new (require_type())("tag:yaml.org,2002:seq", {
 		kind: "sequence",
-		construct: function(data) {
+		construct: function (data) {
 			return data !== null ? data : [];
 		}
 	});
@@ -6292,7 +6294,7 @@ var require_seq = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 var require_map = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = new (require_type())("tag:yaml.org,2002:map", {
 		kind: "mapping",
-		construct: function(data) {
+		construct: function (data) {
 			return data !== null ? data : {};
 		}
 	});
@@ -6300,11 +6302,13 @@ var require_map = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region node_modules/js-yaml/lib/schema/failsafe.js
 var require_failsafe = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	module.exports = new (require_schema())({ explicit: [
-		require_str(),
-		require_seq(),
-		require_map()
-	] });
+	module.exports = new (require_schema())({
+		explicit: [
+			require_str(),
+			require_seq(),
+			require_map()
+		]
+	});
 }));
 //#endregion
 //#region node_modules/js-yaml/lib/type/null.js
@@ -6327,19 +6331,19 @@ var require_null = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		construct: constructYamlNull,
 		predicate: isNull,
 		represent: {
-			canonical: function() {
+			canonical: function () {
 				return "~";
 			},
-			lowercase: function() {
+			lowercase: function () {
 				return "null";
 			},
-			uppercase: function() {
+			uppercase: function () {
 				return "NULL";
 			},
-			camelcase: function() {
+			camelcase: function () {
 				return "Null";
 			},
-			empty: function() {
+			empty: function () {
 				return "";
 			}
 		},
@@ -6367,13 +6371,13 @@ var require_bool = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		construct: constructYamlBoolean,
 		predicate: isBoolean,
 		represent: {
-			lowercase: function(object) {
+			lowercase: function (object) {
 				return object ? "true" : "false";
 			},
-			uppercase: function(object) {
+			uppercase: function (object) {
 				return object ? "TRUE" : "FALSE";
 			},
-			camelcase: function(object) {
+			camelcase: function (object) {
 				return object ? "True" : "False";
 			}
 		},
@@ -6467,16 +6471,16 @@ var require_int = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		construct: constructYamlInteger,
 		predicate: isInteger,
 		represent: {
-			binary: function(obj) {
+			binary: function (obj) {
 				return obj >= 0 ? "0b" + obj.toString(2) : "-0b" + obj.toString(2).slice(1);
 			},
-			octal: function(obj) {
+			octal: function (obj) {
 				return obj >= 0 ? "0o" + obj.toString(8) : "-0o" + obj.toString(8).slice(1);
 			},
-			decimal: function(obj) {
+			decimal: function (obj) {
 				return obj.toString(10);
 			},
-			hexadecimal: function(obj) {
+			hexadecimal: function (obj) {
 				return obj >= 0 ? "0x" + obj.toString(16).toUpperCase() : "-0x" + obj.toString(16).toUpperCase().slice(1);
 			}
 		},
@@ -6546,12 +6550,14 @@ var require_float = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region node_modules/js-yaml/lib/schema/json.js
 var require_json = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	module.exports = require_failsafe().extend({ implicit: [
-		require_null(),
-		require_bool(),
-		require_int(),
-		require_float()
-	] });
+	module.exports = require_failsafe().extend({
+		implicit: [
+			require_null(),
+			require_bool(),
+			require_int(),
+			require_float()
+		]
+	});
 }));
 //#endregion
 //#region node_modules/js-yaml/lib/schema/core.js
@@ -8060,7 +8066,7 @@ var require_dumper = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		return quotingType === QUOTING_TYPE_DOUBLE ? STYLE_DOUBLE : STYLE_SINGLE;
 	}
 	function writeScalar(state, string, level, iskey, inblock) {
-		state.dump = function() {
+		state.dump = function () {
 			if (string.length === 0) return state.quotingType === QUOTING_TYPE_DOUBLE ? "\"\"" : "''";
 			if (!state.noCompatMode) {
 				if (DEPRECATED_BOOLEANS_SYNTAX.indexOf(string) !== -1 || DEPRECATED_BASE60_SYNTAX.test(string)) return state.quotingType === QUOTING_TYPE_DOUBLE ? "\"" + string + "\"" : "'" + string + "'";
@@ -8091,7 +8097,7 @@ var require_dumper = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}
 	function foldString(string, width) {
 		const lineRe = /(\n+)([^\n]*)/g;
-		let result = function() {
+		let result = function () {
 			let nextLF = string.indexOf("\n");
 			nextLF = nextLF !== -1 ? nextLF : string.length;
 			lineRe.lastIndex = nextLF;
@@ -8335,7 +8341,7 @@ var require_js_yaml = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var loader = require_loader();
 	var dumper = require_dumper();
 	function renamed(from, to) {
-		return function() {
+		return function () {
 			throw new Error("Function yaml." + from + " is removed in js-yaml 4. Use yaml." + to + " instead, which is now safe by default.");
 		};
 	}
@@ -8422,7 +8428,7 @@ var require_constants$1 = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region node_modules/electron-updater/node_modules/semver/internal/debug.js
 var require_debug$1 = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	module.exports = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {};
+	module.exports = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => { };
 }));
 //#endregion
 //#region node_modules/electron-updater/node_modules/semver/internal/re.js
@@ -9782,10 +9788,10 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	/** Detect free variable `process` from Node.js. */
 	var freeProcess = moduleExports && freeGlobal.process;
 	/** Used to access faster Node.js helpers. */
-	var nodeUtil = function() {
+	var nodeUtil = function () {
 		try {
 			return freeProcess && freeProcess.binding && freeProcess.binding("util");
-		} catch (e) {}
+		} catch (e) { }
 	}();
 	var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
 	/**
@@ -9855,7 +9861,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	* @returns {Function} Returns the new capped function.
 	*/
 	function baseUnary(func) {
-		return function(value) {
+		return function (value) {
 			return func(value);
 		};
 	}
@@ -9890,7 +9896,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	*/
 	function mapToArray(map) {
 		var index = -1, result = Array(map.size);
-		map.forEach(function(value, key) {
+		map.forEach(function (value, key) {
 			result[++index] = [key, value];
 		});
 		return result;
@@ -9904,7 +9910,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	* @returns {Function} Returns the new function.
 	*/
 	function overArg(func, transform) {
-		return function(arg) {
+		return function (arg) {
 			return func(transform(arg));
 		};
 	}
@@ -9917,7 +9923,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	*/
 	function setToArray(set) {
 		var index = -1, result = Array(set.size);
-		set.forEach(function(value) {
+		set.forEach(function (value) {
 			result[++index] = value;
 		});
 		return result;
@@ -9931,7 +9937,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	/** Used to check objects for own properties. */
 	var hasOwnProperty = objectProto.hasOwnProperty;
 	/** Used to detect methods masquerading as native. */
-	var maskSrcKey = function() {
+	var maskSrcKey = function () {
 		var uid = /[^.]+$/.exec(coreJsData && coreJsData.keys && coreJsData.keys.IE_PROTO || "");
 		return uid ? "Symbol(src)_1." + uid : "";
 	}();
@@ -10540,7 +10546,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 				break;
 			}
 			if (seen) {
-				if (!arraySome(other, function(othValue, othIndex) {
+				if (!arraySome(other, function (othValue, othIndex) {
 					if (!cacheHas(seen, othIndex) && (arrValue === othValue || equalFunc(arrValue, othValue, bitmask, customizer, stack))) return seen.push(othIndex);
 				})) {
 					result = false;
@@ -10694,7 +10700,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 		try {
 			value[symToStringTag] = void 0;
 			var unmasked = true;
-		} catch (e) {}
+		} catch (e) { }
 		var result = nativeObjectToString.call(value);
 		if (unmasked) if (isOwn) value[symToStringTag] = tag;
 		else delete value[symToStringTag];
@@ -10707,10 +10713,10 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	* @param {Object} object The object to query.
 	* @returns {Array} Returns the array of symbols.
 	*/
-	var getSymbols = !nativeGetSymbols ? stubArray : function(object) {
+	var getSymbols = !nativeGetSymbols ? stubArray : function (object) {
 		if (object == null) return [];
 		object = Object(object);
-		return arrayFilter(nativeGetSymbols(object), function(symbol) {
+		return arrayFilter(nativeGetSymbols(object), function (symbol) {
 			return propertyIsEnumerable.call(object, symbol);
 		});
 	};
@@ -10722,7 +10728,7 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	* @returns {string} Returns the `toStringTag`.
 	*/
 	var getTag = baseGetTag;
-	if (DataView && getTag(new DataView(/* @__PURE__ */ new ArrayBuffer(1))) != dataViewTag || Map && getTag(new Map()) != mapTag || Promise && getTag(Promise.resolve()) != promiseTag || Set && getTag(new Set()) != setTag || WeakMap && getTag(new WeakMap()) != weakMapTag) getTag = function(value) {
+	if (DataView && getTag(new DataView(/* @__PURE__ */ new ArrayBuffer(1))) != dataViewTag || Map && getTag(new Map()) != mapTag || Promise && getTag(Promise.resolve()) != promiseTag || Set && getTag(new Set()) != setTag || WeakMap && getTag(new WeakMap()) != weakMapTag) getTag = function (value) {
 		var result = baseGetTag(value), Ctor = result == objectTag ? value.constructor : void 0, ctorString = Ctor ? toSource(Ctor) : "";
 		if (ctorString) switch (ctorString) {
 			case dataViewCtorString: return dataViewTag;
@@ -10798,10 +10804,10 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 		if (func != null) {
 			try {
 				return funcToString.call(func);
-			} catch (e) {}
+			} catch (e) { }
 			try {
 				return func + "";
-			} catch (e) {}
+			} catch (e) { }
 		}
 		return "";
 	}
@@ -10858,9 +10864,9 @@ var require_lodash_isequal = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 	* _.isArguments([1, 2, 3]);
 	* // => false
 	*/
-	var isArguments = baseIsArguments(function() {
+	var isArguments = baseIsArguments(function () {
 		return arguments;
-	}()) ? baseIsArguments : function(value) {
+	}()) ? baseIsArguments : function (value) {
 		return isObjectLike(value) && hasOwnProperty.call(value, "callee") && !propertyIsEnumerable.call(value, "callee");
 	};
 	/**
@@ -11223,7 +11229,7 @@ var require_DownloadedUpdateHelper = /* @__PURE__ */ __commonJSMin(((exports) =>
 		async cleanCacheDirForPendingUpdate() {
 			try {
 				await (0, fs_extra_1.emptyDir)(this.cacheDirForPendingUpdate);
-			} catch (_ignore) {}
+			} catch (_ignore) { }
 		}
 		/**
 		* Returns "update-info.json" which is created in the update cache directory's "pending" subfolder after the first update is downloaded.  If the update file does not exist then the cache is cleared and recreated.  If the update file exists then its properties are validated.
@@ -11721,7 +11727,7 @@ var require_GenericProvider = /* @__PURE__ */ __commonJSMin(((exports) => {
 		async getLatestVersion() {
 			const channelFile = (0, util_1.getChannelFilename)(this.channel);
 			const channelUrl = (0, util_1.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
-			for (let attemptNumber = 0;; attemptNumber++) try {
+			for (let attemptNumber = 0; ; attemptNumber++) try {
 				return (0, Provider_1.parseUpdateInfo)(await this.httpRequest(channelUrl), channelFile, channelUrl);
 			} catch (e) {
 				if (e instanceof builder_util_runtime_1.HttpError && e.statusCode === 404) throw (0, builder_util_runtime_1.newError)(`Cannot find channel "${channelFile}" update info: ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
@@ -11936,7 +11942,7 @@ var require_GitHubProvider = /* @__PURE__ */ __commonJSMin(((exports) => {
 		try {
 			latestVersion = releaseVersionRegExp.exec(latestRelease.element("link").attribute("href"))[1];
 			latestVersion = semver.valid(latestVersion) ? latestVersion : void 0;
-		} catch {}
+		} catch { }
 		if (latestVersion == null) return null;
 		const releaseNotes = [];
 		for (const release of feed.getElements("entry")) {
@@ -12351,7 +12357,7 @@ var require_downloadPlanBuilder = /* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.OperationKind = void 0;
 	exports.computeOperations = computeOperations;
 	var OperationKind;
-	(function(OperationKind) {
+	(function (OperationKind) {
 		OperationKind[OperationKind["COPY"] = 0] = "COPY";
 		OperationKind[OperationKind["DOWNLOAD"] = 1] = "DOWNLOAD";
 	})(OperationKind || (exports.OperationKind = OperationKind = {}));
@@ -12456,7 +12462,7 @@ var require_DataSplitter = /* @__PURE__ */ __commonJSMin(((exports) => {
 	var downloadPlanBuilder_1 = require_downloadPlanBuilder();
 	var DOUBLE_CRLF = Buffer.from("\r\n\r\n");
 	var ReadState;
-	(function(ReadState) {
+	(function (ReadState) {
 		ReadState[ReadState["INIT"] = 0] = "INIT";
 		ReadState[ReadState["HEADER"] = 1] = "HEADER";
 		ReadState[ReadState["BODY"] = 2] = "BODY";
@@ -12741,7 +12747,7 @@ var require_ProgressDifferentialDownloadCallbackTransform = /* @__PURE__ */ __co
 	exports.ProgressDifferentialDownloadCallbackTransform = void 0;
 	var stream_1 = __require("stream");
 	var OperationKind;
-	(function(OperationKind) {
+	(function (OperationKind) {
 		OperationKind[OperationKind["COPY"] = 0] = "COPY";
 		OperationKind[OperationKind["DOWNLOAD"] = 1] = "DOWNLOAD";
 	})(OperationKind || (OperationKind = {}));
@@ -12841,10 +12847,12 @@ var require_DifferentialDownloader = /* @__PURE__ */ __commonJSMin(((exports) =>
 			this.logger = options.logger;
 		}
 		createRequestOptions() {
-			const result = { headers: {
-				...this.options.requestHeaders,
-				accept: "*/*"
-			} };
+			const result = {
+				headers: {
+					...this.options.requestHeaders,
+					accept: "*/*"
+				}
+			};
 			(0, builder_util_runtime_1.configureRequestUrl)(this.options.newUrl, result);
 			(0, builder_util_runtime_1.configureRequestOptions)(result);
 			return result;
@@ -12882,7 +12890,7 @@ var require_DifferentialDownloader = /* @__PURE__ */ __commonJSMin(((exports) =>
 					} catch (errorOnLog) {
 						try {
 							console.error(errorOnLog);
-						} catch (_ignored) {}
+						} catch (_ignored) { }
 					}
 					throw e;
 				}).then(() => {
@@ -13056,7 +13064,7 @@ var require_types = /* @__PURE__ */ __commonJSMin(((exports) => {
 	var builder_util_runtime_1 = require_out();
 	Object.defineProperty(exports, "CancellationToken", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return builder_util_runtime_1.CancellationToken;
 		}
 	});
@@ -13598,8 +13606,8 @@ var require_AppUpdater = /* @__PURE__ */ __commonJSMin(((exports) => {
 				return await done(false);
 			}
 			const removeFileIfAny = async () => {
-				await downloadedUpdateHelper.clear().catch(() => {});
-				return await (0, fs_extra_1.unlink)(updateFile).catch(() => {});
+				await downloadedUpdateHelper.clear().catch(() => { });
+				return await (0, fs_extra_1.unlink)(updateFile).catch(() => { });
 			};
 			const tempUpdateFile = await (0, DownloadedUpdateHelper_1.createTempUpdateFile)(`temp-${updateFileName}`, cacheDir, log);
 			try {
@@ -13684,9 +13692,9 @@ var require_AppUpdater = /* @__PURE__ */ __commonJSMin(((exports) => {
 	}
 	/** @private */
 	var NoOpLogger = class {
-		info(message) {}
-		warn(message) {}
-		error(message) {}
+		info(message) { }
+		warn(message) { }
+		error(message) { }
 	};
 	exports.NoOpLogger = NoOpLogger;
 }));
@@ -14527,11 +14535,11 @@ var require_MacUpdater = /* @__PURE__ */ __commonJSMin(((exports) => {
 			else {
 				this.nativeUpdater.on("update-downloaded", () => this.handleUpdateDownloaded());
 				if (!this.autoInstallOnAppQuit)
- /**
-				* If this was not `true` previously then MacUpdater.doDownloadUpdate()
-				* would not actually initiate the downloading by electron's autoUpdater
-				*/
-				this.nativeUpdater.checkForUpdates();
+					/**
+								   * If this was not `true` previously then MacUpdater.doDownloadUpdate()
+								   * would not actually initiate the downloading by electron's autoUpdater
+								   */
+					this.nativeUpdater.checkForUpdates();
 			}
 		}
 	};
@@ -14708,7 +14716,7 @@ var require_NsisUpdater = /* @__PURE__ */ __commonJSMin(((exports) => {
 						} catch (e) {
 							try {
 								await (0, fs_extra_1.unlink)(packageFile);
-							} catch (_ignored) {}
+							} catch (_ignored) { }
 							throw e;
 						}
 					}
@@ -14781,21 +14789,21 @@ var require_NsisUpdater = /* @__PURE__ */ __commonJSMin(((exports) => {
 //#endregion
 //#region electron/db/migrations/index.ts
 var import_main = (/* @__PURE__ */ __commonJSMin(((exports) => {
-	var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+	var __createBinding = exports && exports.__createBinding || (Object.create ? (function (o, m, k, k2) {
 		if (k2 === void 0) k2 = k;
 		var desc = Object.getOwnPropertyDescriptor(m, k);
 		if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) desc = {
 			enumerable: true,
-			get: function() {
+			get: function () {
 				return m[k];
 			}
 		};
 		Object.defineProperty(o, k2, desc);
-	}) : (function(o, m, k, k2) {
+	}) : (function (o, m, k, k2) {
 		if (k2 === void 0) k2 = k;
 		o[k2] = m[k];
 	}));
-	var __exportStar = exports && exports.__exportStar || function(m, exports$2) {
+	var __exportStar = exports && exports.__exportStar || function (m, exports$2) {
 		for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports$2, p)) __createBinding(exports$2, m, p);
 	};
 	Object.defineProperty(exports, "__esModule", { value: true });
@@ -14805,69 +14813,69 @@ var import_main = (/* @__PURE__ */ __commonJSMin(((exports) => {
 	var BaseUpdater_1 = require_BaseUpdater();
 	Object.defineProperty(exports, "BaseUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return BaseUpdater_1.BaseUpdater;
 		}
 	});
 	var AppUpdater_1 = require_AppUpdater();
 	Object.defineProperty(exports, "AppUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return AppUpdater_1.AppUpdater;
 		}
 	});
 	Object.defineProperty(exports, "NoOpLogger", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return AppUpdater_1.NoOpLogger;
 		}
 	});
 	var Provider_1 = require_Provider();
 	Object.defineProperty(exports, "Provider", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return Provider_1.Provider;
 		}
 	});
 	var AppImageUpdater_1 = require_AppImageUpdater();
 	Object.defineProperty(exports, "AppImageUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return AppImageUpdater_1.AppImageUpdater;
 		}
 	});
 	var DebUpdater_1 = require_DebUpdater();
 	Object.defineProperty(exports, "DebUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return DebUpdater_1.DebUpdater;
 		}
 	});
 	var PacmanUpdater_1 = require_PacmanUpdater();
 	Object.defineProperty(exports, "PacmanUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return PacmanUpdater_1.PacmanUpdater;
 		}
 	});
 	var RpmUpdater_1 = require_RpmUpdater();
 	Object.defineProperty(exports, "RpmUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return RpmUpdater_1.RpmUpdater;
 		}
 	});
 	var MacUpdater_1 = require_MacUpdater();
 	Object.defineProperty(exports, "MacUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return MacUpdater_1.MacUpdater;
 		}
 	});
 	var NsisUpdater_1 = require_NsisUpdater();
 	Object.defineProperty(exports, "NsisUpdater", {
 		enumerable: true,
-		get: function() {
+		get: function () {
 			return NsisUpdater_1.NsisUpdater;
 		}
 	});
@@ -15048,15 +15056,15 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE employees ADD COLUMN updated_at TEXT;");
-			} catch {}
+			} catch { }
 			db.exec("UPDATE employees SET updated_at = created_at WHERE updated_at IS NULL;");
 			try {
 				db.exec("ALTER TABLE salary_payments ADD COLUMN updated_at TEXT;");
-			} catch {}
+			} catch { }
 			db.exec("UPDATE salary_payments SET updated_at = COALESCE(paid_date, '2000-01-01T00:00:00Z') WHERE updated_at IS NULL;");
 			try {
 				db.exec("ALTER TABLE expenses ADD COLUMN updated_at TEXT;");
-			} catch {}
+			} catch { }
 			db.exec("UPDATE expenses SET updated_at = created_at WHERE updated_at IS NULL;");
 		}
 	},
@@ -15147,10 +15155,10 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE settings ADD COLUMN updated_at TEXT;");
-			} catch {}
+			} catch { }
 			try {
 				db.exec("ALTER TABLE settings ADD COLUMN synced INTEGER DEFAULT 0;");
-			} catch {}
+			} catch { }
 			db.exec("UPDATE settings SET updated_at = '2000-01-01T00:00:00Z' WHERE updated_at IS NULL;");
 		}
 	},
@@ -15159,10 +15167,10 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE users ADD COLUMN updated_at TEXT;");
-			} catch {}
+			} catch { }
 			try {
 				db.exec("ALTER TABLE users ADD COLUMN synced INTEGER DEFAULT 0;");
-			} catch {}
+			} catch { }
 			db.exec("UPDATE users SET updated_at = created_at WHERE updated_at IS NULL;");
 		}
 	},
@@ -15208,7 +15216,7 @@ var migrations = [
 			const addColumn = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			addColumn("ALTER TABLE children ADD COLUMN photo_url TEXT;");
 			addColumn("ALTER TABLE children ADD COLUMN photo_public_id TEXT;");
@@ -15248,7 +15256,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			addCol("ALTER TABLE employees ADD COLUMN role_id INTEGER REFERENCES employee_roles(id);");
 			addCol("ALTER TABLE employees ADD COLUMN salary_type_override_id INTEGER REFERENCES salary_types(id);");
@@ -15285,7 +15293,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			addCol("ALTER TABLE service_definitions ADD COLUMN synced INTEGER DEFAULT 0;");
 			const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -15325,7 +15333,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			db.exec(`
         CREATE TABLE IF NOT EXISTS scheduled_sessions (
@@ -15357,7 +15365,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			db.exec(`
         CREATE TABLE IF NOT EXISTS attendance_records (
@@ -15396,7 +15404,7 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE payments ADD COLUMN prorated_calculated REAL;");
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15405,7 +15413,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			addCol("ALTER TABLE salary_types ADD COLUMN synced INTEGER DEFAULT 0;");
 			addCol("ALTER TABLE employee_roles ADD COLUMN synced INTEGER DEFAULT 0;");
@@ -15420,7 +15428,7 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE attendance_conflicts ADD COLUMN synced INTEGER DEFAULT 0;");
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15429,7 +15437,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			db.exec(`
         CREATE TABLE IF NOT EXISTS payment_methods (
@@ -15520,7 +15528,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			addCol("ALTER TABLE child_services ADD COLUMN teacher_id INTEGER;");
 			addCol("ALTER TABLE child_services ADD COLUMN lesson_days TEXT;");
@@ -15562,7 +15570,7 @@ var migrations = [
       `);
 			try {
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_child_services_child ON child_services(child_id);`);
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15585,7 +15593,7 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE employees ADD COLUMN teacher_session_rate REAL;");
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15594,7 +15602,7 @@ var migrations = [
 			const addCol = (ddl) => {
 				try {
 					db.exec(ddl);
-				} catch {}
+				} catch { }
 			};
 			addCol("ALTER TABLE attendance_records ADD COLUMN attended_teacher_id INTEGER REFERENCES employees(id);");
 			addCol("ALTER TABLE attendance_records ADD COLUMN teacher_status TEXT CHECK(teacher_status IN ('present','absent'));");
@@ -15668,7 +15676,7 @@ var migrations = [
 			try {
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_attendance_records_session ON attendance_records(session_id);`);
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_attendance_records_child ON attendance_records(child_id);`);
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15701,7 +15709,7 @@ var migrations = [
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_edit_requests_record ON attendance_edit_requests(attendance_record_id);`);
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_edit_requests_status ON attendance_edit_requests(status);`);
 				db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_edit_requests_one_pending ON attendance_edit_requests(attendance_record_id) WHERE status = 'pending';`);
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15727,7 +15735,7 @@ var migrations = [
       `);
 			try {
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_log_record ON attendance_audit_log(attendance_record_id);`);
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15748,7 +15756,7 @@ var migrations = [
       `);
 			try {
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at);`);
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15784,7 +15792,7 @@ var migrations = [
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_daily_payments_date ON daily_payments(billing_date);`);
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_daily_payments_child ON daily_payments(child_id, billing_date);`);
 				db.exec(`CREATE INDEX IF NOT EXISTS idx_daily_payments_synced ON daily_payments(synced);`);
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -15860,7 +15868,7 @@ var migrations = [
 		up: (db) => {
 			try {
 				db.exec("ALTER TABLE child_services ADD COLUMN teacher_session_rate REAL;");
-			} catch {}
+			} catch { }
 		}
 	},
 	{
@@ -16012,10 +16020,10 @@ var randomFallback = null;
 function randomBytes(len) {
 	try {
 		return crypto.getRandomValues(new Uint8Array(len));
-	} catch {}
+	} catch { }
 	try {
 		return nodeCrypto.randomBytes(len);
-	} catch {}
+	} catch { }
 	if (!randomFallback) throw Error("Neither WebCryptoAPI nor a crypto module is available. Use bcrypt.setRandomFallback to set an alternative");
 	return randomFallback(len);
 }
@@ -16065,7 +16073,7 @@ function genSalt(rounds, seed_length, callback) {
 	if (typeof rounds === "undefined") rounds = GENSALT_DEFAULT_LOG2_ROUNDS;
 	else if (typeof rounds !== "number") throw Error("illegal arguments: " + typeof rounds);
 	function _async(callback) {
-		nextTick(function() {
+		nextTick(function () {
 			try {
 				callback(null, genSaltSync(rounds));
 			} catch (err) {
@@ -16076,8 +16084,8 @@ function genSalt(rounds, seed_length, callback) {
 	if (callback) {
 		if (typeof callback !== "function") throw Error("Illegal callback: " + typeof callback);
 		_async(callback);
-	} else return new Promise(function(resolve, reject) {
-		_async(function(err, res) {
+	} else return new Promise(function (resolve, reject) {
+		_async(function (err, res) {
 			if (err) {
 				reject(err);
 				return;
@@ -16110,7 +16118,7 @@ function hashSync(password, salt) {
 */
 function hash(password, salt, callback, progressCallback) {
 	function _async(callback) {
-		if (typeof password === "string" && typeof salt === "number") genSalt(salt, function(err, salt) {
+		if (typeof password === "string" && typeof salt === "number") genSalt(salt, function (err, salt) {
 			_hash(password, salt, callback, progressCallback);
 		});
 		else if (typeof password === "string" && typeof salt === "string") _hash(password, salt, callback, progressCallback);
@@ -16119,8 +16127,8 @@ function hash(password, salt, callback, progressCallback) {
 	if (callback) {
 		if (typeof callback !== "function") throw Error("Illegal callback: " + typeof callback);
 		_async(callback);
-	} else return new Promise(function(resolve, reject) {
-		_async(function(err, res) {
+	} else return new Promise(function (resolve, reject) {
+		_async(function (err, res) {
 			if (err) {
 				reject(err);
 				return;
@@ -16173,7 +16181,7 @@ function compare(password, hashValue, callback, progressCallback) {
 			nextTick(callback.bind(this, null, false));
 			return;
 		}
-		hash(password, hashValue.substring(0, 29), function(err, comp) {
+		hash(password, hashValue.substring(0, 29), function (err, comp) {
 			if (err) callback(err);
 			else callback(null, safeStringCompare(comp, hashValue));
 		}, progressCallback);
@@ -16181,8 +16189,8 @@ function compare(password, hashValue, callback, progressCallback) {
 	if (callback) {
 		if (typeof callback !== "function") throw Error("Illegal callback: " + typeof callback);
 		_async(callback);
-	} else return new Promise(function(resolve, reject) {
-		_async(function(err, res) {
+	} else return new Promise(function (resolve, reject) {
+		_async(function (err, res) {
 			if (err) {
 				reject(err);
 				return;
@@ -17846,7 +17854,7 @@ function _hash(password, salt, callback, progressCallback) {
 		return res.join("");
 	}
 	if (typeof callback == "undefined") return finish(_crypt(passwordb, saltb, rounds));
-	else _crypt(passwordb, saltb, rounds, function(err, bytes) {
+	else _crypt(passwordb, saltb, rounds, function (err, bytes) {
 		if (err) callback(err, null);
 		else callback(null, finish(bytes));
 	}, progressCallback);
@@ -17923,11 +17931,11 @@ async function seedDatabase(db) {
 			},
 			{
 				key: "brand_org_name",
-				value: seedSetting("SEED_BRAND_ORG_NAME", "مركز مهند الليثي للتوحد ونمو الطفل")
+				value: seedSetting("SEED_BRAND_ORG_NAME", "مركز مهند الليثي للتوحد ونمو الطالب")
 			},
 			{
 				key: "brand_tagline",
-				value: "رعاية متميزة وتنمية مهارات طفلك"
+				value: "رعاية متميزة وتنمية مهارات طالبك"
 			},
 			{
 				key: "brand_primary_color",
@@ -18028,11 +18036,11 @@ var require_safe_buffer = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}
 	SafeBuffer.prototype = Object.create(Buffer.prototype);
 	copyProps(Buffer, SafeBuffer);
-	SafeBuffer.from = function(arg, encodingOrOffset, length) {
+	SafeBuffer.from = function (arg, encodingOrOffset, length) {
 		if (typeof arg === "number") throw new TypeError("Argument must not be a number");
 		return Buffer(arg, encodingOrOffset, length);
 	};
-	SafeBuffer.alloc = function(size, fill, encoding) {
+	SafeBuffer.alloc = function (size, fill, encoding) {
 		if (typeof size !== "number") throw new TypeError("Argument must be a number");
 		var buf = Buffer(size);
 		if (fill !== void 0) if (typeof encoding === "string") buf.fill(fill, encoding);
@@ -18040,11 +18048,11 @@ var require_safe_buffer = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		else buf.fill(0);
 		return buf;
 	};
-	SafeBuffer.allocUnsafe = function(size) {
+	SafeBuffer.allocUnsafe = function (size) {
 		if (typeof size !== "number") throw new TypeError("Argument must be a number");
 		return Buffer(size);
 	};
-	SafeBuffer.allocUnsafeSlow = function(size) {
+	SafeBuffer.allocUnsafeSlow = function (size) {
 		if (typeof size !== "number") throw new TypeError("Argument must be a number");
 		return buffer.SlowBuffer(size);
 	};
@@ -18071,7 +18079,7 @@ var require_data_stream = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (data.length || typeof data === "object") {
 			this.buffer = data;
 			this.writable = false;
-			process.nextTick(function() {
+			process.nextTick(function () {
 				this.emit("end", data);
 				this.readable = false;
 				this.emit("close");
@@ -18217,14 +18225,14 @@ var require_buffer_equal_constant_time = /* @__PURE__ */ __commonJSMin(((exports
 		for (var i = 0; i < a.length; i++) c |= a[i] ^ b[i];
 		return c === 0;
 	}
-	bufferEq.install = function() {
+	bufferEq.install = function () {
 		Buffer$2.prototype.equal = SlowBuffer.prototype.equal = function equal(that) {
 			return bufferEq(this, that);
 		};
 	};
 	var origBufEqual = Buffer$2.prototype.equal;
 	var origSlowBufEqual = SlowBuffer.prototype.equal;
-	bufferEq.restore = function() {
+	bufferEq.restore = function () {
 		Buffer$2.prototype.equal = origBufEqual;
 		SlowBuffer.prototype.equal = origSlowBufEqual;
 	};
@@ -18454,10 +18462,10 @@ var require_sign_stream = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		this.encoding = opts.encoding;
 		this.secret = this.privateKey = this.key = secretStream;
 		this.payload = new DataStream(opts.payload);
-		this.secret.once("close", function() {
+		this.secret.once("close", function () {
 			if (!this.payload.writable && this.readable) this.sign();
 		}.bind(this));
-		this.payload.once("close", function() {
+		this.payload.once("close", function () {
 			if (!this.secret.writable && this.readable) this.sign();
 		}.bind(this));
 	}
@@ -18560,10 +18568,10 @@ var require_verify_stream = /* @__PURE__ */ __commonJSMin(((exports, module) => 
 		this.encoding = opts.encoding;
 		this.secret = this.publicKey = this.key = secretStream;
 		this.signature = new DataStream(opts.signature);
-		this.secret.once("close", function() {
+		this.secret.once("close", function () {
 			if (!this.signature.writable && this.readable) this.verify();
 		}.bind(this));
-		this.signature.once("close", function() {
+		this.signature.once("close", function () {
 			if (!this.secret.writable && this.readable) this.verify();
 		}.bind(this));
 	}
@@ -18622,7 +18630,7 @@ var require_jws = /* @__PURE__ */ __commonJSMin(((exports) => {
 //#region node_modules/jsonwebtoken/decode.js
 var require_decode = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var jws = require_jws();
-	module.exports = function(jwt, options) {
+	module.exports = function (jwt, options) {
 		options = options || {};
 		var decoded = jws.decode(jwt, options);
 		if (!decoded) return null;
@@ -18630,7 +18638,7 @@ var require_decode = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (typeof payload === "string") try {
 			var obj = JSON.parse(payload);
 			if (obj !== null && typeof obj === "object") payload = obj;
-		} catch (e) {}
+		} catch (e) { }
 		if (options.complete === true) return {
 			header: decoded.header,
 			payload,
@@ -18642,7 +18650,7 @@ var require_decode = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region node_modules/jsonwebtoken/lib/JsonWebTokenError.js
 var require_JsonWebTokenError = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var JsonWebTokenError = function(message, error) {
+	var JsonWebTokenError = function (message, error) {
 		Error.call(this, message);
 		if (Error.captureStackTrace) Error.captureStackTrace(this, this.constructor);
 		this.name = "JsonWebTokenError";
@@ -18657,7 +18665,7 @@ var require_JsonWebTokenError = /* @__PURE__ */ __commonJSMin(((exports, module)
 //#region node_modules/jsonwebtoken/lib/NotBeforeError.js
 var require_NotBeforeError = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var JsonWebTokenError = require_JsonWebTokenError();
-	var NotBeforeError = function(message, date) {
+	var NotBeforeError = function (message, date) {
 		JsonWebTokenError.call(this, message);
 		this.name = "NotBeforeError";
 		this.date = date;
@@ -18670,7 +18678,7 @@ var require_NotBeforeError = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 //#region node_modules/jsonwebtoken/lib/TokenExpiredError.js
 var require_TokenExpiredError = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var JsonWebTokenError = require_JsonWebTokenError();
-	var TokenExpiredError = function(message, expiredAt) {
+	var TokenExpiredError = function (message, expiredAt) {
 		JsonWebTokenError.call(this, message);
 		this.name = "TokenExpiredError";
 		this.expiredAt = expiredAt;
@@ -18683,7 +18691,7 @@ var require_TokenExpiredError = /* @__PURE__ */ __commonJSMin(((exports, module)
 //#region node_modules/jsonwebtoken/lib/timespan.js
 var require_timespan = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var ms = require_ms();
-	module.exports = function(time, iat) {
+	module.exports = function (time, iat) {
 		var timestamp = iat || Math.floor(Date.now() / 1e3);
 		if (typeof time === "string") {
 			var milliseconds = ms(time);
@@ -18721,7 +18729,7 @@ var require_constants = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region node_modules/semver/internal/debug.js
 var require_debug = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	module.exports = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {};
+	module.exports = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => { };
 }));
 //#endregion
 //#region node_modules/semver/internal/re.js
@@ -20114,7 +20122,7 @@ var require_validateAsymmetricKey = /* @__PURE__ */ __commonJSMin(((exports, mod
 		ES384: "secp384r1",
 		ES512: "secp521r1"
 	};
-	module.exports = function(algorithm, key) {
+	module.exports = function (algorithm, key) {
 		if (!algorithm || !key) return;
 		const keyType = key.asymmetricKeyType;
 		if (!keyType) return;
@@ -20180,7 +20188,7 @@ var require_verify = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		PUB_KEY_ALGS.splice(PUB_KEY_ALGS.length, 0, "PS256", "PS384", "PS512");
 		RSA_KEY_ALGS.splice(RSA_KEY_ALGS.length, 0, "PS256", "PS384", "PS512");
 	}
-	module.exports = function(jwtString, secretOrPublicKey, options, callback) {
+	module.exports = function (jwtString, secretOrPublicKey, options, callback) {
 		if (typeof options === "function" && !callback) {
 			callback = options;
 			options = {};
@@ -20189,7 +20197,7 @@ var require_verify = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		options = Object.assign({}, options);
 		let done;
 		if (callback) done = callback;
-		else done = function(err, data) {
+		else done = function (err, data) {
 			if (err) throw err;
 			return data;
 		};
@@ -20213,10 +20221,10 @@ var require_verify = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (typeof secretOrPublicKey === "function") {
 			if (!callback) return done(new JsonWebTokenError("verify must be called asynchronous if secret or public key is provided as a callback"));
 			getSecret = secretOrPublicKey;
-		} else getSecret = function(header, secretCallback) {
+		} else getSecret = function (header, secretCallback) {
 			return secretCallback(null, secretOrPublicKey);
 		};
-		return getSecret(header, function(err, secretOrPublicKey) {
+		return getSecret(header, function (err, secretOrPublicKey) {
 			if (err) return done(new JsonWebTokenError("error in secret or public key callback: " + err.message));
 			const hasSignature = parts[2].trim() !== "";
 			if (!hasSignature && secretOrPublicKey) return done(new JsonWebTokenError("jwt signature is required"));
@@ -20261,8 +20269,8 @@ var require_verify = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			}
 			if (options.audience) {
 				const audiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-				if (!(Array.isArray(payload.aud) ? payload.aud : [payload.aud]).some(function(targetAudience) {
-					return audiences.some(function(audience) {
+				if (!(Array.isArray(payload.aud) ? payload.aud : [payload.aud]).some(function (targetAudience) {
+					return audiences.some(function (audience) {
 						return audience instanceof RegExp ? audience.test(targetAudience) : audience === targetAudience;
 					});
 				})) return done(new JsonWebTokenError("jwt audience invalid. expected: " + audiences.join(" or ")));
@@ -20404,7 +20412,7 @@ var require_lodash_includes = /* @__PURE__ */ __commonJSMin(((exports, module) =
 	* @returns {Object} Returns the array of property values.
 	*/
 	function baseValues(object, props) {
-		return arrayMap(props, function(key) {
+		return arrayMap(props, function (key) {
 			return object[key];
 		});
 	}
@@ -20417,7 +20425,7 @@ var require_lodash_includes = /* @__PURE__ */ __commonJSMin(((exports, module) =
 	* @returns {Function} Returns the new function.
 	*/
 	function overArg(func, transform) {
-		return function(arg) {
+		return function (arg) {
 			return func(transform(arg));
 		};
 	}
@@ -21319,7 +21327,7 @@ var require_lodash_isplainobject = /* @__PURE__ */ __commonJSMin(((exports, modu
 		var result = false;
 		if (value != null && typeof value.toString != "function") try {
 			result = !!(value + "");
-		} catch (e) {}
+		} catch (e) { }
 		return result;
 	}
 	/**
@@ -21331,7 +21339,7 @@ var require_lodash_isplainobject = /* @__PURE__ */ __commonJSMin(((exports, modu
 	* @returns {Function} Returns the new function.
 	*/
 	function overArg(func, transform) {
-		return function(arg) {
+		return function (arg) {
 			return func(transform(arg));
 		};
 	}
@@ -21558,7 +21566,7 @@ var require_lodash_once = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		var result;
 		if (typeof func != "function") throw new TypeError(FUNC_ERROR_TEXT);
 		n = toInteger(n);
-		return function() {
+		return function () {
 			if (--n > 0) result = func.apply(this, arguments);
 			if (n <= 1) func = void 0;
 			return result;
@@ -21787,19 +21795,19 @@ var require_sign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	if (PS_SUPPORTED) SUPPORTED_ALGS.splice(3, 0, "PS256", "PS384", "PS512");
 	var sign_options_schema = {
 		expiresIn: {
-			isValid: function(value) {
+			isValid: function (value) {
 				return isInteger(value) || isString(value) && value;
 			},
 			message: "\"expiresIn\" should be a number of seconds or string representing a timespan"
 		},
 		notBefore: {
-			isValid: function(value) {
+			isValid: function (value) {
 				return isInteger(value) || isString(value) && value;
 			},
 			message: "\"notBefore\" should be a number of seconds or string representing a timespan"
 		},
 		audience: {
-			isValid: function(value) {
+			isValid: function (value) {
 				return isString(value) || Array.isArray(value);
 			},
 			message: "\"audience\" must be a string or array"
@@ -21865,7 +21873,7 @@ var require_sign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	};
 	function validate(schema, allowUnknown, object, parameterName) {
 		if (!isPlainObject(object)) throw new Error("Expected \"" + parameterName + "\" to be a plain object.");
-		Object.keys(object).forEach(function(key) {
+		Object.keys(object).forEach(function (key) {
 			const validator = schema[key];
 			if (!validator) {
 				if (!allowUnknown) throw new Error("\"" + key + "\" is not allowed in \"" + parameterName + "\"");
@@ -21895,7 +21903,7 @@ var require_sign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		"subject",
 		"jwtid"
 	];
-	module.exports = function(payload, secretOrPrivateKey, options, callback) {
+	module.exports = function (payload, secretOrPrivateKey, options, callback) {
 		if (typeof options === "function") {
 			callback = options;
 			options = {};
@@ -21934,7 +21942,7 @@ var require_sign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			}
 			if (!options.mutatePayload) payload = Object.assign({}, payload);
 		} else {
-			const invalid_options = options_for_objects.filter(function(opt) {
+			const invalid_options = options_for_objects.filter(function (opt) {
 				return typeof options[opt] !== "undefined";
 			});
 			if (invalid_options.length > 0) return failure(/* @__PURE__ */ new Error("invalid " + invalid_options.join(",") + " option for " + typeof payload + " payload"));
@@ -21970,7 +21978,7 @@ var require_sign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			}
 			if (typeof payload.exp === "undefined") return failure(/* @__PURE__ */ new Error("\"expiresIn\" should be a number of seconds or string representing a timespan eg: \"1d\", \"20h\", 60"));
 		}
-		Object.keys(options_to_payload).forEach(function(key) {
+		Object.keys(options_to_payload).forEach(function (key) {
 			const claim = options_to_payload[key];
 			if (typeof options[key] !== "undefined") {
 				if (typeof payload[claim] !== "undefined") return failure(/* @__PURE__ */ new Error("Bad \"options." + key + "\" option. The payload already has an \"" + claim + "\" property."));
@@ -21985,7 +21993,7 @@ var require_sign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 				privateKey: secretOrPrivateKey,
 				payload,
 				encoding
-			}).once("error", callback).once("done", function(signature) {
+			}).once("error", callback).once("done", function (signature) {
 				if (!options.allowInsecureKeySizes && /^(?:RS|PS)/.test(header.alg) && signature.length < 256) return callback(/* @__PURE__ */ new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`));
 				callback(null, signature);
 			});
@@ -22330,7 +22338,7 @@ function validateGuardianPhone(phone) {
 }
 function validateChildPhone(phone) {
 	if (phone && phone.toString().trim() !== "") {
-		if (!GUARDIAN_PHONE_RE.test(phone.toString().trim())) throw new Error("رقم هاتف الطفل يجب أن يكون بالتنسيق الصحيح (مثال: 01012345678 أو +201012345678) / Child phone must be a valid format (e.g., 01012345678, 201012345678, or +201012345678)");
+		if (!GUARDIAN_PHONE_RE.test(phone.toString().trim())) throw new Error("رقم هاتف الطالب يجب أن يكون بالتنسيق الصحيح (مثال: 01012345678 أو +201012345678) / Child phone must be a valid format (e.g., 01012345678, 201012345678, or +201012345678)");
 	}
 }
 function buildLessonFields(src) {
@@ -22426,7 +22434,7 @@ ipcMain.handle("children:update", async (_event, { id, patch }) => {
 		const db = getDb();
 		if (!id || !patch) throw new Error("Child ID and patch data are required");
 		const child = db.prepare("SELECT * FROM children WHERE id = ?").get(id);
-		if (!child) throw new Error("الطفل غير موجود / Child not found");
+		if (!child) throw new Error("الطالب غير موجود / Child not found");
 		if (patch.guardian_phone !== void 0) validateGuardianPhone(patch.guardian_phone);
 		if (patch.child_phone !== void 0) validateChildPhone(patch.child_phone);
 		db.transaction(() => {
@@ -22532,7 +22540,7 @@ ipcMain.handle("children:deactivate", async (_event, { id }) => {
 	try {
 		requireAdmin();
 		const db = getDb();
-		if (!db.prepare("SELECT id FROM children WHERE id = ?").get(id)) throw new Error("الطفل غير موجود / Child not found");
+		if (!db.prepare("SELECT id FROM children WHERE id = ?").get(id)) throw new Error("الطالب غير موجود / Child not found");
 		db.prepare("UPDATE children SET is_active = 0, updated_at = ?, synced = 0 WHERE id = ?").run((/* @__PURE__ */ new Date()).toISOString(), id);
 		return { ok: true };
 	} catch (error) {
@@ -22545,8 +22553,8 @@ ipcMain.handle("children:delete", async (_event, { id }) => {
 		requireAdmin();
 		const db = getDb();
 		const child = db.prepare("SELECT id, is_active FROM children WHERE id = ?").get(id);
-		if (!child) throw new Error("الطفل غير موجود / Child not found");
-		if (child.is_active !== 0) throw new Error("لا يمكن حذف طفل نشط — يجب إلغاء تفعيله أولاً / Cannot delete an active child — deactivate first");
+		if (!child) throw new Error("الطالب غير موجود / Child not found");
+		if (child.is_active !== 0) throw new Error("لا يمكن حذف طالب نشط — يجب إلغاء تفعيله أولاً / Cannot delete an active child — deactivate first");
 		db.prepare("DELETE FROM children WHERE id = ?").run(id);
 		return { ok: true };
 	} catch (error) {
@@ -22560,7 +22568,7 @@ ipcMain.handle("children:statement", async (_event, { childId }) => {
 		if (!childId) throw new Error("Child ID is required");
 		const db = getDb();
 		const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
-		if (!child) throw new Error("الطفل غير موجود / Child not found");
+		if (!child) throw new Error("الطالب غير موجود / Child not found");
 		if (child.teacher_id) child.teacher_name = db.prepare("SELECT name FROM employees WHERE id = ?").get(child.teacher_id)?.name ?? null;
 		return getChildStatement(child, db.prepare("SELECT * FROM payments WHERE child_id = ?").all(childId), /* @__PURE__ */ new Date());
 	} catch (error) {
@@ -22614,7 +22622,7 @@ ipcMain.handle("childServices:add", async (_event, { childId, service, unit, pri
 		requireAdmin();
 		const db = getDb();
 		if (!childId || !service || !unit || price === void 0) throw new Error("جميع الحقول الإلزامية مطلوبة / Missing required fields");
-		if (db.prepare("SELECT id FROM child_services WHERE child_id = ? AND service = ?").get(childId, service)) throw new Error("هذه الخدمة مضافة بالفعل للطفل / Service already enrolled");
+		if (db.prepare("SELECT id FROM child_services WHERE child_id = ? AND service = ?").get(childId, service)) throw new Error("هذه الخدمة مضافة بالفعل للطالب / Service already enrolled");
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const result = db.prepare(`
       INSERT INTO child_services (child_id, service, unit, price, teacher_session_rate, created_at, updated_at, synced)
@@ -22821,7 +22829,7 @@ ipcMain.handle("payments:get", async (_event, { month, year }) => {
 			let lessonDays = [];
 			try {
 				lessonDays = JSON.parse(p.service_lesson_days || "[]");
-			} catch {}
+			} catch { }
 			if (lessonDays.length === 0 || monthIndex === -1) return p.quantity;
 			return countLessonDayOccurrences(lessonDays);
 		};
@@ -22985,7 +22993,7 @@ ipcMain.handle("payments:generate", async (_event, { month, year }) => {
 						if (regYear === payYear && regMonth === monthIndex && regDate.getDate() > 1) {
 							const daysRemaining = daysInMonth - regDate.getDate() + 1;
 							if (enrollment.unit === "شهر") proratedCalc = Math.round(enrollment.price * daysRemaining / daysInMonth);
-							else if (enrollment.unit === "يوم" || enrollment.unit === "ساعة") {} else if (enrollment.unit === "جلسة") {
+							else if (enrollment.unit === "يوم" || enrollment.unit === "ساعة") { } else if (enrollment.unit === "جلسة") {
 								const regDateStr = enrollment.reg_date;
 								const monthEnd = `${payYear}-${String(monthIndex + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
 								quantity = db.prepare(`SELECT COUNT(*) as cnt FROM scheduled_sessions WHERE session_date >= ? AND session_date <= ?`).get(regDateStr, monthEnd)?.cnt || quantity;
@@ -24725,8 +24733,8 @@ ipcMain.handle("branding:reset", () => {
 		const db = getDb();
 		const defaultBranding = {
 			brand_app_name: "أكاديمية مهند الليثي",
-			brand_org_name: "مركز مهند الليثي للتوحد ونمو الطفل",
-			brand_tagline: "رعاية متميزة وتنمية مهارات طفلك",
+			brand_org_name: "مركز مهند الليثي للتوحد ونمو الطالب",
+			brand_tagline: "رعاية متميزة وتنمية مهارات طالبك",
 			brand_primary_color: "#0f766e",
 			brand_accent_color: "#f59e0b",
 			brand_phone: "+20 123 456 7890",
@@ -24761,8 +24769,8 @@ function getExportHeader() {
 	const logoPath = path.isAbsolute(logoRelPath) ? logoRelPath : path.join(app.getPath("userData"), logoRelPath);
 	return {
 		appName: settings["brand_app_name"] || "أكاديمية مهند الليثي",
-		orgName: settings["brand_org_name"] || "مركز مهند الليثي للتوحد ونمو الطفل",
-		tagline: settings["brand_tagline"] || "رعاية متميزة وتنمية مهارات طفلك",
+		orgName: settings["brand_org_name"] || "مركز مهند الليثي للتوحد ونمو الطالب",
+		tagline: settings["brand_tagline"] || "رعاية متميزة وتنمية مهارات طالبك",
 		phone: settings["brand_phone"] || "+20 123 456 7890",
 		address: settings["brand_address"] || "القاهرة، مصر",
 		email: settings["brand_email"] || "info@zaineldeen.com",
@@ -24981,7 +24989,7 @@ function generateMonthSheet(worksheet, workbook, brand, month, year, lang, payme
 	const db = getDb();
 	const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, lang === "ar" ? `مطالبات شهر ${month} لسنة ${year}` : `Billing Sheet: ${month} ${year}`);
 	const headers = lang === "ar" ? [
-		"اسم الطفل 👶",
+		"اسم الطالب 👶",
 		"ولي الأمر 👤",
 		"الهاتف 📞",
 		"الخدمة ⚙️",
@@ -25098,12 +25106,12 @@ function generateMonthSheet(worksheet, workbook, brand, month, year, lang, payme
 }
 function generateChildrenSheet(worksheet, workbook, brand, lang) {
 	const db = getDb();
-	const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, lang === "ar" ? "سجل بيانات الأطفال المسجلين" : "Children Roster");
+	const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, lang === "ar" ? "سجل بيانات الطلاب المسجلين" : "Children Roster");
 	const headers = lang === "ar" ? [
-		"اسم الطفل",
+		"اسم الطالب",
 		"ولي الأمر",
 		"هاتف ولي الأمر",
-		"هاتف الطفل",
+		"هاتف الطالب",
 		"الرقم القومي",
 		"الخدمة الأساسية",
 		"الوحدة المحتسبة",
@@ -25525,7 +25533,7 @@ function generateChildReportSheet(worksheet, workbook, brand, childId, lang) {
 	const isAr = lang === "ar";
 	const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 	if (!child) throw new Error(`Child not found with ID: ${childId}`);
-	let row = writeBrandingHeader(worksheet, workbook, brand, lang, isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`);
+	let row = writeBrandingHeader(worksheet, workbook, brand, lang, isAr ? `تقرير الطالب الشامل: ${child.name}` : `Full Child Report: ${child.name}`);
 	const sectionTitle = (text) => {
 		const cell = worksheet.getCell(`A${row}`);
 		cell.value = text;
@@ -25635,7 +25643,7 @@ function generateChildReportSheet(worksheet, workbook, brand, childId, lang) {
 		"التاريخ",
 		"المعلم",
 		"حالة المعلم",
-		"حالة الطفل"
+		"حالة الطالب"
 	] : [
 		"Date",
 		"Teacher",
@@ -25738,7 +25746,7 @@ function generateChildStatementSheet(worksheet, workbook, brand, childId, lang) 
 	const db = getDb();
 	const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 	if (!child) throw new Error(`Child not found with ID: ${childId}`);
-	const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, lang === "ar" ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`);
+	const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, lang === "ar" ? `كشف حساب الطالب: ${child.name}` : `Account Statement: ${child.name}`);
 	const detailsRow1 = worksheet.getRow(startRow);
 	detailsRow1.height = 20;
 	detailsRow1.getCell(1).value = lang === "ar" ? "اسم ولي الأمر:" : "Guardian:";
@@ -25888,7 +25896,7 @@ async function buildExcelFile(type, params, savePath) {
 			month: Number(params.month),
 			year: Number(params.year)
 		}, lang);
-	} else if (type === "childReport") generateChildReportSheet(workbook.addWorksheet(lang === "ar" ? "تقرير الطفل" : "Child Report"), workbook, brand, Number(childId), lang);
+	} else if (type === "childReport") generateChildReportSheet(workbook.addWorksheet(lang === "ar" ? "تقرير الطالب" : "Child Report"), workbook, brand, Number(childId), lang);
 	else if (type === "child") generateChildStatementSheet(workbook.addWorksheet(lang === "ar" ? "كشف الحساب" : "Statement"), workbook, brand, Number(childId), lang);
 	else if (type === "salaries") {
 		const sheetName = lang === "ar" ? "الرواتب" : "Salaries";
@@ -25954,7 +25962,7 @@ async function buildExcelFile(type, params, savePath) {
 			rIdx++;
 		}
 		autofitColumns(wsDash);
-		generateChildrenSheet(workbook.addWorksheet(lang === "ar" ? "الأطفال" : "Children"), workbook, brand, lang);
+		generateChildrenSheet(workbook.addWorksheet(lang === "ar" ? "الطلاب" : "Children"), workbook, brand, lang);
 		generateSalariesSheet(workbook.addWorksheet(lang === "ar" ? "الرواتب" : "Salaries"), workbook, brand, "ديسمبر", year, lang);
 		generateExpensesSheet(workbook.addWorksheet(lang === "ar" ? "المصاريف" : "Expenses"), workbook, brand, year, lang);
 		for (const m of arabicMonths$4) generateMonthSheet(workbook.addWorksheet(m), workbook, brand, m, year, lang);
@@ -26998,12 +27006,14 @@ function buildPdfFile(type, params, savePath) {
 			const { month, year, childId, lang = "ar" } = params;
 			const isAr = lang === "ar";
 			const fontsDir = path.join(app.getPath("userData"), "branding/fonts");
-			const printer = new PdfPrinter({ Cairo: {
-				normal: path.join(fontsDir, "Cairo-Regular.ttf"),
-				bold: path.join(fontsDir, "Cairo-Bold.ttf"),
-				italic: path.join(fontsDir, "Cairo-Regular.ttf"),
-				bolditalic: path.join(fontsDir, "Cairo-Bold.ttf")
-			} });
+			const printer = new PdfPrinter({
+				Cairo: {
+					normal: path.join(fontsDir, "Cairo-Regular.ttf"),
+					bold: path.join(fontsDir, "Cairo-Bold.ttf"),
+					italic: path.join(fontsDir, "Cairo-Regular.ttf"),
+					bolditalic: path.join(fontsDir, "Cairo-Bold.ttf")
+				}
+			});
 			let pageOrientation = "portrait";
 			if ([
 				"full",
@@ -27055,7 +27065,7 @@ function buildPdfFile(type, params, savePath) {
           ${hasSelection ? `AND p.id IN (${params.paymentIds.map(() => "?").join(",")})` : ""}
         `).all(month, year, ...hasSelection ? params.paymentIds : []);
 				const body = [(isAr ? [
-					"اسم الطفل",
+					"اسم الطالب",
 					"ولي الأمر",
 					"الهاتف",
 					"الخدمة",
@@ -27279,7 +27289,7 @@ function buildPdfFile(type, params, savePath) {
 			} else if (type === "childReport") {
 				const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 				if (!child) throw new Error("Child not found");
-				const title = isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`;
+				const title = isAr ? `تقرير الطالب الشامل: ${child.name}` : `Full Child Report: ${child.name}`;
 				docDefinition.content.push(...getPdfHeader(brand, lang, title));
 				const sectionHeader = (text) => ({
 					text: shapeText(text),
@@ -27397,7 +27407,7 @@ function buildPdfFile(type, params, savePath) {
 					"التاريخ",
 					"المعلم",
 					"حالة المعلم",
-					"حالة الطفل"
+					"حالة الطالب"
 				] : [
 					"Date",
 					"Teacher",
@@ -27452,7 +27462,7 @@ function buildPdfFile(type, params, savePath) {
 			} else if (type === "child") {
 				const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 				if (!child) throw new Error("Child not found");
-				const title = isAr ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`;
+				const title = isAr ? `كشف حساب الطالب: ${child.name}` : `Account Statement: ${child.name}`;
 				docDefinition.content.push(...getPdfHeader(brand, lang, title));
 				docDefinition.content.push({
 					margin: [
@@ -28219,10 +28229,10 @@ function buildPdfFile(type, params, savePath) {
 					text: "",
 					pageBreak: "after"
 				});
-				docDefinition.content.push(...getPdfHeader(brand, lang, isAr ? "قائمة سجلات الأطفال" : "Children Records List"));
+				docDefinition.content.push(...getPdfHeader(brand, lang, isAr ? "قائمة سجلات الطلاب" : "Children Records List"));
 				const kids = db.prepare("SELECT name, guardian, guardian_phone, service, price, reg_date FROM children").all();
 				const kidBody = [(isAr ? [
-					"اسم الطفل",
+					"اسم الطالب",
 					"ولي الأمر",
 					"رقم الهاتف",
 					"الخدمة",
@@ -28250,18 +28260,20 @@ function buildPdfFile(type, params, savePath) {
 					shapeText(formatCurrency(k.price, lang)),
 					shapeText(k.reg_date)
 				]);
-				docDefinition.content.push({ table: {
-					headerRows: 1,
-					widths: [
-						"*",
-						"*",
-						"auto",
-						"auto",
-						"auto",
-						"auto"
-					],
-					body: kidBody
-				} });
+				docDefinition.content.push({
+					table: {
+						headerRows: 1,
+						widths: [
+							"*",
+							"*",
+							"auto",
+							"auto",
+							"auto",
+							"auto"
+						],
+						body: kidBody
+					}
+				});
 				docDefinition.content.push({
 					text: "",
 					pageBreak: "after"
@@ -28277,7 +28289,7 @@ function buildPdfFile(type, params, savePath) {
             WHERE p.month = ? AND p.year = ?
           `).all(m, year);
 					const body = [(isAr ? [
-						"اسم الطفل",
+						"اسم الطالب",
 						"الخدمة",
 						"الكمية",
 						"السعر",
@@ -28387,20 +28399,22 @@ function buildPdfFile(type, params, savePath) {
 							fillColor: "#f1f5f9"
 						}
 					]);
-					docDefinition.content.push({ table: {
-						headerRows: 1,
-						widths: [
-							"*",
-							"auto",
-							"auto",
-							"auto",
-							"auto",
-							"auto",
-							"auto",
-							"auto"
-						],
-						body
-					} });
+					docDefinition.content.push({
+						table: {
+							headerRows: 1,
+							widths: [
+								"*",
+								"auto",
+								"auto",
+								"auto",
+								"auto",
+								"auto",
+								"auto",
+								"auto"
+							],
+							body
+						}
+					});
 					if (mIdx < arabicMonths$3.length - 1) docDefinition.content.push({
 						text: "",
 						pageBreak: "after"
@@ -28488,7 +28502,7 @@ async function buildCsvFile(type, params, savePath) {
 		const hasSelection = Array.isArray(params.paymentIds) && params.paymentIds.length > 0;
 		lines = buildHeaderLines(isAr ? `مطالبات شهر ${month} لسنة ${year}` : `Billing Sheet: ${month} ${year}`, isAr ? `الفترة: ${month} ${year}${hasSelection ? ` — ${params.paymentIds.length} سجل محدد` : ""}` : `Period: ${month} ${year}${hasSelection ? ` — ${params.paymentIds.length} selected record(s)` : ""}`);
 		lines.push(toCsvLine(isAr ? [
-			"اسم الطفل",
+			"اسم الطالب",
 			"ولي الأمر",
 			"الهاتف",
 			"الخدمة",
@@ -28562,7 +28576,7 @@ async function buildCsvFile(type, params, savePath) {
 		const childId = Number(params.childId);
 		const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 		if (!child) throw new Error(`Child not found with ID: ${childId}`);
-		lines = buildHeaderLines(isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`, isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`);
+		lines = buildHeaderLines(isAr ? `تقرير الطالب الشامل: ${child.name}` : `Full Child Report: ${child.name}`, isAr ? `الطالب: ${child.name}` : `Child: ${child.name}`);
 		lines.push(toCsvLine([isAr ? "📋 البيانات الشخصية" : "📋 Personal Information"]));
 		lines.push(toCsvLine([isAr ? "الاسم" : "Name", child.name]));
 		lines.push(toCsvLine([isAr ? "ولي الأمر" : "Guardian", child.guardian]));
@@ -28611,7 +28625,7 @@ async function buildCsvFile(type, params, savePath) {
 			"التاريخ",
 			"المعلم",
 			"حالة المعلم",
-			"حالة الطفل"
+			"حالة الطالب"
 		] : [
 			"Date",
 			"Teacher",
@@ -28667,7 +28681,7 @@ async function buildCsvFile(type, params, savePath) {
 		const childId = Number(params.childId);
 		const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 		if (!child) throw new Error(`Child not found with ID: ${childId}`);
-		lines = buildHeaderLines(isAr ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`, isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`);
+		lines = buildHeaderLines(isAr ? `كشف حساب الطالب: ${child.name}` : `Account Statement: ${child.name}`, isAr ? `الطالب: ${child.name}` : `Child: ${child.name}`);
 		lines.push(toCsvLine(isAr ? [
 			"الشهر",
 			"السنة",
@@ -28876,7 +28890,7 @@ function buildPrintPreviewHtml(reportType, params) {
       ${hasSelection ? `AND p.id IN (${params.paymentIds.map(() => "?").join(",")})` : ""}
     `).all(month, year, ...hasSelection ? params.paymentIds : []);
 		const headers = isAr ? [
-			"اسم الطفل",
+			"اسم الطالب",
 			"ولي الأمر",
 			"الهاتف",
 			"الخدمة",
@@ -28998,8 +29012,8 @@ function buildPrintPreviewHtml(reportType, params) {
 		const childId = Number(params.childId);
 		const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 		if (!child) throw new Error(`Child not found with ID: ${childId}`);
-		title = isAr ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`;
-		filterSummary = isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`;
+		title = isAr ? `كشف حساب الطالب: ${child.name}` : `Account Statement: ${child.name}`;
+		filterSummary = isAr ? `الطالب: ${child.name}` : `Child: ${child.name}`;
 		const headers = isAr ? [
 			"الشهر",
 			"السنة",
@@ -29042,8 +29056,8 @@ function buildPrintPreviewHtml(reportType, params) {
 		const childId = Number(params.childId);
 		const child = db.prepare("SELECT * FROM children WHERE id = ?").get(childId);
 		if (!child) throw new Error(`Child not found with ID: ${childId}`);
-		title = isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`;
-		filterSummary = isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`;
+		title = isAr ? `تقرير الطالب الشامل: ${child.name}` : `Full Child Report: ${child.name}`;
+		filterSummary = isAr ? `الطالب: ${child.name}` : `Child: ${child.name}`;
 		const section = (heading, inner) => `<h2>${escapeHtml(heading)}</h2>${inner}`;
 		const personalInfo = `
       <table><tbody>
@@ -29072,7 +29086,7 @@ function buildPrintPreviewHtml(reportType, params) {
 		const pct = attendanceRows.length > 0 ? Math.round(attended / attendanceRows.length * 100) : null;
 		const attendanceHtml = `
       <p><strong>${escapeHtml(isAr ? "نسبة الحضور" : "Attendance Percentage")}:</strong> ${escapeHtml(pct != null ? `${pct}%` : isAr ? "غير متاح" : "N/A")}</p>
-      ${attendanceRows.length === 0 ? `<p class="empty">${escapeHtml(isAr ? "لا يوجد سجل حضور بعد." : "No attendance history yet.")}</p>` : `<table><thead><tr><th>${escapeHtml(isAr ? "التاريخ" : "Date")}</th><th>${escapeHtml(isAr ? "المعلم" : "Teacher")}</th><th>${escapeHtml(isAr ? "حالة المعلم" : "Teacher Status")}</th><th>${escapeHtml(isAr ? "حالة الطفل" : "Child Status")}</th></tr></thead>
+      ${attendanceRows.length === 0 ? `<p class="empty">${escapeHtml(isAr ? "لا يوجد سجل حضور بعد." : "No attendance history yet.")}</p>` : `<table><thead><tr><th>${escapeHtml(isAr ? "التاريخ" : "Date")}</th><th>${escapeHtml(isAr ? "المعلم" : "Teacher")}</th><th>${escapeHtml(isAr ? "حالة المعلم" : "Teacher Status")}</th><th>${escapeHtml(isAr ? "حالة الطالب" : "Child Status")}</th></tr></thead>
           <tbody>${attendanceRows.map((a) => `<tr><td>${escapeHtml(a.attendance_date)}</td><td>${escapeHtml(a.teacher_name || "")}</td><td>${escapeHtml(a.teacher_status || "")}</td><td>${escapeHtml(a.child_status)}</td></tr>`).join("")}</tbody></table>`}
     `;
 		const statementForReport = getChildStatement(child, db.prepare("SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE child_id = ?").all(childId), /* @__PURE__ */ new Date());
@@ -29178,7 +29192,7 @@ ipcMain.handle("export:month", async (_event, { month, year, format, lang, payme
 ipcMain.handle("export:child", async (_event, { childId, format, lang }) => {
 	try {
 		checkAuth$6();
-		const filename = lang === "ar" ? `كشف_حساب_طفل_${childId}.${format}` : `child_statement_${childId}.${format}`;
+		const filename = lang === "ar" ? `كشف_حساب_طالب_${childId}.${format}` : `child_statement_${childId}.${format}`;
 		return await executeExport("child", {
 			childId,
 			format,
@@ -29192,7 +29206,7 @@ ipcMain.handle("export:child", async (_event, { childId, format, lang }) => {
 ipcMain.handle("export:childReport", async (_event, { childId, format, lang }) => {
 	try {
 		checkAuth$6();
-		const filename = lang === "ar" ? `تقرير_طفل_شامل_${childId}.${format}` : `child_report_${childId}.${format}`;
+		const filename = lang === "ar" ? `تقرير_طالب_شامل_${childId}.${format}` : `child_report_${childId}.${format}`;
 		return await executeExport("childReport", {
 			childId,
 			format,
@@ -29288,7 +29302,7 @@ function progressReporter(event, op) {
 				total,
 				percent
 			});
-		} catch {}
+		} catch { }
 	};
 }
 //#endregion
@@ -29334,7 +29348,7 @@ async function uploadImage(dataUrl, folder = "nursery/children") {
 		try {
 			const body = await res.json();
 			detail = body?.error?.message ? `: ${body.error.message}` : "";
-		} catch {}
+		} catch { }
 		throw new Error(`Cloudinary upload failed (${res.status})${detail}`);
 	}
 	const body = await res.json();
@@ -29374,7 +29388,7 @@ async function uploadFile(dataUrl, folder = "nursery/children") {
 		try {
 			const body = await res.json();
 			detail = body?.error?.message ? `: ${body.error.message}` : "";
-		} catch {}
+		} catch { }
 		throw new Error(`Cloudinary file upload failed (${res.status})${detail}`);
 	}
 	const body = await res.json();
@@ -29413,7 +29427,7 @@ async function uploadVideo(dataUrl, folder = "nursery/children") {
 		try {
 			const body = await res.json();
 			detail = body?.error?.message ? `: ${body.error.message}` : "";
-		} catch {}
+		} catch { }
 		throw new Error(`Cloudinary video upload failed (${res.status})${detail}`);
 	}
 	const body = await res.json();
@@ -29457,7 +29471,7 @@ ipcMain.handle("storage:stats", async () => {
 		try {
 			const dbPath = path.join(app.getPath("userData"), "nursery.db");
 			if (fs.existsSync(dbPath)) sizeBytes = fs.statSync(dbPath).size;
-		} catch {}
+		} catch { }
 		return {
 			counts,
 			sizeBytes
@@ -30353,7 +30367,7 @@ function logSync(action, entityType, recordId, status, error = null) {
       INSERT INTO sync_log (action, table_name, record_id, status, error, synced_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(action, entityType, String(recordId), status, error, (/* @__PURE__ */ new Date()).toISOString());
-	} catch {}
+	} catch { }
 }
 var DEFAULT_MONGO_URI = process.env.MONGO_URI || "mongodb+srv://nursery:nursery@cluster0.ile4s29.mongodb.net/?appName=Cluster0";
 function getMongoUri() {
@@ -30449,7 +30463,7 @@ ipcMain.handle("sync:status", async () => {
 		throw new Error(error.message || "Failed to get sync status");
 	}
 });
-var noopReport = () => {};
+var noopReport = () => { };
 /** Connect (or reconnect) using the saved URI if the connection is down. */
 async function ensureConnected() {
 	const { connected } = getConnectionStatus();
@@ -30541,7 +30555,7 @@ async function runPull(force, report = noopReport) {
 		let totalWork = 0;
 		for (const entity of SYNC_ENTITIES) try {
 			totalWork += await entity.model.estimatedDocumentCount();
-		} catch {}
+		} catch { }
 		let done = 0;
 		report(0, totalWork, "starting");
 		const results = {};
@@ -30876,7 +30890,7 @@ ipcMain.handle("dashboard:get", async (_event, { month, year }) => {
 		});
 		if (kpi.arrears > 0) alerts.push({
 			type: "danger",
-			messageAr: `هناك متأخرات مستحقة بقيمة ${kpi.arrears} ج.م على الأطفال هذا الشهر`,
+			messageAr: `هناك متأخرات مستحقة بقيمة ${kpi.arrears} ج.م على الطلاب هذا الشهر`,
 			messageEn: `There are outstanding arrears of ${kpi.arrears} EGP this month`
 		});
 		if (kpi.collectionRate < .8 && kpi.invoiced > 0) {
@@ -31081,7 +31095,7 @@ ipcMain.handle("serviceDefinitions:delete", async (_event, { id }) => {
 		if (!svc) throw new Error("الخدمة غير موجودة / Service not found");
 		if (svc.is_custom === 0) throw new Error("لا يمكن حذف الخدمات الافتراضية / Cannot delete built-in services");
 		const enrolled = db.prepare("SELECT COUNT(*) as cnt FROM child_services WHERE service = ?").get(svc.name);
-		if (enrolled.cnt > 0) throw new Error(`لا يمكن الحذف — ${enrolled.cnt} طفل مسجل في هذه الخدمة / Cannot delete — ${enrolled.cnt} child(ren) enrolled`);
+		if (enrolled.cnt > 0) throw new Error(`لا يمكن الحذف — ${enrolled.cnt} طالب مسجل في هذه الخدمة / Cannot delete — ${enrolled.cnt} child(ren) enrolled`);
 		db.prepare("DELETE FROM service_definitions WHERE id = ?").run(id);
 		return { ok: true };
 	} catch (error) {
@@ -31256,7 +31270,7 @@ ipcMain.handle("sessions:proRateCalc", async (_event, args) => {
 		let pricePerSession = args.price_per_session ?? 0;
 		if (!reg_date && args.child_id) {
 			const child = db.prepare("SELECT reg_date, session_price FROM children WHERE id = ?").get(args.child_id);
-			if (!child) throw new Error("الطفل غير موجود / Child not found");
+			if (!child) throw new Error("الطالب غير موجود / Child not found");
 			reg_date = child.reg_date;
 			pricePerSession = child.session_price ?? 0;
 		}
@@ -31514,10 +31528,10 @@ ipcMain.handle("transactions:list", async (_event, args) => {
 			to = date;
 		} else if (range === "week") {
 			if (!date) throw new Error("date is required for range=week");
-			({from, to} = weekBounds(date));
+			({ from, to } = weekBounds(date));
 		} else if (range === "month") {
 			if (!date) throw new Error("date is required for range=month");
-			({from, to} = monthBounds(date));
+			({ from, to } = monthBounds(date));
 		} else if (range === "custom") {
 			if (!from || !to) throw new Error("from and to are required for range=custom");
 		} else throw new Error("Invalid range: must be one of day, week, month, custom");
@@ -31578,7 +31592,7 @@ ipcMain.handle("childIllnessCases:create", async (_event, { child_id, descriptio
 		checkAuth$2();
 		if (!child_id) throw new Error("child_id is required");
 		const db = getDb();
-		if (db.prepare("SELECT id FROM child_illness_cases WHERE child_id = ? AND status = 'open'").get(child_id)) throw new Error("يوجد بالفعل حالة مرضية مفتوحة لهذا الطفل / An open illness case already exists for this child");
+		if (db.prepare("SELECT id FROM child_illness_cases WHERE child_id = ? AND status = 'open'").get(child_id)) throw new Error("يوجد بالفعل حالة مرضية مفتوحة لهذا الطالب / An open illness case already exists for this child");
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const result = db.prepare(`
       INSERT INTO child_illness_cases (child_id, status, description, opened_at, created_at, updated_at, synced)
@@ -31916,13 +31930,13 @@ function initAutoUpdater() {
 			});
 			if (!rateLimitRetryTimer) rateLimitRetryTimer = setTimeout(() => {
 				rateLimitRetryTimer = null;
-				import_main.autoUpdater.checkForUpdates().catch(() => {});
+				import_main.autoUpdater.checkForUpdates().catch(() => { });
 			}, CHECK_COOLDOWN_MS);
 			return;
 		}
 		if (isNetworkError && !_updateRetried) {
 			_updateRetried = true;
-			setTimeout(() => import_main.autoUpdater.downloadUpdate().catch(() => {}), 3e3);
+			setTimeout(() => import_main.autoUpdater.downloadUpdate().catch(() => { }), 3e3);
 			return;
 		}
 		lastOutcome = null;
@@ -31985,6 +31999,6 @@ app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") app.quit();
 });
 //#endregion
-export {};
+export { };
 
 //# sourceMappingURL=main.js.map

@@ -17,7 +17,7 @@ export function applyCloudTombstones(db: any, cloudTombstones: { entity: string,
     // Delete the local row
     // In SQLite, we can't parameterize table names, so we have to construct the query
     // Make sure entity is a valid table name to prevent SQL injection
-    const allowedEntities = ['children', 'child_services', 'payments', 'expenses', 'employees', 'salary_payments']
+    const allowedEntities = ['students', 'student_services', 'payments', 'expenses', 'employees', 'salary_payments']
     if (allowedEntities.includes(tombstone.entity)) {
       db.prepare(`DELETE FROM ${tombstone.entity} WHERE id = ?`).run(tombstone.record_id)
     }

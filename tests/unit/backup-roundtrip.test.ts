@@ -12,7 +12,7 @@ import { Db } from '../../electron/db/connection.js'
 import { runMigrations } from '../../electron/db/migrations/index.js'
 
 const TABLES = [
-  'children', 'child_services', 'payments', 'employees',
+  'students', 'student_services', 'payments', 'employees',
   'salary_payments', 'expenses', 'settings', 'imported_snapshots', 'tombstones'
 ]
 
@@ -42,13 +42,13 @@ describe('backup → restore round-trip (US3, SC-010)', () => {
     // Write across tables, including the new imported_snapshots, with uncommitted
     // WAL pages that would be lost by a naive copy without a checkpoint.
     db.prepare("INSERT INTO settings (key, value, updated_at, synced) VALUES ('nursery_monthly', '3500', ?, 0)").run(now)
-    db.prepare(`INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, is_active, created_at, updated_at, synced)
-                VALUES ('طفل', '—', '—', 'حضانة', 'شهر', 3500, ?, 1, ?, ?, 0)`).run(now.slice(0, 10), now, now)
+    db.prepare(`INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, is_active, created_at, updated_at, synced)
+                VALUES ('طالب', '—', '—', 'حضانة', 'شهر', 3500, ?, 1, ?, ?, 0)`).run(now.slice(0, 10), now, now)
     db.prepare(`INSERT INTO imported_snapshots (sheet, row_index, data_json, imported_at, updated_at, synced)
                 VALUES ('📊 داشبورد', 1, '[1,2,3]', ?, ?, 0)`).run(now, now)
 
     const before = countAll(db)
-    expect(before.children).toBe(1)
+    expect(before.students).toBe(1)
     expect(before.imported_snapshots).toBe(1)
 
     // Backup: checkpoint folds WAL into the main file, then copy.

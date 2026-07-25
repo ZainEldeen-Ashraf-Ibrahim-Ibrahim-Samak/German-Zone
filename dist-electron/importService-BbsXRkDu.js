@@ -102,7 +102,7 @@ function isIgnoredSheet(name) {
 	return name.includes("داشبورد") || name.includes("إعدادات") || name.includes("الإعدادات") || name.includes("كشف حساب") || name.includes("تخطيط") || name.includes("تارجت") || name.toLowerCase().includes("dashboard") || name.toLowerCase().includes("setting");
 }
 function isChildrenSheet(name) {
-	return name.includes("بيانات الأطفال") || name.includes("الأطفال");
+	return name.includes("بيانات الطلاب") || name.includes("الطلاب");
 }
 function isSalarySheet(name) {
 	return name.includes("رواتب") || name.includes("راتب") || name.includes("موظف") || name.toLowerCase().includes("salary");

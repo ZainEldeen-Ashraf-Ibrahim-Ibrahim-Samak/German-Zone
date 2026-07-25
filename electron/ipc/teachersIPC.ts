@@ -6,7 +6,7 @@ import { getCurrentUser } from './authIPC.js'
  * teachers:list { role? }
  *
  * Auth-level (any signed-in user) read projection over the `employees` table,
- * used by the child form to assign a teacher (feature 004). Returns only
+ * used by the student form to assign a teacher (feature 004). Returns only
  * id/name/role — salary fields are intentionally excluded so employee users
  * can pick a teacher without gaining payroll visibility (the admin-only
  * `employees:get` is unchanged). When `role` is provided, results are filtered

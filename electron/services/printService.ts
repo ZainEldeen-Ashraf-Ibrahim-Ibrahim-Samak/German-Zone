@@ -1,6 +1,6 @@
 import { getDb } from '../db/connection.js'
 import { getExportHeader } from './exportHeader.js'
-import { getChildStatement } from './statementService.js'
+import { getStudentStatement } from './statementService.js'
 
 const arabicMonths = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -25,7 +25,7 @@ function escapeHtml(value: unknown): string {
  * exact same query as the equivalent export:* handler so Print and Export PDF/Excel can never
  * disagree on what data they show (FR-003).
  */
-export function buildPrintPreviewHtml(reportType: 'payroll' | 'expenses' | 'child' | 'childReport' | 'month', params: any): string {
+export function buildPrintPreviewHtml(reportType: 'payroll' | 'expenses' | 'student' | 'studentReport' | 'month', params: any): string {
   const brand = getExportHeader()
   const isAr = params.lang === 'ar'
   const dir = isAr ? 'rtl' : 'ltr'
@@ -45,21 +45,21 @@ export function buildPrintPreviewHtml(reportType: 'payroll' | 'expenses' | 'chil
       ? `الفترة: ${month} ${year}${hasSelection ? ` — ${params.paymentIds.length} سجل محدد` : ''}`
       : `Period: ${month} ${year}${hasSelection ? ` — ${params.paymentIds.length} selected record(s)` : ''}`
     const payments = db.prepare(`
-      SELECT c.name as child_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status
+      SELECT c.name as student_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status
       FROM payments p
-      JOIN children c ON p.child_id = c.id
+      JOIN students c ON p.student_id = c.id
       WHERE p.month = ? AND p.year = ?
       ${hasSelection ? `AND p.id IN (${params.paymentIds.map(() => '?').join(',')})` : ''}
     `).all(month, year, ...(hasSelection ? params.paymentIds : [])) as any[]
 
     const headers = isAr
-      ? ['اسم الطفل', 'ولي الأمر', 'الهاتف', 'الخدمة', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة']
-      : ['Child Name', 'Guardian', 'Phone', 'Service', 'Unit', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status']
+      ? ['اسم الطالب', 'ولي الأمر', 'الهاتف', 'الخدمة', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة']
+      : ['Student Name', 'Guardian', 'Phone', 'Service', 'Unit', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status']
 
     let totalInvoiced = 0, totalCollected = 0, arrears = 0
     const bodyRows = payments.map((p) => {
       totalInvoiced += p.total; totalCollected += p.paid; arrears += p.balance
-      return `<tr><td>${escapeHtml(p.child_name)}</td><td>${escapeHtml(p.guardian)}</td><td>${escapeHtml(p.guardian_phone)}</td><td>${escapeHtml(p.service)}</td><td>${escapeHtml(p.unit)}</td><td>${escapeHtml(p.quantity)}</td><td>${escapeHtml(p.price)}</td><td>${escapeHtml(p.total)}</td><td>${escapeHtml(p.paid)}</td><td>${escapeHtml(p.balance)}</td><td>${escapeHtml(p.status)}</td></tr>`
+      return `<tr><td>${escapeHtml(p.student_name)}</td><td>${escapeHtml(p.guardian)}</td><td>${escapeHtml(p.guardian_phone)}</td><td>${escapeHtml(p.service)}</td><td>${escapeHtml(p.unit)}</td><td>${escapeHtml(p.quantity)}</td><td>${escapeHtml(p.price)}</td><td>${escapeHtml(p.total)}</td><td>${escapeHtml(p.paid)}</td><td>${escapeHtml(p.balance)}</td><td>${escapeHtml(p.status)}</td></tr>`
     }).join('')
 
     const footerRow = payments.length > 0
@@ -159,23 +159,23 @@ export function buildPrintPreviewHtml(reportType: 'payroll' | 'expenses' | 'chil
     `
   }
 
-  if (reportType === 'child') {
+  if (reportType === 'student') {
     const db = getDb()
-    const childId = Number(params.childId)
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-    if (!child) throw new Error(`Child not found with ID: ${childId}`)
+    const studentId = Number(params.studentId)
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+    if (!student) throw new Error(`Student not found with ID: ${studentId}`)
 
-    title = isAr ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`
-    filterSummary = isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`
+    title = isAr ? `كشف حساب الطالب: ${student.name}` : `Account Statement: ${student.name}`
+    filterSummary = isAr ? `الطالب: ${student.name}` : `Student: ${student.name}`
 
     const headers = isAr
       ? ['الشهر', 'السنة', 'الخدمة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'الرصيد/المتأخرات', 'الحالة']
       : ['Month', 'Year', 'Service', 'Qty', 'Price', 'Total', 'Paid', 'Balance', 'Status']
 
     const existingPayments = db.prepare(
-      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE child_id = ?'
-    ).all(childId) as any[]
-    const statement = getChildStatement(child, existingPayments, new Date())
+      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE student_id = ?'
+    ).all(studentId) as any[]
+    const statement = getStudentStatement(student, existingPayments, new Date())
 
     let totalDue = 0, totalPaid = 0, totalBalance = 0
     const bodyRows = statement.rows.map((p: any) => {
@@ -196,58 +196,58 @@ export function buildPrintPreviewHtml(reportType: 'payroll' | 'expenses' | 'chil
     `
   }
 
-  if (reportType === 'childReport') {
+  if (reportType === 'studentReport') {
     const db = getDb()
-    const childId = Number(params.childId)
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-    if (!child) throw new Error(`Child not found with ID: ${childId}`)
+    const studentId = Number(params.studentId)
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+    if (!student) throw new Error(`Student not found with ID: ${studentId}`)
 
-    title = isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`
-    filterSummary = isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`
+    title = isAr ? `تقرير الطالب الشامل: ${student.name}` : `Full Student Report: ${student.name}`
+    filterSummary = isAr ? `الطالب: ${student.name}` : `Student: ${student.name}`
 
     const section = (heading: string, inner: string) => `<h2>${escapeHtml(heading)}</h2>${inner}`
 
     const personalInfo = `
       <table><tbody>
-        <tr><td class="label">${escapeHtml(isAr ? 'الاسم' : 'Name')}</td><td>${escapeHtml(child.name)}</td></tr>
-        <tr><td class="label">${escapeHtml(isAr ? 'ولي الأمر' : 'Guardian')}</td><td>${escapeHtml(child.guardian)}</td></tr>
-        <tr><td class="label">${escapeHtml(isAr ? 'هاتف ولي الأمر' : 'Guardian Phone')}</td><td>${escapeHtml(child.guardian_phone)}</td></tr>
-        <tr><td class="label">${escapeHtml(isAr ? 'تاريخ التسجيل' : 'Registration Date')}</td><td>${escapeHtml(child.reg_date)}</td></tr>
-        <tr><td class="label">${escapeHtml(isAr ? 'الحالة' : 'Status')}</td><td>${escapeHtml(child.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive'))}</td></tr>
+        <tr><td class="label">${escapeHtml(isAr ? 'الاسم' : 'Name')}</td><td>${escapeHtml(student.name)}</td></tr>
+        <tr><td class="label">${escapeHtml(isAr ? 'ولي الأمر' : 'Guardian')}</td><td>${escapeHtml(student.guardian)}</td></tr>
+        <tr><td class="label">${escapeHtml(isAr ? 'هاتف ولي الأمر' : 'Guardian Phone')}</td><td>${escapeHtml(student.guardian_phone)}</td></tr>
+        <tr><td class="label">${escapeHtml(isAr ? 'تاريخ التسجيل' : 'Registration Date')}</td><td>${escapeHtml(student.reg_date)}</td></tr>
+        <tr><td class="label">${escapeHtml(isAr ? 'الحالة' : 'Status')}</td><td>${escapeHtml(student.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive'))}</td></tr>
       </tbody></table>`
 
     const services = db.prepare(`
       SELECT cs.service, cs.unit, cs.price, e.name as teacher_name
-      FROM child_services cs LEFT JOIN employees e ON e.id = cs.teacher_id
-      WHERE cs.child_id = ?
-    `).all(childId) as any[]
+      FROM student_services cs LEFT JOIN employees e ON e.id = cs.teacher_id
+      WHERE cs.student_id = ?
+    `).all(studentId) as any[]
     const servicesHtml = services.length === 0
       ? `<p class="empty">${escapeHtml(isAr ? 'لا توجد خدمات مسجلة.' : 'No services enrolled.')}</p>`
       : `<table><thead><tr><th>${escapeHtml(isAr ? 'الخدمة' : 'Service')}</th><th>${escapeHtml(isAr ? 'الوحدة' : 'Unit')}</th><th>${escapeHtml(isAr ? 'السعر' : 'Price')}</th><th>${escapeHtml(isAr ? 'المعلم' : 'Teacher')}</th></tr></thead>
         <tbody>${services.map((s) => `<tr><td>${escapeHtml(s.service)}</td><td>${escapeHtml(s.unit)}</td><td>${escapeHtml(s.price)}</td><td>${escapeHtml(s.teacher_name || (isAr ? 'بدون معلم' : 'No teacher'))}</td></tr>`).join('')}</tbody></table>`
 
     const attendanceRows = db.prepare(`
-      SELECT ss.session_date as attendance_date, e.name as teacher_name, ar.teacher_status, ar.status as child_status
+      SELECT ss.session_date as attendance_date, e.name as teacher_name, ar.teacher_status, ar.status as student_status
       FROM attendance_records ar
       JOIN scheduled_sessions ss ON ss.id = ar.session_id
       LEFT JOIN employees e ON e.id = ar.attended_teacher_id
-      WHERE ar.child_id = ?
+      WHERE ar.student_id = ?
       ORDER BY ss.session_date DESC
-    `).all(childId) as any[]
-    const attended = attendanceRows.filter((r) => r.child_status === 'attended').length
+    `).all(studentId) as any[]
+    const attended = attendanceRows.filter((r) => r.student_status === 'attended').length
     const pct = attendanceRows.length > 0 ? Math.round((attended / attendanceRows.length) * 100) : null
     const attendanceHtml = `
       <p><strong>${escapeHtml(isAr ? 'نسبة الحضور' : 'Attendance Percentage')}:</strong> ${escapeHtml(pct != null ? `${pct}%` : (isAr ? 'غير متاح' : 'N/A'))}</p>
       ${attendanceRows.length === 0
         ? `<p class="empty">${escapeHtml(isAr ? 'لا يوجد سجل حضور بعد.' : 'No attendance history yet.')}</p>`
-        : `<table><thead><tr><th>${escapeHtml(isAr ? 'التاريخ' : 'Date')}</th><th>${escapeHtml(isAr ? 'المعلم' : 'Teacher')}</th><th>${escapeHtml(isAr ? 'حالة المعلم' : 'Teacher Status')}</th><th>${escapeHtml(isAr ? 'حالة الطفل' : 'Child Status')}</th></tr></thead>
-          <tbody>${attendanceRows.map((a) => `<tr><td>${escapeHtml(a.attendance_date)}</td><td>${escapeHtml(a.teacher_name || '')}</td><td>${escapeHtml(a.teacher_status || '')}</td><td>${escapeHtml(a.child_status)}</td></tr>`).join('')}</tbody></table>`}
+        : `<table><thead><tr><th>${escapeHtml(isAr ? 'التاريخ' : 'Date')}</th><th>${escapeHtml(isAr ? 'المعلم' : 'Teacher')}</th><th>${escapeHtml(isAr ? 'حالة المعلم' : 'Teacher Status')}</th><th>${escapeHtml(isAr ? 'حالة الطالب' : 'Student Status')}</th></tr></thead>
+          <tbody>${attendanceRows.map((a) => `<tr><td>${escapeHtml(a.attendance_date)}</td><td>${escapeHtml(a.teacher_name || '')}</td><td>${escapeHtml(a.teacher_status || '')}</td><td>${escapeHtml(a.student_status)}</td></tr>`).join('')}</tbody></table>`}
     `
 
     const existingPaymentsForReport = db.prepare(
-      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE child_id = ?'
-    ).all(childId) as any[]
-    const statementForReport = getChildStatement(child, existingPaymentsForReport, new Date())
+      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE student_id = ?'
+    ).all(studentId) as any[]
+    const statementForReport = getStudentStatement(student, existingPaymentsForReport, new Date())
     const paymentsHtml = statementForReport.rows.length === 0
       ? `<p class="empty">${escapeHtml(isAr ? 'لا توجد معاملات مالية مسجلة.' : 'No financial transactions recorded.')}</p>`
       : `<table><thead><tr><th>${escapeHtml(isAr ? 'الشهر' : 'Month')}</th><th>${escapeHtml(isAr ? 'السنة' : 'Year')}</th><th>${escapeHtml(isAr ? 'الخدمة' : 'Service')}</th><th>${escapeHtml(isAr ? 'الإجمالي' : 'Total')}</th><th>${escapeHtml(isAr ? 'المدفوع' : 'Paid')}</th><th>${escapeHtml(isAr ? 'الرصيد' : 'Balance')}</th><th>${escapeHtml(isAr ? 'الحالة' : 'Status')}</th></tr></thead>
@@ -256,7 +256,7 @@ export function buildPrintPreviewHtml(reportType: 'payroll' | 'expenses' | 'chil
           return `<tr><td>${escapeHtml(monthLabel)}</td><td>${escapeHtml(p.year)}</td><td>${escapeHtml(p.service)}</td><td>${escapeHtml(p.total)}</td><td>${escapeHtml(p.paid)}</td><td>${escapeHtml(p.balance)}</td><td>${escapeHtml(p.status)}</td></tr>`
         }).join('')}</tbody></table>`
 
-    const notesHtml = `<p>${escapeHtml(child.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.'))}</p>`
+    const notesHtml = `<p>${escapeHtml(student.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.'))}</p>`
 
     tableHtml = [
       section(isAr ? '📋 البيانات الشخصية' : '📋 Personal Information', personalInfo),

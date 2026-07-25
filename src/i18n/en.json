@@ -2,7 +2,7 @@
   "translation": {
     "app_name": "Mohand Academy",
     "dashboard": "Dashboard",
-    "children": "Children",
+    "students": "Students",
     "payments": "Payments",
     "generate_daily_payments": "Generate Daily Bills",
     "daily_billing": "Daily Billing",
@@ -59,9 +59,11 @@
       "dec": "December"
     },
     "services": {
-      "nursery": "Nursery",
-      "hosting": "Hosting",
-      "session": "Session"
+      "a1": "A1",
+      "a2": "A2",
+      "b1": "B1",
+      "b2": "B2",
+      "speaking": "Speaking Sessions"
     },
     "units": {
       "month": "Month",
@@ -69,10 +71,10 @@
       "hour": "Hour",
       "session": "Session"
     },
-    "child_name": "Child Name",
+    "student_name": "Student Name",
     "guardian": "Guardian",
     "guardian_phone": "Guardian Phone",
-    "child_phone": "Child Phone",
+    "student_phone": "Student Phone",
     "national_id": "National ID",
     "price": "Price",
     "reg_date": "Registration Date",
@@ -80,17 +82,17 @@
     "status": "Status",
     "active_only": "Active Only",
     "all_records": "All Records",
-    "deactivate_confirm": "Are you sure you want to deactivate this child?",
-    "child_details": "Child Details",
+    "deactivate_confirm": "Are you sure you want to deactivate this student?",
+    "student_details": "Student Details",
     "statement": "Statement",
-    "add_child": "Add Child",
-    "edit_child": "Edit Child Details",
+    "add_student": "Add Student",
+    "edit_student": "Edit Student Details",
     "invoiced": "Total Invoiced",
     "collected": "Total Collected",
     "arrears": "Arrears",
     "generate_payments": "Generate Monthly Billing",
     "bulk_pay_selected": "Record Full Payment for Selected",
-    "no_payments": "No billing records found for this period. Click below to generate them for active children.",
+    "no_payments": "No billing records found for this period. Click below to generate them for active students.",
     "select_month": "Select Month",
     "select_year": "Select Year",
     "index": "#",
@@ -116,8 +118,8 @@
     "digits_optional": "14 digits, optional",
     "back_to_list": "Back to List",
     "enrolled_services": "Enrolled Services",
-    "child_phone_own": "Child's own phone number",
-    "child_phone_placeholder": "Child's own phone number (e.g. 010... or +2010...)",
+    "student_phone_own": "Student's own phone number",
+    "student_phone_placeholder": "Student's own phone number (e.g. 010... or +2010...)",
     "guardian_phone_placeholder": "Phone number (e.g. 010... or +2010...)",
     "check_updates": "Check for updates",
     "checking": "Checking...",
@@ -200,7 +202,7 @@
     "service_price_hourly": "Hourly Price (EGP)",
     "service_builtin_badge": "Built-in",
     "service_custom_badge": "Custom",
-    "delete_service_confirm": "Delete this service? Children enrolled in it must be re-enrolled first.",
+    "delete_service_confirm": "Delete this service? Students enrolled in it must be re-enrolled first.",
 
     "sessions_page_title": "Sessions",
     "add_session": "Add Session",
@@ -228,6 +230,6 @@
     "confirm_first_payment": "Confirm First Payment",
 
     "uploading_photo": "Uploading photo...",
-    "photo_upload_failed": "Photo upload failed — child saved without photo"
+    "photo_upload_failed": "Photo upload failed — student saved without photo"
   }
 }

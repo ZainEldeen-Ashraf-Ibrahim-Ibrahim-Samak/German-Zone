@@ -20,7 +20,7 @@ function getHandler(channel: string) {
 
 describe('payments:deleteBulk / payments:deleteAll — admin-only bulk deletion', () => {
   let db: any
-  let childId: number
+  let studentId: number
   let p1: number, p2: number, p3: number
 
   const deleteBulk = getHandler('payments:deleteBulk')
@@ -31,15 +31,15 @@ describe('payments:deleteBulk / payments:deleteAll — admin-only bulk deletion'
     runMigrations(db)
 
     const now = new Date().toISOString()
-    childId = Number(db.prepare(`
-      INSERT INTO children (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
+    studentId = Number(db.prepare(`
+      INSERT INTO students (name, guardian, guardian_phone, service, unit, price, reg_date, created_at, updated_at)
       VALUES ('Sami', 'Guardian', '0100', 'جلسة', 'جلسة', 100, '2026-01-01', ?, ?)
     `).run(now, now).lastInsertRowid)
 
     const insertPayment = (month: string, price: number) => Number(db.prepare(`
-      INSERT INTO payments (child_id, month, year, service, unit, price, total, balance, status, created_at, updated_at)
+      INSERT INTO payments (student_id, month, year, service, unit, price, total, balance, status, created_at, updated_at)
       VALUES (?, ?, 2026, 'جلسة', 'جلسة', ?, ?, ?, 'unpaid', ?, ?)
-    `).run(childId, month, price, price, price, now, now).lastInsertRowid)
+    `).run(studentId, month, price, price, price, now, now).lastInsertRowid)
     p1 = insertPayment('يوليو', 100)
     p2 = insertPayment('يوليو', 150)
     p3 = insertPayment('أغسطس', 200)

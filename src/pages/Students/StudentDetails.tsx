@@ -6,29 +6,29 @@ import { Stat } from '../../components/ui/Stat.js'
 import { Button } from '../../components/ui/Button.js'
 import { Alert } from '../../components/ui/Alert.js'
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner.js'
-import { useChildActivitiesStore } from '../../store/useChildActivitiesStore.js'
+import { useStudentActivitiesStore } from '../../store/useStudentActivitiesStore.js'
 import type { TimetableSlot } from '../../types/index.js'
 
 const dayNamesAr = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 const dayNamesEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-export default function ChildDetails() {
+export default function StudentDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
-  const childId = Number(id)
+  const studentId = Number(id)
 
   const [timetable, setTimetable] = useState<TimetableSlot[]>([])
   const [balance, setBalance] = useState<{ totalCollected: number; remainingDue: number } | null>(null)
-  const [childName, setChildName] = useState('')
+  const [studentName, setStudentName] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
   const {
     openCase, activities, error: activityError,
     fetchAll, addActivity, openIllnessCase, resolveIllnessCase, clearError, deleteActivity,
-  } = useChildActivitiesStore()
+  } = useStudentActivitiesStore()
 
   const [note, setNote] = useState('')
   const [mediaDataUrl, setMediaDataUrl] = useState<string | undefined>()
@@ -39,23 +39,23 @@ export default function ChildDetails() {
   const [isAddingActivity, setIsAddingActivity] = useState(false)
 
   useEffect(() => {
-    if (!childId) return
+    if (!studentId) return
     setIsLoading(true)
     setLoadError('')
     Promise.all([
-      window.api.childServices.getTimetable(childId),
-      window.api.children.statement({ childId }),
+      window.api.studentServices.getTimetable(studentId),
+      window.api.students.statement({ studentId }),
     ]).then(([slots, statement]) => {
       setTimetable(slots)
-      setChildName(statement?.child?.name || '')
+      setStudentName(statement?.student?.name || '')
       setBalance({
         totalCollected: statement?.summary?.totalCollected ?? 0,
         remainingDue: statement?.summary?.remainingDue ?? statement?.summary?.totalBalance ?? 0,
       })
-    }).catch((err: any) => setLoadError(err.message || 'Failed to load child details'))
+    }).catch((err: any) => setLoadError(err.message || 'Failed to load student details'))
       .finally(() => setIsLoading(false))
-    fetchAll(childId)
-  }, [childId])
+    fetchAll(studentId)
+  }, [studentId])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -73,7 +73,7 @@ export default function ChildDetails() {
   const handleAddActivity = async () => {
     setIsAddingActivity(true)
     try {
-      const ok = await addActivity(childId, { note, media_data_url: mediaDataUrl, media_type: mediaType })
+      const ok = await addActivity(studentId, { note, media_data_url: mediaDataUrl, media_type: mediaType })
       if (ok) {
         setNote('')
         setMediaDataUrl(undefined)
@@ -85,7 +85,7 @@ export default function ChildDetails() {
   }
 
   const handleOpenIllness = async () => {
-    const ok = await openIllnessCase(childId, illnessDescription)
+    const ok = await openIllnessCase(studentId, illnessDescription)
     if (ok) {
       setIllnessDescription('')
       setShowIllnessForm(false)
@@ -97,7 +97,7 @@ export default function ChildDetails() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">{childName || (isAr ? 'تفاصيل الطفل' : 'Child Details')}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{studentName || (isAr ? 'تفاصيل الطالب' : 'Student Details')}</h1>
         <Button variant="outline" onClick={() => navigate(-1)}>{isAr ? 'رجوع' : 'Back'}</Button>
       </div>
 
@@ -115,7 +115,7 @@ export default function ChildDetails() {
       {/* Timetable (FR-005/FR-006) */}
       <Card title={isAr ? 'الجدول الزمني' : 'Timetable'}>
         {timetable.length === 0 ? (
-          <p className="text-slate-500 p-4">{isAr ? 'لا يوجد جدول مواعيد لهذا الطفل' : 'No scheduled services for this child'}</p>
+          <p className="text-slate-500 p-4">{isAr ? 'لا يوجد جدول مواعيد لهذا الطالب' : 'No scheduled services for this student'}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {timetable.map((slot, i) => (
@@ -139,7 +139,7 @@ export default function ChildDetails() {
               <Alert variant="warning">
                 {isAr ? 'حالة مرضية مفتوحة: ' : 'Open illness case: '}{openCase.description || ''}
               </Alert>
-              <Button className="mt-2" variant="secondary" onClick={() => resolveIllnessCase(openCase.id, childId)}>
+              <Button className="mt-2" variant="secondary" onClick={() => resolveIllnessCase(openCase.id, studentId)}>
                 {isAr ? 'إغلاق الحالة' : 'Resolve case'}
               </Button>
             </div>

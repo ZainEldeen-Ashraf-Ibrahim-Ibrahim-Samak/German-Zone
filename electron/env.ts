@@ -112,11 +112,11 @@ export interface CloudinaryConfig {
 }
 
 /**
- * Resolve Cloudinary credentials for child-photo upload (feature 004).
+ * Resolve Cloudinary credentials for student-photo upload (feature 004).
  * Accepts either the three discrete env vars or a single `CLOUDINARY_URL`
  * of the form `cloudinary://<api_key>:<api_secret>@<cloud_name>`.
  * Returns null when not configured — callers must handle this gracefully
- * (photo upload is optional; the child still saves). Credentials live only in
+ * (photo upload is optional; the student still saves). Credentials live only in
  * the main process and are never sent to the renderer.
  */
 export function getCloudinaryConfig(): CloudinaryConfig | null {

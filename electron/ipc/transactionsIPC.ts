@@ -44,11 +44,11 @@ ipcMain.handle('transactions:list', async (_event, args: {
   date?: string
   from?: string
   to?: string
-  childId?: number
+  studentId?: number
 }) => {
   try {
     checkAuth()
-    const { range, date, childId } = args || ({} as any)
+    const { range, date, studentId } = args || ({} as any)
     let { from, to } = args || ({} as any)
 
     if (range === 'day') {
@@ -71,23 +71,23 @@ ipcMain.handle('transactions:list', async (_event, args: {
     const conditions = ['pt.paid_date BETWEEN ? AND ?']
     const params: any[] = [from, to]
 
-    if (childId) {
-      conditions.push('p.child_id = ?')
-      params.push(childId)
+    if (studentId) {
+      conditions.push('p.student_id = ?')
+      params.push(studentId)
     }
 
     const rows = db.prepare(`
       SELECT
         pt.id,
-        p.child_id,
-        c.name as child_name,
+        p.student_id,
+        c.name as student_name,
         p.service as service_name,
         pt.amount,
         'payment' as type,
         pt.paid_date as date
       FROM payment_transactions pt
       JOIN payments p ON p.id = pt.payment_id
-      JOIN children c ON c.id = p.child_id
+      JOIN students c ON c.id = p.student_id
       WHERE ${conditions.join(' AND ')}
       ORDER BY date DESC, pt.id DESC
     `).all(...params)

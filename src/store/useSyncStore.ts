@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 
 interface PendingCounts {
-  children: number
-  child_services: number
+  students: number
+  student_services: number
   payments: number
   employees: number
   salary_payments: number

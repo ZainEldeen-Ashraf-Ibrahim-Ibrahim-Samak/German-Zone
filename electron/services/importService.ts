@@ -5,7 +5,7 @@ import { getDb } from '../db/connection.js'
  * Import service for the Nursery Management System.
  *
  * Reads the center's `Nursery_V4_Final_5.xlsx` workbook (and workbooks of the same
- * layout) and loads children, payments, employees, salary payments, and expenses
+ * layout) and loads students, payments, employees, salary payments, and expenses
  * into the local SQLite database.
  *
  * Workbook layout facts (see specs/002-excel-import-env-config/data-model.md):
@@ -16,7 +16,7 @@ import { getDb } from '../db/connection.js'
  *
  * Strategy:
  * - Idempotent: existing rows are matched and skipped, never overwritten.
- * - Children matched by name; payments by (child_id, month, year, service);
+ * - Students matched by name; payments by (student_id, month, year, service);
  *   employees by name; salaries by (employee_id, month, year); expenses by
  *   (item, month, year).
  * - Required fields missing from the workbook are auto-filled with safe
@@ -32,7 +32,7 @@ export interface EntityCount {
 }
 
 export interface ImportSummary {
-  children: EntityCount
+  students: EntityCount
   payments: EntityCount
   employees: EntityCount
   salaryPayments: EntityCount
@@ -64,9 +64,9 @@ const ARABIC_MONTHS = [
 // lead column (A); the row number ("#") sits in column B(2) and real data starts
 // at column C(3). Verified against Nursery_V4_Final_5.xlsx.
 
-// Children master sheet (👶 بيانات الأطفال)
-const CHILD_COL = {
-  name: 3, guardian: 4, guardianPhone: 5, childPhone: 6, nationalId: 7,
+// Students master sheet (👶 بيانات الطلاب)
+const STUDENT_COL = {
+  name: 3, guardian: 4, guardianPhone: 5, studentPhone: 6, nationalId: 7,
   service: 8, unit: 9, price: 10, regDate: 11, notes: 12
 }
 
@@ -134,7 +134,7 @@ function orNull(s: string): string | null {
 /**
  * The workbook sheets embed summary/total/tip rows (e.g. "إجمالي الرواتب",
  * "💰 إجمالي الفواتير", "💡 ..."). These are NOT real records and must be
- * skipped so they don't pollute children/employees/expenses.
+ * skipped so they don't pollute students/employees/expenses.
  */
 function isDataName(name: string): boolean {
   if (!name) return false
@@ -172,8 +172,8 @@ function isIgnoredSheet(name: string): boolean {
   )
 }
 
-function isChildrenSheet(name: string): boolean {
-  return name.includes('بيانات الأطفال') || name.includes('الأطفال')
+function isStudentsSheet(name: string): boolean {
+  return name.includes('بيانات الطلاب') || name.includes('الطلاب')
 }
 
 function isSalarySheet(name: string): boolean {
@@ -242,7 +242,7 @@ export async function importFromWorkbook(
   onProgress?.(0, totalSheets, 'starting')
 
   const summary: ImportSummary = {
-    children: { imported: 0, skipped: 0 },
+    students: { imported: 0, skipped: 0 },
     payments: { imported: 0, skipped: 0 },
     employees: { imported: 0, skipped: 0 },
     salaryPayments: { imported: 0, skipped: 0 },
@@ -268,36 +268,36 @@ export async function importFromWorkbook(
   }
 
   // Prepared statements reused across sheets
-  const findChild = db.prepare('SELECT id FROM children WHERE name = ?')
-  const insertChild = db.prepare(`
-    INSERT INTO children
-      (name, guardian, guardian_phone, child_phone, national_id, service, unit, price,
+  const findStudent = db.prepare('SELECT id FROM students WHERE name = ?')
+  const insertStudent = db.prepare(`
+    INSERT INTO students
+      (name, guardian, guardian_phone, student_phone, national_id, service, unit, price,
        reg_date, notes, is_active, created_at, updated_at, synced)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
   `)
   const findPayment = db.prepare(
-    'SELECT id FROM payments WHERE child_id = ? AND month = ? AND year = ? AND service = ?'
+    'SELECT id FROM payments WHERE student_id = ? AND month = ? AND year = ? AND service = ?'
   )
   const insertPayment = db.prepare(`
     INSERT INTO payments
-      (child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance,
+      (student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance,
        status, notes, created_at, updated_at, synced)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `)
-  // Each imported child must have a matching service enrollment so the
+  // Each imported student must have a matching service enrollment so the
   // service filter, payment generation, and sync stay consistent.
-  const insertChildService = db.prepare(`
-    INSERT INTO child_services (child_id, service, unit, price, created_at, updated_at, synced)
+  const insertStudentService = db.prepare(`
+    INSERT INTO student_services (student_id, service, unit, price, created_at, updated_at, synced)
     VALUES (?, ?, ?, ?, ?, ?, 0)
   `)
-  const findChildService = db.prepare(
-    'SELECT id FROM child_services WHERE child_id = ? AND service = ?'
+  const findStudentService = db.prepare(
+    'SELECT id FROM student_services WHERE student_id = ? AND service = ?'
   )
-  /** Ensure a (child, service) enrollment exists; return its id. Idempotent. */
-  function ensureEnrollment(childId: number, service: string, unit: string, price: number): number | null {
-    const row = findChildService.get(childId, service) as any
+  /** Ensure a (student, service) enrollment exists; return its id. Idempotent. */
+  function ensureEnrollment(studentId: number, service: string, unit: string, price: number): number | null {
+    const row = findStudentService.get(studentId, service) as any
     if (row) return row.id
-    const res = insertChildService.run(childId, service, unit, price, now, now)
+    const res = insertStudentService.run(studentId, service, unit, price, now, now)
     return Number(res.lastInsertRowid)
   }
   const findEmployee = db.prepare('SELECT id FROM employees WHERE name = ?')
@@ -347,67 +347,67 @@ export async function importFromWorkbook(
       data_json = excluded.data_json, updated_at = excluded.updated_at, synced = 0
   `)
 
-  /** Ensure a child row exists for `name`; return its id (creating a placeholder). */
-  function ensureChild(name: string, opts: {
+  /** Ensure a student row exists for `name`; return its id (creating a placeholder). */
+  function ensureStudent(name: string, opts: {
     service?: string; unit?: string; price?: number; regDate?: string
   } = {}): number {
-    const existing = findChild.get(name) as any
+    const existing = findStudent.get(name) as any
     if (existing) return existing.id
     const svc = opts.service || 'حضانة'
     const unit = opts.unit || 'شهر'
     const price = opts.price ?? 0
-    const res = insertChild.run(
+    const res = insertStudent.run(
       name, '—', '—', null, null,
       svc, unit, price,
       opts.regDate || now.slice(0, 10), null, now, now
     )
-    const childId = Number(res.lastInsertRowid)
-    ensureEnrollment(childId, svc, unit, price)
-    summary.children.imported++
-    return childId
+    const studentId = Number(res.lastInsertRowid)
+    ensureEnrollment(studentId, svc, unit, price)
+    summary.students.imported++
+    return studentId
   }
 
-  // ── 1. Children master sheet ────────────────────────────────────────────────
-  const childSheet = workbook.worksheets.find((ws) => isChildrenSheet(ws.name))
-  if (childSheet) {
-    summary.sheetsProcessed.push(childSheet.name)
-    const importChildren = db.transaction(() => {
-      for (const row of dataRows(childSheet)) {
+  // ── 1. Students master sheet ────────────────────────────────────────────────
+  const studentSheet = workbook.worksheets.find((ws) => isStudentsSheet(ws.name))
+  if (studentSheet) {
+    summary.sheetsProcessed.push(studentSheet.name)
+    const importStudents = db.transaction(() => {
+      for (const row of dataRows(studentSheet)) {
         const r = row.number
-        const name = toStr(cellAt(row, CHILD_COL.name))
+        const name = toStr(cellAt(row, STUDENT_COL.name))
         if (!isDataName(name)) continue
-        if (findChild.get(name)) { summary.children.skipped++; continue }
+        if (findStudent.get(name)) { summary.students.skipped++; continue }
         try {
-          const svc = toStr(cellAt(row, CHILD_COL.service)) || 'حضانة'
-          const unit = toStr(cellAt(row, CHILD_COL.unit)) || 'شهر'
-          const price = toNum(cellAt(row, CHILD_COL.price))
-          const res = insertChild.run(
+          const svc = toStr(cellAt(row, STUDENT_COL.service)) || 'حضانة'
+          const unit = toStr(cellAt(row, STUDENT_COL.unit)) || 'شهر'
+          const price = toNum(cellAt(row, STUDENT_COL.price))
+          const res = insertStudent.run(
             name,
-            toStr(cellAt(row, CHILD_COL.guardian)) || '—',
-            toStr(cellAt(row, CHILD_COL.guardianPhone)) || '—',
-            orNull(toStr(cellAt(row, CHILD_COL.childPhone))),
-            orNull(toStr(cellAt(row, CHILD_COL.nationalId))),
+            toStr(cellAt(row, STUDENT_COL.guardian)) || '—',
+            toStr(cellAt(row, STUDENT_COL.guardianPhone)) || '—',
+            orNull(toStr(cellAt(row, STUDENT_COL.studentPhone))),
+            orNull(toStr(cellAt(row, STUDENT_COL.nationalId))),
             svc,
             unit,
             price,
-            toStr(cellAt(row, CHILD_COL.regDate)) || now.slice(0, 10),
-            orNull(toStr(cellAt(row, CHILD_COL.notes))),
+            toStr(cellAt(row, STUDENT_COL.regDate)) || now.slice(0, 10),
+            orNull(toStr(cellAt(row, STUDENT_COL.notes))),
             now, now
           )
           ensureEnrollment(Number(res.lastInsertRowid), svc, unit, price)
-          summary.children.imported++
+          summary.students.imported++
         } catch (err) {
-          recordRowError(childSheet.name, r, name, err)
+          recordRowError(studentSheet.name, r, name, err)
         }
       }
     })
-    importChildren()
-    tick(childSheet.name)
+    importStudents()
+    tick(studentSheet.name)
   }
 
   // ── 2. Monthly payment sheets ───────────────────────────────────────────────
   for (const ws of workbook.worksheets) {
-    if (isIgnoredSheet(ws.name) || isChildrenSheet(ws.name) ||
+    if (isIgnoredSheet(ws.name) || isStudentsSheet(ws.name) ||
         isSalarySheet(ws.name) || isExpensesSheet(ws.name) ||
         isSettingsSheet(ws.name) || isTargetSheet(ws.name) ||
         isDashboardSheet(ws.name) || isStatementSheet(ws.name)) continue
@@ -435,17 +435,17 @@ export async function importFromWorkbook(
           const status = paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid'
           const notes = orNull(toStr(cellAt(row, PAY_COL.notes)))
 
-          const childId = ensureChild(name, { service, unit, price, regDate: regBase })
-          // Link to a (child, service) enrollment, creating it if this sheet
-          // bills a service the child is not yet enrolled in (multi-service import).
-          const serviceId = ensureEnrollment(childId, service, unit, price)
+          const studentId = ensureStudent(name, { service, unit, price, regDate: regBase })
+          // Link to a (student, service) enrollment, creating it if this sheet
+          // bills a service the student is not yet enrolled in (multi-service import).
+          const serviceId = ensureEnrollment(studentId, service, unit, price)
 
-          if (findPayment.get(childId, month, year, service)) {
+          if (findPayment.get(studentId, month, year, service)) {
             summary.payments.skipped++
             continue
           }
           insertPayment.run(
-            childId, serviceId, month, year, service, unit, quantity, price, total, paid,
+            studentId, serviceId, month, year, service, unit, quantity, price, total, paid,
             balance, status, notes, now, now
           )
           summary.payments.imported++

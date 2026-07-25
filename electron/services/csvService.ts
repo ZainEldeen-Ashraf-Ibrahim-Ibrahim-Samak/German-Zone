@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { getDb } from '../db/connection.js'
 import { getExportHeader } from './exportHeader.js'
-import { getChildStatement } from './statementService.js'
+import { getStudentStatement } from './statementService.js'
 
 const arabicMonths = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -44,7 +44,7 @@ function buildHeaderLines(title: string, filterSummary: string): string[] {
 }
 
 export async function buildCsvFile(
-  type: 'payrollReport' | 'expenses' | 'child' | 'childReport' | 'month',
+  type: 'payrollReport' | 'expenses' | 'student' | 'studentReport' | 'month',
   params: any,
   savePath: string
 ): Promise<void> {
@@ -67,14 +67,14 @@ export async function buildCsvFile(
     lines = buildHeaderLines(title, filterSummary)
     lines.push(toCsvLine(
       isAr
-        ? ['اسم الطفل', 'ولي الأمر', 'الهاتف', 'الخدمة', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة', 'ملاحظات']
-        : ['Child Name', 'Guardian', 'Phone', 'Service', 'Unit', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status', 'Notes']
+        ? ['اسم الطالب', 'ولي الأمر', 'الهاتف', 'الخدمة', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي', 'المدفوع', 'المتأخرات', 'الحالة', 'ملاحظات']
+        : ['Student Name', 'Guardian', 'Phone', 'Service', 'Unit', 'Qty', 'Price', 'Total', 'Paid', 'Arrears', 'Status', 'Notes']
     ))
 
     const payments = db.prepare(`
-      SELECT c.name as child_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes
+      SELECT c.name as student_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes
       FROM payments p
-      JOIN children c ON p.child_id = c.id
+      JOIN students c ON p.student_id = c.id
       WHERE p.month = ? AND p.year = ?
       ${hasSelection ? `AND p.id IN (${params.paymentIds.map(() => '?').join(',')})` : ''}
     `).all(month, year, ...(hasSelection ? params.paymentIds : [])) as any[]
@@ -82,7 +82,7 @@ export async function buildCsvFile(
     let totalInvoiced = 0, totalCollected = 0, arrears = 0
     for (const p of payments) {
       totalInvoiced += p.total; totalCollected += p.paid; arrears += p.balance
-      lines.push(toCsvLine([p.child_name, p.guardian, p.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes || '']))
+      lines.push(toCsvLine([p.student_name, p.guardian, p.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes || '']))
     }
     if (payments.length === 0) {
       lines.push(toCsvLine([isAr ? 'لا توجد مطالبات مسجلة لهذا الشهر.' : 'No billing records for this month.']))
@@ -91,60 +91,60 @@ export async function buildCsvFile(
     }
   }
 
-  // Full Child Report (feature 007, US3/FR-007) — personal info, services & teachers, attendance
+  // Full Student Report (feature 007, US3/FR-007) — personal info, services & teachers, attendance
   // history + percentage, payment history, and notes, each as its own labeled block.
-  if (type === 'childReport') {
+  if (type === 'studentReport') {
     const db = getDb()
-    const childId = Number(params.childId)
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-    if (!child) throw new Error(`Child not found with ID: ${childId}`)
+    const studentId = Number(params.studentId)
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+    if (!student) throw new Error(`Student not found with ID: ${studentId}`)
 
-    const title = isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`
-    const filterSummary = isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`
+    const title = isAr ? `تقرير الطالب الشامل: ${student.name}` : `Full Student Report: ${student.name}`
+    const filterSummary = isAr ? `الطالب: ${student.name}` : `Student: ${student.name}`
     lines = buildHeaderLines(title, filterSummary)
 
     lines.push(toCsvLine([isAr ? '📋 البيانات الشخصية' : '📋 Personal Information']))
-    lines.push(toCsvLine([isAr ? 'الاسم' : 'Name', child.name]))
-    lines.push(toCsvLine([isAr ? 'ولي الأمر' : 'Guardian', child.guardian]))
-    lines.push(toCsvLine([isAr ? 'هاتف ولي الأمر' : 'Guardian Phone', child.guardian_phone]))
-    lines.push(toCsvLine([isAr ? 'تاريخ التسجيل' : 'Registration Date', child.reg_date]))
-    lines.push(toCsvLine([isAr ? 'الحالة' : 'Status', child.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive')]))
+    lines.push(toCsvLine([isAr ? 'الاسم' : 'Name', student.name]))
+    lines.push(toCsvLine([isAr ? 'ولي الأمر' : 'Guardian', student.guardian]))
+    lines.push(toCsvLine([isAr ? 'هاتف ولي الأمر' : 'Guardian Phone', student.guardian_phone]))
+    lines.push(toCsvLine([isAr ? 'تاريخ التسجيل' : 'Registration Date', student.reg_date]))
+    lines.push(toCsvLine([isAr ? 'الحالة' : 'Status', student.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive')]))
     lines.push('')
 
     lines.push(toCsvLine([isAr ? '🏷️ الخدمات والمعلمون' : '🏷️ Services & Teachers']))
     lines.push(toCsvLine(isAr ? ['الخدمة', 'الوحدة', 'السعر', 'المعلم'] : ['Service', 'Unit', 'Price', 'Teacher']))
     const services = db.prepare(`
       SELECT cs.service, cs.unit, cs.price, e.name as teacher_name
-      FROM child_services cs LEFT JOIN employees e ON e.id = cs.teacher_id
-      WHERE cs.child_id = ?
-    `).all(childId) as any[]
+      FROM student_services cs LEFT JOIN employees e ON e.id = cs.teacher_id
+      WHERE cs.student_id = ?
+    `).all(studentId) as any[]
     if (services.length === 0) lines.push(toCsvLine([isAr ? 'لا توجد خدمات مسجلة.' : 'No services enrolled.']))
     for (const s of services) lines.push(toCsvLine([s.service, s.unit, s.price, s.teacher_name || (isAr ? 'بدون معلم' : 'No teacher')]))
     lines.push('')
 
     const attendanceRows = db.prepare(`
-      SELECT ss.session_date as attendance_date, e.name as teacher_name, ar.teacher_status, ar.status as child_status
+      SELECT ss.session_date as attendance_date, e.name as teacher_name, ar.teacher_status, ar.status as student_status
       FROM attendance_records ar
       JOIN scheduled_sessions ss ON ss.id = ar.session_id
       LEFT JOIN employees e ON e.id = ar.attended_teacher_id
-      WHERE ar.child_id = ?
+      WHERE ar.student_id = ?
       ORDER BY ss.session_date DESC
-    `).all(childId) as any[]
-    const attended = attendanceRows.filter((r) => r.child_status === 'attended').length
+    `).all(studentId) as any[]
+    const attended = attendanceRows.filter((r) => r.student_status === 'attended').length
     const pct = attendanceRows.length > 0 ? Math.round((attended / attendanceRows.length) * 100) : null
     lines.push(toCsvLine([isAr ? '📅 سجل الحضور' : '📅 Attendance History']))
     lines.push(toCsvLine([isAr ? 'نسبة الحضور' : 'Attendance Percentage', pct != null ? `${pct}%` : (isAr ? 'غير متاح' : 'N/A')]))
-    lines.push(toCsvLine(isAr ? ['التاريخ', 'المعلم', 'حالة المعلم', 'حالة الطفل'] : ['Date', 'Teacher', 'Teacher Status', 'Child Status']))
+    lines.push(toCsvLine(isAr ? ['التاريخ', 'المعلم', 'حالة المعلم', 'حالة الطالب'] : ['Date', 'Teacher', 'Teacher Status', 'Student Status']))
     if (attendanceRows.length === 0) lines.push(toCsvLine([isAr ? 'لا يوجد سجل حضور بعد.' : 'No attendance history yet.']))
-    for (const a of attendanceRows) lines.push(toCsvLine([a.attendance_date, a.teacher_name || '', a.teacher_status || '', a.child_status]))
+    for (const a of attendanceRows) lines.push(toCsvLine([a.attendance_date, a.teacher_name || '', a.teacher_status || '', a.student_status]))
     lines.push('')
 
     lines.push(toCsvLine([isAr ? '💰 السجل المالي' : '💰 Payment History']))
     lines.push(toCsvLine(isAr ? ['الشهر', 'السنة', 'الخدمة', 'الإجمالي', 'المدفوع', 'الرصيد', 'الحالة'] : ['Month', 'Year', 'Service', 'Total', 'Paid', 'Balance', 'Status']))
     const existingPaymentsForReport = db.prepare(
-      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE child_id = ?'
-    ).all(childId) as any[]
-    const statementForReport = getChildStatement(child, existingPaymentsForReport, new Date())
+      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status FROM payments WHERE student_id = ?'
+    ).all(studentId) as any[]
+    const statementForReport = getStudentStatement(student, existingPaymentsForReport, new Date())
     if (statementForReport.rows.length === 0) lines.push(toCsvLine([isAr ? 'لا توجد معاملات مالية مسجلة.' : 'No financial transactions recorded.']))
     for (const p of statementForReport.rows) {
       const monthLabel = isAr ? p.month : (arabicMonths.includes(p.month) ? englishMonths[arabicMonths.indexOf(p.month)] : p.month)
@@ -153,20 +153,20 @@ export async function buildCsvFile(
     lines.push('')
 
     lines.push(toCsvLine([isAr ? '📝 ملاحظات' : '📝 Notes']))
-    lines.push(toCsvLine([child.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.')]))
+    lines.push(toCsvLine([student.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.')]))
   }
 
   // Financial Transactions Report (feature 007, US4/FR-008) — every recorded payment for the
-  // child plus the resulting outstanding balance, sourced from the same statement engine as the
-  // Excel/PDF child statement export so all three formats can never disagree.
-  if (type === 'child') {
+  // student plus the resulting outstanding balance, sourced from the same statement engine as the
+  // Excel/PDF student statement export so all three formats can never disagree.
+  if (type === 'student') {
     const db = getDb()
-    const childId = Number(params.childId)
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-    if (!child) throw new Error(`Child not found with ID: ${childId}`)
+    const studentId = Number(params.studentId)
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+    if (!student) throw new Error(`Student not found with ID: ${studentId}`)
 
-    const title = isAr ? `كشف حساب الطفل: ${child.name}` : `Account Statement: ${child.name}`
-    const filterSummary = isAr ? `الطفل: ${child.name}` : `Child: ${child.name}`
+    const title = isAr ? `كشف حساب الطالب: ${student.name}` : `Account Statement: ${student.name}`
+    const filterSummary = isAr ? `الطالب: ${student.name}` : `Student: ${student.name}`
     lines = buildHeaderLines(title, filterSummary)
     lines.push(toCsvLine(
       isAr
@@ -175,9 +175,9 @@ export async function buildCsvFile(
     ))
 
     const existingPayments = db.prepare(
-      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE child_id = ?'
-    ).all(childId) as any[]
-    const statement = getChildStatement(child, existingPayments, new Date())
+      'SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE student_id = ?'
+    ).all(studentId) as any[]
+    const statement = getStudentStatement(student, existingPayments, new Date())
 
     let totalDue = 0, totalPaid = 0, totalBalance = 0
     for (const p of statement.rows) {

@@ -40,7 +40,7 @@ interface CalcResult {
 }
 
 interface ServiceScenario {
-  childrenNeeded: number
+  studentsNeeded: number
   feasible: boolean
   maxRevenue: number
   utilization: number
@@ -56,7 +56,7 @@ interface CapacityPlan {
   metrics: {
     revenuePerClass: number
     revenuePerStaff: number
-    childrenPerStaff: number
+    studentsPerStaff: number
     revenueGap: number
   }
 }
@@ -93,19 +93,19 @@ export default function TargetPlanning() {
   const [data, setData] = useState<TargetData | null>(null)
 
   // ── distribution calculator state ──────────────────────────────────────
-  const [calcMonth, setCalcMonth]           = useState(arabicMonths[new Date().getMonth()])
-  const [calcYear, setCalcYear]             = useState(new Date().getFullYear())
-  const [calcCounts, setCalcCounts]         = useState<Record<string, string>>({ حضانة: '10', استضافة: '5', جلسة: '20' })
-  const [calcProfitPct, setCalcProfitPct]   = useState('')
-  const [calcResult, setCalcResult]         = useState<CalcResult | null>(null)
-  const [isCalcing, setIsCalcing]           = useState(false)
+  const [calcMonth, setCalcMonth] = useState(arabicMonths[new Date().getMonth()])
+  const [calcYear, setCalcYear] = useState(new Date().getFullYear())
+  const [calcCounts, setCalcCounts] = useState<Record<string, string>>({ حضانة: '10', استضافة: '5', جلسة: '20' })
+  const [calcProfitPct, setCalcProfitPct] = useState('')
+  const [calcResult, setCalcResult] = useState<CalcResult | null>(null)
+  const [isCalcing, setIsCalcing] = useState(false)
 
   // ── capacity planner state ─────────────────────────────────────────────
-  const [numClasses, setNumClasses]         = useState('')
-  const [classCapacity, setClassCapacity]   = useState('')
-  const [numStaff, setNumStaff]             = useState('')
+  const [numClasses, setNumClasses] = useState('')
+  const [classCapacity, setClassCapacity] = useState('')
+  const [numStaff, setNumStaff] = useState('')
   const [desiredRevenue, setDesiredRevenue] = useState('')
-  const [capacityPlan, setCapacityPlan]     = useState<CapacityPlan | null>(null)
+  const [capacityPlan, setCapacityPlan] = useState<CapacityPlan | null>(null)
 
   // ── data fetch ─────────────────────────────────────────────────────────
 
@@ -162,9 +162,9 @@ export default function TargetPlanning() {
     setError(null)
     try {
       const plan = await window.api.target.capacityPlan({
-        numClasses:    Number(numClasses)    || 0,
+        numClasses: Number(numClasses) || 0,
         classCapacity: Number(classCapacity) || 0,
-        numStaff:      Number(numStaff)      || 0,
+        numStaff: Number(numStaff) || 0,
         desiredRevenue: Number(desiredRevenue) || 0,
       })
       setCapacityPlan(plan)
@@ -386,7 +386,7 @@ export default function TargetPlanning() {
                 placeholder={isAr ? 'مثال: 5' : 'e.g. 5'}
               />
               <Input
-                label={isAr ? 'سعة كل فصل (طفل)' : 'Capacity per Room (children)'}
+                label={isAr ? 'سعة كل فصل (طالب)' : 'Capacity per Room (students)'}
                 type="number"
                 min="0"
                 value={classCapacity}
@@ -417,7 +417,7 @@ export default function TargetPlanning() {
                 <span className="text-slate-500">{isAr ? 'إجمالي الطاقة الاستيعابية:' : 'Total capacity:'}</span>
                 <span className="font-bold text-slate-800">
                   {(Number(numClasses) * Number(classCapacity)).toLocaleString()}
-                  {' '}{isAr ? 'طفل' : 'children'}
+                  {' '}{isAr ? 'طالب' : 'students'}
                 </span>
               </div>
             )}
@@ -576,7 +576,7 @@ export default function TargetPlanning() {
                 <div className="grid grid-cols-2 gap-3">
                   <MetricTile
                     label={isAr ? 'إجمالي الطاقة الاستيعابية' : 'Total Capacity'}
-                    value={`${capacityPlan.totalCapacity.toLocaleString()} ${isAr ? 'طفل' : 'children'}`}
+                    value={`${capacityPlan.totalCapacity.toLocaleString()} ${isAr ? 'طالب' : 'students'}`}
                     color="slate"
                   />
                   <MetricTile
@@ -595,8 +595,8 @@ export default function TargetPlanning() {
                     color="purple"
                   />
                   <MetricTile
-                    label={isAr ? 'أطفال لكل موظف (طاقة كاملة)' : 'Children per Staff (full cap.)'}
-                    value={`${capacityPlan.metrics.childrenPerStaff.toFixed(1)} ${isAr ? 'طفل/موظف' : 'children/staff'}`}
+                    label={isAr ? 'طلاب لكل موظف (طاقة كاملة)' : 'Students per Staff (full cap.)'}
+                    value={`${capacityPlan.metrics.studentsPerStaff.toFixed(1)} ${isAr ? 'طالب/موظف' : 'students/staff'}`}
                     color="teal"
                   />
                 </div>
@@ -606,14 +606,14 @@ export default function TargetPlanning() {
               <div className="border-t border-slate-100 pt-4">
                 <p className={`text-xs font-bold text-slate-400 mb-3 ${isAr ? '' : 'uppercase tracking-widest'}`}>
                   {isAr
-                    ? 'كم طفل تحتاج لتحقيق هدفك (من كل خدمة بمفردها؟)'
-                    : 'Children needed to hit goal (each service type alone)'}
+                    ? 'كم طالب تحتاج لتحقيق هدفك (من كل خدمة بمفردها؟)'
+                    : 'Students needed to hit goal (each service type alone)'}
                 </p>
                 <div className="space-y-3">
                   {Object.entries(capacityPlan.scenarios).map(([svc, sc]) => {
-                    const overCapacity = sc.childrenNeeded > capacityPlan.totalCapacity
+                    const overCapacity = sc.studentsNeeded > capacityPlan.totalCapacity
                     const pctUsed = capacityPlan.totalCapacity > 0
-                      ? Math.min(1, sc.childrenNeeded / capacityPlan.totalCapacity)
+                      ? Math.min(1, sc.studentsNeeded / capacityPlan.totalCapacity)
                       : 0
                     return (
                       <div key={svc} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 space-y-2">
@@ -631,7 +631,7 @@ export default function TargetPlanning() {
                           <div>
                             <span className="block text-slate-400">{isAr ? 'مطلوب' : 'Needed'}</span>
                             <span className="font-bold text-slate-800">
-                              {sc.childrenNeeded.toLocaleString()} {isAr ? 'طفل' : 'children'}
+                              {sc.studentsNeeded.toLocaleString()} {isAr ? 'طالب' : 'students'}
                             </span>
                           </div>
                           <div>
@@ -740,11 +740,11 @@ export default function TargetPlanning() {
 
 function MetricTile({ label, value, color }: { label: string; value: string; color: string }) {
   const bg: Record<string, string> = {
-    slate:  'bg-slate-50  border-slate-200  text-slate-800',
-    amber:  'bg-amber-50  border-amber-200  text-amber-800',
-    blue:   'bg-blue-50   border-blue-200   text-blue-800',
+    slate: 'bg-slate-50  border-slate-200  text-slate-800',
+    amber: 'bg-amber-50  border-amber-200  text-amber-800',
+    blue: 'bg-blue-50   border-blue-200   text-blue-800',
     purple: 'bg-purple-50 border-purple-200 text-purple-800',
-    teal:   'bg-teal-50   border-teal-200   text-teal-800',
+    teal: 'bg-teal-50   border-teal-200   text-teal-800',
   }
   return (
     <div className={`rounded-lg border px-3 py-2.5 ${bg[color] ?? bg.slate}`}>

@@ -5,7 +5,7 @@ interface AttendanceEditRequestsState {
   requests: AttendanceEditRequest[]
   isLoading: boolean
   error: string | null
-  fetchRequests: (args?: { status?: string; child_id?: number; teacher_id?: number }) => Promise<void>
+  fetchRequests: (args?: { status?: string; student_id?: number; teacher_id?: number }) => Promise<void>
   requestEdit: (args: {
     attendance_record_id: number
     requested_status: string

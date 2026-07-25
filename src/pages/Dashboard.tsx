@@ -11,6 +11,7 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner.js'
 import RevenueChart from '../components/charts/RevenueChart.js'
 import CollectionDonut from '../components/charts/CollectionDonut.js'
 import MonthlyProfitBar from '../components/charts/MonthlyProfitBar.js'
+import { serviceLabel, serviceSwatch } from '../utils/services.js'
 
 const arabicMonths = [
   'يناير',
@@ -465,14 +466,8 @@ export default function Dashboard() {
                         const totalRev = data.revenueByService.reduce((sum, item) => sum + item.collected, 0)
                         const pct = totalRev > 0 ? Math.round((srv.collected / totalRev) * 100) : 0
                         
-                        // Color matching
-                        const colorClass = 
-                          srv.service === 'حضانة' ? 'bg-teal-500' :
-                          srv.service === 'استضافة' ? 'bg-amber-500' : 'bg-emerald-500'
-
-                        const label = 
-                          srv.service === 'حضانة' ? t('services.nursery') :
-                          srv.service === 'استضافة' ? t('services.hosting') : t('services.session')
+                        const colorClass = serviceSwatch(srv.service)
+                        const label = serviceLabel(srv.service, i18n.language)
 
                         return (
                           <div key={srv.service} className="border border-slate-100 rounded-lg p-3 space-y-2 hover:bg-slate-50/50 transition-all">

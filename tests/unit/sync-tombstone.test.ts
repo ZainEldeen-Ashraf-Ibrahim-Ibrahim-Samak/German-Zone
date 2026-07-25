@@ -20,7 +20,7 @@ describe('Tombstone Reconciliation', () => {
     db = initDb()
     // Setup tables needed for test
     db.exec(`
-      CREATE TABLE IF NOT EXISTS children (
+      CREATE TABLE IF NOT EXISTS students (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         is_active INTEGER DEFAULT 1
@@ -37,38 +37,38 @@ describe('Tombstone Reconciliation', () => {
   })
 
   it('deletes the local row when a cloud tombstone is applied', () => {
-    // Insert a local child
-    const insert = db.prepare('INSERT INTO children (name) VALUES (?)').run('Test Child')
-    const childId = insert.lastInsertRowid
+    // Insert a local student
+    const insert = db.prepare('INSERT INTO students (name) VALUES (?)').run('Test Student')
+    const studentId = insert.lastInsertRowid
 
-    // Apply cloud tombstone for this child
+    // Apply cloud tombstone for this student
     const cloudTombstones = [
-      { entity: 'children', record_id: childId }
+      { entity: 'students', record_id: studentId }
     ]
     
     applyCloudTombstones(db, cloudTombstones)
 
     // Verify row is deleted
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId)
-    expect(child).toBeUndefined()
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId)
+    expect(student).toBeUndefined()
 
     // Verify a local tombstone is recorded so it is not re-applied endlessly (or marked synced)
     // Actually, if we apply a cloud tombstone, we should record it locally with synced = 1
     // so we know we already processed it.
-    const localTombstone = db.prepare('SELECT * FROM tombstones WHERE entity = ? AND record_id = ?').get('children', childId)
+    const localTombstone = db.prepare('SELECT * FROM tombstones WHERE entity = ? AND record_id = ?').get('students', studentId)
     expect(localTombstone).toBeDefined()
     expect(localTombstone.synced).toBe(1)
   })
 
   it('does nothing if the local row is already deleted (idempotent)', () => {
     const cloudTombstones = [
-      { entity: 'children', record_id: 999 }
+      { entity: 'students', record_id: 999 }
     ]
     
     // Should not throw
     applyCloudTombstones(db, cloudTombstones)
 
-    const localTombstone = db.prepare('SELECT * FROM tombstones WHERE entity = ? AND record_id = ?').get('children', 999)
+    const localTombstone = db.prepare('SELECT * FROM tombstones WHERE entity = ? AND record_id = ?').get('students', 999)
     expect(localTombstone).toBeDefined()
     expect(localTombstone.synced).toBe(1)
   })

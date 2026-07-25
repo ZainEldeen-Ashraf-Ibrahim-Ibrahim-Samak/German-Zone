@@ -9,10 +9,10 @@ import { uploadImage } from '../services/cloudinaryService.js'
 
 /**
  * storage:uploadPhoto { dataUrl, folder? }
- * Uploads a child photo to Cloudinary from the main process (signed request;
+ * Uploads a student photo to Cloudinary from the main process (signed request;
  * the API secret never reaches the renderer). Auth-level — employees may add
- * children with photos (feature 004). Returns { url, publicId }. Throws when
- * Cloudinary is unconfigured/unreachable; the renderer then saves the child
+ * students with photos (feature 004). Returns { url, publicId }. Throws when
+ * Cloudinary is unconfigured/unreachable; the renderer then saves the student
  * without a photo (offline-safe, FR-004a).
  */
 ipcMain.handle('storage:uploadPhoto', async (_event, { dataUrl, folder }) => {
@@ -35,7 +35,7 @@ ipcMain.handle('storage:stats', async () => {
 
     const counts = {
       users: (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c,
-      children: (db.prepare('SELECT COUNT(*) as c FROM children').get() as any).c,
+      students: (db.prepare('SELECT COUNT(*) as c FROM students').get() as any).c,
       payments: (db.prepare('SELECT COUNT(*) as c FROM payments').get() as any).c,
       employees: (db.prepare('SELECT COUNT(*) as c FROM employees').get() as any).c,
       salary_payments: (db.prepare('SELECT COUNT(*) as c FROM salary_payments').get() as any).c,
@@ -207,8 +207,8 @@ ipcMain.handle('storage:clear', async (_event, { confirm }) => {
         db.prepare('DELETE FROM expenses').run()
         db.prepare('DELETE FROM sync_log').run()
         db.prepare('DELETE FROM tombstones').run()
-        db.prepare('DELETE FROM child_services').run()
-        db.prepare('DELETE FROM children').run()
+        db.prepare('DELETE FROM student_services').run()
+        db.prepare('DELETE FROM students').run()
         db.prepare('DELETE FROM session_teachers').run()
         db.prepare('DELETE FROM scheduled_sessions').run()
         db.prepare('DELETE FROM service_teachers').run()
@@ -220,8 +220,8 @@ ipcMain.handle('storage:clear', async (_event, { confirm }) => {
         db.prepare('DELETE FROM notifications').run()
         db.prepare('DELETE FROM imported_snapshots').run()
         db.prepare('DELETE FROM employees').run()
-        db.prepare('DELETE FROM child_activities').run()
-        db.prepare('DELETE FROM child_illness_cases').run()
+        db.prepare('DELETE FROM student_activities').run()
+        db.prepare('DELETE FROM student_illness_cases').run()
       })
       clearAll()
     } finally {

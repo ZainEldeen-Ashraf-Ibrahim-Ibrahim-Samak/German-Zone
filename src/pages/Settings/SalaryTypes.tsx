@@ -13,9 +13,9 @@ import type { SalaryType, SalaryMode } from '../../types/index.js'
 const MODES: { value: SalaryMode; labelEn: string; labelAr: string }[] = [
   { value: 'fixed_monthly', labelEn: 'Fixed Monthly', labelAr: 'راتب شهري ثابت' },
   { value: 'per_session_fixed', labelEn: 'Per Session (Fixed)', labelAr: 'مبلغ ثابت لكل جلسة' },
-  { value: 'per_session_pct', labelEn: 'Per Session (% of child\'s service price)', labelAr: 'نسبة مئوية من سعر خدمة الطفل' },
+  { value: 'per_session_pct', labelEn: 'Per Session (% of student\'s service price)', labelAr: 'نسبة مئوية من سعر خدمة الطالب' },
   { value: 'hybrid', labelEn: 'Hybrid (Monthly + Per Session)', labelAr: 'هجين (شهري + لكل جلسة)' },
-  { value: 'per_child_session', labelEn: 'Per Child (Attendance-based)', labelAr: 'حسب الطفل (بناءً على الحضور)' },
+  { value: 'per_student_session', labelEn: 'Per Student (Attendance-based)', labelAr: 'حسب الطالب (بناءً على الحضور)' },
 ]
 
 export default function SalaryTypes() {
@@ -155,12 +155,12 @@ export default function SalaryTypes() {
           {mode === 'per_session_pct' && (
             <Input label={isAr ? 'النسبة (0–1)' : 'Percentage (0–1)'} type="number" value={sessionPct} onChange={(e) => setSessionPct(e.target.value)} min={0} max={1} step={0.01} />
           )}
-          {mode === 'per_child_session' && (
+          {mode === 'per_student_session' && (
             <>
               <p className="text-xs text-slate-400">
                 {isAr
-                  ? 'يُصرف مبلغ الحضور حسب كل طفل: سعر المعلم المحدد للطفل (إن وُجد) أولاً، ثم سعر الجلسة المحدد في نوع الراتب أدناه — ولا يُستخدم أبداً سعر خدمة الطفل ولا سعر جلسة المعلم في ملفه.'
-                  : 'Attendance pay follows each child: the child’s teacher-rate override first (if set), then this salary type’s per-session rate below — the child’s service price and the teacher’s own "Per Session Cost" are never used in this mode.'}
+                  ? 'يُصرف مبلغ الحضور حسب كل طالب: سعر المعلم المحدد للطالب (إن وُجد) أولاً، ثم سعر الجلسة المحدد في نوع الراتب أدناه — ولا يُستخدم أبداً سعر خدمة الطالب ولا سعر جلسة المعلم في ملفه.'
+                  : 'Attendance pay follows each student: the student’s teacher-rate override first (if set), then this salary type’s per-session rate below — the student’s service price and the teacher’s own "Per Session Cost" are never used in this mode.'}
               </p>
               <Input label={isAr ? 'مبلغ الجلسة (جنيه)' : 'Per Session Rate (EGP)'} type="number" value={sessionRate} onChange={(e) => setSessionRate(e.target.value)} min={0} />
             </>

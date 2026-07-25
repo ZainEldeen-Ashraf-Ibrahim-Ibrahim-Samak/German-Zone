@@ -10,20 +10,20 @@ The workbook has 19 sheets. Two leading spreadsheet columns (A, B) are blank —
 |-------|------|-----|
 | `📊 داشبورد` | Dashboard | Ignore |
 | `⚙️ الإعدادات` | Pricing/targets | Ignore for v1 (settings come from code/env per clarification); structure noted below |
-| `👶 بيانات الأطفال` | **Children master** | Source of children (full fields) |
+| `👶 بيانات الطلاب` | **Children master** | Source of children (full fields) |
 | `👔 الرواتب` | **Salaries** | Source of employees + salary payments |
 | `💸 المصروفات` | **Expenses** | Source of expenses (item × 12 months) |
 | `📄 كشف حساب` | Statement | Ignore |
 | `🎯 تخطيط التارجت` | Target planning | Ignore |
 | `يناير` … `ديسمبر` | **Monthly revenue** (12) | Source of payments per child per month |
 
-### Children master `👶 بيانات الأطفال` (header row 3, cols C–M)
-`# | اسم الطفل (name) | اسم ولي الأمر (guardian) | رقم هاتف ولي الأمر (guardian_phone) | رقم هاتف الطفل (child_phone) | الرقم القومي (national_id) | الخدمة (service) | الوحدة (unit) | السعر (price) | تاريخ التسجيل (reg_date) | ملاحظات (notes)`
+### Children master `👶 بيانات الطلاب` (header row 3, cols C–M)
+`# | اسم الطالب (name) | اسم ولي الأمر (guardian) | رقم هاتف ولي الأمر (guardian_phone) | رقم هاتف الطالب (child_phone) | الرقم القومي (national_id) | الخدمة (service) | الوحدة (unit) | السعر (price) | تاريخ التسجيل (reg_date) | ملاحظات (notes)`
 
 ### Monthly sheets `يناير`…`ديسمبر` (header row 3, cols C–M)
-`# | اسم الطفل (name) | الخدمة (service) | الوحدة (unit) | الكمية (quantity) | السعر (price) | الإجمالي (total) | المدفوع (paid) | الرصيد (balance) | الحالة (status) | ملاحظات (notes)`
+`# | اسم الطالب (name) | الخدمة (service) | الوحدة (unit) | الكمية (quantity) | السعر (price) | الإجمالي (total) | المدفوع (paid) | الرصيد (balance) | الحالة (status) | ملاحظات (notes)`
 - **No year in the sheet name** (just `يناير`, not `يناير 2025`).
-- The `name` cell is a **formula** (`'👶 بيانات الأطفال'!C4`); must read its `.result`.
+- The `name` cell is a **formula** (`'👶 بيانات الطلاب'!C4`); must read its `.result`.
 - `total`, `balance`, `status` are formula cells too.
 
 ### Salaries `👔 الرواتب` (header row 3, cols C–…)
@@ -40,7 +40,7 @@ Pricing grid: `service | hourly | daily | monthly` (e.g., حضانة → 50 / 20
 
 **Decision**: Rewrite `importFromWorkbook`. **Rationale**: every assumption it makes is wrong against the real file and the current schema:
 
-1. Reads children only from monthly sheets — **ignores the `👶 بيانات الأطفال` master sheet** that actually carries guardian, phone, national_id, unit, reg_date.
+1. Reads children only from monthly sheets — **ignores the `👶 بيانات الطلاب` master sheet** that actually carries guardian, phone, national_id, unit, reg_date.
 2. Requires a 4-digit year in the monthly sheet name → all 12 monthly sheets are skipped → **zero payments imported**.
 3. Reads cells `1,2,3` (cols A,B,C) but data lives in cols **C+ (3+)** with two blank lead columns → wrong/empty values.
 4. Skips only `rowNum < 2`, but the real header is **row 3** (title in row 1, blank row 2).

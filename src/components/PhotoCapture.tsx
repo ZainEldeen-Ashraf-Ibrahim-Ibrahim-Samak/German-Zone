@@ -11,7 +11,7 @@ interface PhotoCaptureProps {
 }
 
 /**
- * Child photo input (feature 004): capture from a selectable camera device, or
+ * Student photo input (feature 004): capture from a selectable camera device, or
  * upload an image file. Emits a data URL the parent uploads to Cloudinary on
  * save. Camera APIs run in the Electron renderer (Chromium); when no camera is
  * available the file-upload path still works.
@@ -108,7 +108,7 @@ export default function PhotoCapture({ value, onChange }: PhotoCaptureProps) {
         <div className="w-24 h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="child" className="w-full h-full object-cover" />
+            <img src={value} alt="student" className="w-full h-full object-cover" />
           ) : isCameraOn ? null : (
             <span className="text-3xl text-slate-300">🧒</span>
           )}

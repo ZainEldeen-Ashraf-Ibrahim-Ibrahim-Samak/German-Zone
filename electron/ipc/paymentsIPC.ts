@@ -25,7 +25,7 @@ export function calculatePayment(quantity: number, price: number, paid: number):
   return { total, balance, status }
 }
 
-export function calculateChildStatusRollup(payments: { status: PaymentStatus }[]): PaymentStatus {
+export function calculateStudentStatusRollup(payments: { status: PaymentStatus }[]): PaymentStatus {
   if (payments.length === 0) return 'unpaid'
   const allPaid = payments.every(p => p.status === 'paid')
   const allUnpaid = payments.every(p => p.status === 'unpaid')
@@ -50,16 +50,16 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
       throw new Error('Month and year are required')
     }
     
-    // Fetch payments joined with children names and status.
+    // Fetch payments joined with students names and status.
     // Daily-unit (يوم) rows are included: since feature 009 replaced Daily Billing with the
     // read-only Transactions view, day/hour services are billed here from attendance counts.
     const payments = db.prepare(`
-      SELECT p.*, c.name as child_name, c.guardian as child_guardian, c.guardian_phone as child_guardian_phone, c.is_active as child_is_active,
+      SELECT p.*, c.name as student_name, c.guardian as student_guardian, c.guardian_phone as student_guardian_phone, c.is_active as student_is_active,
         COALESCE(NULLIF(cs.lesson_days, '[]'), c.lesson_days) as service_lesson_days,
         (SELECT COUNT(*) FROM payment_transactions pt WHERE pt.payment_id = p.id) as transaction_count
       FROM payments p
-      JOIN children c ON p.child_id = c.id
-      LEFT JOIN child_services cs ON cs.id = p.service_id
+      JOIN students c ON p.student_id = c.id
+      LEFT JOIN student_services cs ON cs.id = p.service_id
       WHERE p.month = ? AND p.year = ?
       ORDER BY c.name ASC
     `).all(month, year) as (Payment & { service_lesson_days: string | null })[]
@@ -72,7 +72,7 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
     const payYear = Number(year)
     const daysInMonth = monthIndex !== -1 ? new Date(payYear, monthIndex + 1, 0).getDate() : 30
 
-    // Same calendar-based counting as the ChildForm's ServiceCostPreview banner: occurrences of
+    // Same calendar-based counting as the StudentForm's ServiceCostPreview banner: occurrences of
     // the service's lesson days from today (inclusive) through the end of the month count, for
     // the month currently in progress — already-elapsed days don't inflate the expected total.
     // Past/future months (not the one in progress) count the whole month, since there's no
@@ -107,7 +107,7 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
     let totalCollected = 0
     let arrears = 0
     
-    const childMap = new Map<number, any>()
+    const studentMap = new Map<number, any>()
     
     for (const p of payments) {
       totalInvoiced += p.total
@@ -116,13 +116,13 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
         arrears += p.balance
       }
       
-      if (!childMap.has(p.child_id)) {
-        childMap.set(p.child_id, {
-          child_id: p.child_id,
-          child_name: p.child_name,
-          child_guardian: (p as any).child_guardian,
-          child_guardian_phone: (p as any).child_guardian_phone,
-          child_is_active: (p as any).child_is_active ?? 1,
+      if (!studentMap.has(p.student_id)) {
+        studentMap.set(p.student_id, {
+          student_id: p.student_id,
+          student_name: p.student_name,
+          student_guardian: (p as any).student_guardian,
+          student_guardian_phone: (p as any).student_guardian_phone,
+          student_is_active: (p as any).student_is_active ?? 1,
           services: [],
           totalInvoiced: 0,
           totalCollected: 0,
@@ -133,7 +133,7 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
         })
       }
 
-      const rollUp = childMap.get(p.child_id)
+      const rollUp = studentMap.get(p.student_id)
       rollUp.services.push(p)
       rollUp.totalInvoiced += p.total
       rollUp.totalCollected += p.paid
@@ -142,15 +142,15 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
       rollUp.totalExpectedPayment += (p as any).expected_total ?? p.total
     }
 
-    // Wallet credit — the child's LIFETIME balance across every month (including this one), same
-    // sign convention as the per-child "balance" column: negative = they've paid more than owed
+    // Wallet credit — the student's LIFETIME balance across every month (including this one), same
+    // sign convention as the per-student "balance" column: negative = they've paid more than owed
     // (credit sitting in their wallet), positive = arrears still owed. Shown as "Wallet Balance" so
-    // it always agrees with the "(Credit)" badge on the child's row — a child who overpaid THIS
+    // it always agrees with the "(Credit)" badge on the student's row — a student who overpaid THIS
     // month must not show "nothing in wallet".
     const lifetimeBalanceStmt = db.prepare(`
       SELECT COALESCE(SUM(balance), 0) as lifetime_balance
       FROM payments
-      WHERE child_id = ?
+      WHERE student_id = ?
     `)
     // Credit carried in from OTHER months only — used (instead of the lifetime figure above) to
     // work out "Left To Pay" against the month's full EXPECTED total, since this month's own
@@ -158,19 +158,19 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
     const priorCreditStmt = db.prepare(`
       SELECT COALESCE(SUM(balance), 0) as prior_balance
       FROM payments
-      WHERE child_id = ? AND NOT (month = ? AND year = ?)
+      WHERE student_id = ? AND NOT (month = ? AND year = ?)
     `)
 
-    for (const rollUp of childMap.values()) {
-      rollUp.status = calculateChildStatusRollup(rollUp.services)
+    for (const rollUp of studentMap.values()) {
+      rollUp.status = calculateStudentStatusRollup(rollUp.services)
       rollUp.totalInvoiced = Number(rollUp.totalInvoiced.toFixed(2))
       rollUp.totalCollected = Number(rollUp.totalCollected.toFixed(2))
       rollUp.totalExpectedPayment = Number(rollUp.totalExpectedPayment.toFixed(2))
       rollUp.balance = Number(rollUp.balance.toFixed(2))
 
       const totalSessions = rollUp.services.reduce((sum: number, s: any) => sum + (s.quantity || 0), 0)
-      const { lifetime_balance } = lifetimeBalanceStmt.get(rollUp.child_id) as { lifetime_balance: number }
-      const { prior_balance } = priorCreditStmt.get(rollUp.child_id, month, year) as { prior_balance: number }
+      const { lifetime_balance } = lifetimeBalanceStmt.get(rollUp.student_id) as { lifetime_balance: number }
+      const { prior_balance } = priorCreditStmt.get(rollUp.student_id, month, year) as { prior_balance: number }
       const priorCredit = Math.max(0, -prior_balance)
 
       rollUp.totalSessions = totalSessions
@@ -182,7 +182,7 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
 
     return {
       payments,
-      byChild: Array.from(childMap.values()).sort((a, b) => a.child_name.localeCompare(b.child_name)),
+      byStudent: Array.from(studentMap.values()).sort((a, b) => a.student_name.localeCompare(b.student_name)),
       summary: {
         totalInvoiced: Number(totalInvoiced.toFixed(2)),
         totalCollected: Number(totalCollected.toFixed(2)),
@@ -204,13 +204,13 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
       throw new Error('Month and year are required')
     }
     
-    // Fetch active enrollments + child extra session data.
+    // Fetch active enrollments + student extra session data.
     // Day-unit (يوم) services are included: they are charged from attendance (attended +
     // unexcused absence), since the separate Daily Billing flow was retired in feature 009.
     const activeEnrollments = db.prepare(`
       SELECT cs.*, c.extra_lessons, c.session_price, c.sessions_baseline, c.reg_date
-      FROM child_services cs
-      JOIN children c ON cs.child_id = c.id
+      FROM student_services cs
+      JOIN students c ON cs.student_id = c.id
       WHERE c.is_active = 1
     `).all() as any[]
 
@@ -218,24 +218,24 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
     let updatedCount = 0
     const now = new Date().toISOString()
 
-    const checkStmt = db.prepare('SELECT id FROM payments WHERE child_id = ? AND service_id = ? AND month = ? AND year = ?')
-    const checkExtraStmt = db.prepare(`SELECT id FROM payments WHERE child_id = ? AND month = ? AND year = ? AND service = 'حصص إضافية'`)
+    const checkStmt = db.prepare('SELECT id FROM payments WHERE student_id = ? AND service_id = ? AND month = ? AND year = ?')
+    const checkExtraStmt = db.prepare(`SELECT id FROM payments WHERE student_id = ? AND month = ? AND year = ? AND service = 'حصص إضافية'`)
     const insertStmt = db.prepare(`
       INSERT INTO payments (
-        child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, notes, created_at, updated_at, synced
+        student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, notes, created_at, updated_at, synced
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0)
     `)
 
-    // Counts billable attendance for a child's service within a date range: sessions where the
-    // child was attended OR absent without excuse (absent_unexcused). Excused absences are not
-    // charged. Sessions only exist on the child's selected lesson days, so the selection is
+    // Counts billable attendance for a student's service within a date range: sessions where the
+    // student was attended OR absent without excuse (absent_unexcused). Excused absences are not
+    // charged. Sessions only exist on the student's selected lesson days, so the selection is
     // respected implicitly. DISTINCT session_id guards against per-teacher duplicate rows.
     const billableAttendanceStmt = db.prepare(`
       SELECT COUNT(DISTINCT ar.session_id) as cnt
       FROM attendance_records ar
       JOIN scheduled_sessions ss ON ss.id = ar.session_id
       LEFT JOIN service_definitions sd ON sd.id = ss.service_id
-      WHERE ar.child_id = ?
+      WHERE ar.student_id = ?
         AND ss.session_date >= ? AND ss.session_date <= ?
         AND ar.status IN ('attended', 'absent_unexcused')
         AND (ss.service_id IS NULL OR sd.name = ?)
@@ -252,11 +252,11 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
         const monthEndStr = `${payYear}-${monthPad2}-${String(daysInMonth).padStart(2, '0')}`
 
         const countBillableAttendance = () => {
-          const row = billableAttendanceStmt.get(enrollment.child_id, monthStartStr, monthEndStr, enrollment.service) as any
+          const row = billableAttendanceStmt.get(enrollment.student_id, monthStartStr, monthEndStr, enrollment.service) as any
           return Number(row?.cnt) || 0
         }
 
-        const existing = checkStmt.get(enrollment.child_id, enrollment.id, month, year) as any
+        const existing = checkStmt.get(enrollment.student_id, enrollment.id, month, year) as any
         if (existing && (enrollment.unit === 'يوم' || enrollment.unit === 'ساعة')) {
           // Attendance-driven units: refresh the quantity on regeneration so charges track
           // attendance recorded after the row was first created. Paid amounts are preserved;
@@ -278,7 +278,7 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
           if (enrollment.unit === 'شهر') {
             quantity = 1
           } else if (enrollment.unit === 'يوم') {
-            // charge only days the child actually attended or was absent without excuse
+            // charge only days the student actually attended or was absent without excuse
             quantity = countBillableAttendance()
           } else if (enrollment.unit === 'ساعة') {
             // one hour per billable attendance; admin can adjust actual hours manually
@@ -294,7 +294,7 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
             quantity = 1
           }
 
-          // Pro-rate: if child registered mid-month, scale quantity to days remaining
+          // Pro-rate: if student registered mid-month, scale quantity to days remaining
           let proratedCalc: number | null = null
           if (enrollment.reg_date && monthIndex !== -1) {
             const regDate = new Date(enrollment.reg_date)
@@ -330,10 +330,10 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
 
           db.prepare(`
             INSERT INTO payments (
-              child_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, notes, prorated_calculated, created_at, updated_at, synced
+              student_id, service_id, month, year, service, unit, quantity, price, total, paid, balance, status, notes, prorated_calculated, created_at, updated_at, synced
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 0)
           `).run(
-            enrollment.child_id,
+            enrollment.student_id,
             enrollment.id,
             month,
             year,
@@ -356,11 +356,11 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
         const extraLessons = Number(enrollment.extra_lessons) || 0
         const sessionPrice = Number(enrollment.session_price) || 0
         if (extraLessons > 0 && sessionPrice > 0) {
-          const existingExtra = checkExtraStmt.get(enrollment.child_id, month, year)
+          const existingExtra = checkExtraStmt.get(enrollment.student_id, month, year)
           if (!existingExtra) {
             const extraTotal = extraLessons * sessionPrice
             insertStmt.run(
-              enrollment.child_id,
+              enrollment.student_id,
               enrollment.id, // use same service_id as parent
               month,
               year,
@@ -430,8 +430,8 @@ ipcMain.handle('payments:update', async (_event, { id, quantity, paid, notes, pa
     `).run(newQuantity, newPaid, total, balance, status, newNotes, newMethodId, newMethodName, now, id)
 
     const updated = db.prepare(`
-      SELECT p.*, c.name as child_name, c.guardian as child_guardian, c.guardian_phone as child_guardian_phone
-      FROM payments p JOIN children c ON p.child_id = c.id
+      SELECT p.*, c.name as student_name, c.guardian as student_guardian, c.guardian_phone as student_guardian_phone
+      FROM payments p JOIN students c ON p.student_id = c.id
       WHERE p.id = ?
     `).get(id) as Payment
 
@@ -562,7 +562,7 @@ ipcMain.handle('payments:addTransaction', async (_event, { payment_id, amount, p
       recomputePaymentFromTransactions(db, payment_id)
     })()
 
-    const updated = db.prepare('SELECT p.*, c.name as child_name, c.guardian as child_guardian, c.guardian_phone as child_guardian_phone FROM payments p JOIN children c ON p.child_id = c.id WHERE p.id = ?').get(payment_id) as Payment
+    const updated = db.prepare('SELECT p.*, c.name as student_name, c.guardian as student_guardian, c.guardian_phone as student_guardian_phone FROM payments p JOIN students c ON p.student_id = c.id WHERE p.id = ?').get(payment_id) as Payment
     const transactions = db.prepare('SELECT * FROM payment_transactions WHERE payment_id = ? ORDER BY paid_date ASC, id ASC').all(payment_id)
     return { payment: updated, transactions }
   } catch (error: any) {
@@ -582,7 +582,7 @@ ipcMain.handle('payments:deleteTransaction', async (_event, { id }) => {
       db.prepare('DELETE FROM payment_transactions WHERE id = ?').run(id)
       recomputePaymentFromTransactions(db, tx.payment_id)
     })()
-    const updated = db.prepare('SELECT p.*, c.name as child_name, c.guardian as child_guardian, c.guardian_phone as child_guardian_phone FROM payments p JOIN children c ON p.child_id = c.id WHERE p.id = ?').get(tx.payment_id) as Payment
+    const updated = db.prepare('SELECT p.*, c.name as student_name, c.guardian as student_guardian, c.guardian_phone as student_guardian_phone FROM payments p JOIN students c ON p.student_id = c.id WHERE p.id = ?').get(tx.payment_id) as Payment
     const transactions = db.prepare('SELECT * FROM payment_transactions WHERE payment_id = ? ORDER BY paid_date ASC, id ASC').all(tx.payment_id)
     return { payment: updated, transactions }
   } catch (error: any) {
@@ -645,17 +645,17 @@ ipcMain.handle('payments:deleteAll', async (_event, { month, year }) => {
   }
 })
 
-ipcMain.handle('payments:deleteForChild', async (_event, { child_id, month, year }) => {
+ipcMain.handle('payments:deleteForStudent', async (_event, { student_id, month, year }) => {
   try {
     requireAdmin()
     const db = getDb()
-    if (!child_id || !month || !year) {
-      throw new Error('Child ID, month, and year are required')
+    if (!student_id || !month || !year) {
+      throw new Error('Student ID, month, and year are required')
     }
 
     db.transaction(() => {
-      // Find all payments for this child in this period
-      const payments = db.prepare('SELECT id FROM payments WHERE child_id = ? AND month = ? AND year = ?').all(child_id, month, year) as { id: number }[]
+      // Find all payments for this student in this period
+      const payments = db.prepare('SELECT id FROM payments WHERE student_id = ? AND month = ? AND year = ?').all(student_id, month, year) as { id: number }[]
       
       if (payments.length > 0) {
         const ids = payments.map(p => p.id)
@@ -665,13 +665,13 @@ ipcMain.handle('payments:deleteForChild', async (_event, { child_id, month, year
         db.prepare(`DELETE FROM payment_transactions WHERE payment_id IN (${placeholders})`).run(...ids)
         
         // Delete the payments
-        db.prepare(`DELETE FROM payments WHERE child_id = ? AND month = ? AND year = ?`).run(child_id, month, year)
+        db.prepare(`DELETE FROM payments WHERE student_id = ? AND month = ? AND year = ?`).run(student_id, month, year)
       }
     })()
 
     return { ok: true }
   } catch (error: any) {
-    console.error('Failed to delete child payments:', error)
-    throw new Error(error.message || 'Failed to delete child payments')
+    console.error('Failed to delete student payments:', error)
+    throw new Error(error.message || 'Failed to delete student payments')
   }
 })

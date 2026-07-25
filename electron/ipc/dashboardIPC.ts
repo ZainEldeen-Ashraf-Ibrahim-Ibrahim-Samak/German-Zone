@@ -164,7 +164,7 @@ ipcMain.handle('dashboard:get', async (_event, { month, year }) => {
     if (kpi.arrears > 0) {
       alerts.push({
         type: 'danger',
-        messageAr: `هناك متأخرات مستحقة بقيمة ${kpi.arrears} ج.م على الأطفال هذا الشهر`,
+        messageAr: `هناك متأخرات مستحقة بقيمة ${kpi.arrears} ج.م على الطلاب هذا الشهر`,
         messageEn: `There are outstanding arrears of ${kpi.arrears} EGP this month`,
       })
     }

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { RevenueByServiceEntry } from '../../hooks/useDashboard.js'
+import { serviceColor, serviceLabel } from '../../utils/services.js'
 
 interface CollectionDonutProps {
   data: RevenueByServiceEntry[]
@@ -12,13 +13,6 @@ export default function CollectionDonut({ data }: CollectionDonutProps) {
 
   const totalCollected = data.reduce((sum, item) => sum + item.collected, 0)
 
-  // Mapping service types to colors
-  const serviceConfigs: Record<string, { color: string; labelEn: string; labelAr: string }> = {
-    'حضانة': { color: '#0d9488', labelAr: 'حضانة', labelEn: 'Nursery' }, // Teal 600
-    'استضافة': { color: '#f59e0b', labelAr: 'استضافة', labelEn: 'Hosting' }, // Amber 500
-    'جلسة': { color: '#10b981', labelAr: 'جلسة', labelEn: 'Session' }, // Emerald 500
-  }
-
   // Calculate percentages and angles
   const radius = 50
   const circ = 2 * Math.PI * radius
@@ -26,7 +20,6 @@ export default function CollectionDonut({ data }: CollectionDonutProps) {
   const segments = data
     .filter((d) => d.collected > 0)
     .map((d, idx, arr) => {
-      const config = serviceConfigs[d.service] || { color: '#cbd5e1', labelAr: d.service, labelEn: d.service }
       const percent = totalCollected > 0 ? d.collected / totalCollected : 0
       const strokeDasharray = `${(percent * circ).toFixed(2)} ${(circ * (1 - percent)).toFixed(2)}`
 
@@ -40,8 +33,8 @@ export default function CollectionDonut({ data }: CollectionDonutProps) {
         service: d.service,
         collected: d.collected,
         percent,
-        color: config.color,
-        label: i18n.language === 'ar' ? config.labelAr : config.labelEn,
+        color: serviceColor(d.service),
+        label: serviceLabel(d.service, i18n.language),
         strokeDasharray,
         strokeDashoffset,
       }

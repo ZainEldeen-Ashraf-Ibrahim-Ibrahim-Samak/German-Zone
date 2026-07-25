@@ -17,10 +17,10 @@ vi.mock('electron', () => {
   }
 })
 
-import '../../electron/ipc/childrenIPC.js'
+import '../../electron/ipc/studentsIPC.js'
 import { setCurrentUser } from '../../electron/ipc/authIPC.js'
 
-describe('Children access & validation (feature 004)', () => {
+describe('Students access & validation (feature 004)', () => {
   let db: any
   const handlers = () => (globalThis as any).__accessHandlers
 
@@ -32,23 +32,23 @@ describe('Children access & validation (feature 004)', () => {
   })
 
   beforeEach(() => {
-    db.prepare('DELETE FROM children').run()
+    db.prepare('DELETE FROM students').run()
     setCurrentUser(null)
   })
 
   const employee = () => setCurrentUser({ id: 2, username: 'emp1', role: 'employee', is_active: 1 })
 
-  const validChild = {
-    name: 'طفل',
+  const validStudent = {
+    name: 'طالب',
     guardian: 'ولي الأمر',
     guardian_phone: '01012345678',
     reg_date: '2026-06-01',
     services: [{ service: 'حضانة', unit: 'شهر', price: 2500 }]
   }
 
-  it('allows an employee to add a child (FR-012)', async () => {
+  it('allows an employee to add a student (FR-012)', async () => {
     employee()
-    const result = await handlers()['children:add'](null, validChild)
+    const result = await handlers()['students:add'](null, validStudent)
     expect(result.id).toBeGreaterThan(0)
     expect(result.guardian_phone).toBe('01012345678')
   })
@@ -56,30 +56,30 @@ describe('Children access & validation (feature 004)', () => {
   it('rejects an invalid guardian phone on add (FR-001)', async () => {
     employee()
     await expect(
-      handlers()['children:add'](null, { ...validChild, guardian_phone: '0123' })
+      handlers()['students:add'](null, { ...validStudent, guardian_phone: '0123' })
     ).rejects.toThrow()
   })
 
   it('computes monthly_fee = (8 + extra) * session_price (FR-011)', async () => {
     employee()
-    const result = await handlers()['children:add'](null, {
-      ...validChild,
+    const result = await handlers()['students:add'](null, {
+      ...validStudent,
       extra_lessons: 2,
       session_price: 100
     })
-    const row = db.prepare('SELECT monthly_fee, sessions_baseline, extra_lessons FROM children WHERE id = ?').get(result.id) as any
+    const row = db.prepare('SELECT monthly_fee, sessions_baseline, extra_lessons FROM students WHERE id = ?').get(result.id) as any
     expect(row.sessions_baseline).toBe(8)
     expect(row.extra_lessons).toBe(2)
     expect(row.monthly_fee).toBe(1000)
   })
 
-  it('still forbids a non-admin from updating a child', async () => {
-    // Seed a child directly, then try to update as an employee.
+  it('still forbids a non-admin from updating a student', async () => {
+    // Seed a student directly, then try to update as an employee.
     employee()
-    const created = await handlers()['children:add'](null, validChild)
+    const created = await handlers()['students:add'](null, validStudent)
     setCurrentUser({ id: 2, username: 'emp1', role: 'employee', is_active: 1 })
     await expect(
-      handlers()['children:update'](null, { id: created.id, patch: { name: 'x' } })
+      handlers()['students:update'](null, { id: created.id, patch: { name: 'x' } })
     ).rejects.toThrow(/FORBIDDEN/)
   })
 })

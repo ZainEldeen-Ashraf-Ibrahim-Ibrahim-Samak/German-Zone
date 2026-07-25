@@ -112,7 +112,7 @@ ipcMain.handle('target:get', async (_event, { year }) => {
  * target:capacity-plan { numClasses, classCapacity, numStaff, desiredRevenue }
  * Given the physical constraints of the centre, returns:
  *  - totalCapacity (numClasses × classCapacity)
- *  - For each service: minimum children needed to reach desiredRevenue alone,
+ *  - For each service: minimum students needed to reach desiredRevenue alone,
  *    and whether that fits within capacity.
  *  - A balanced recommended mix (50 % nursery, 30 % hosting, 20 % sessions).
  *  - Per-staff and per-class revenue metrics.
@@ -132,14 +132,14 @@ ipcMain.handle('target:capacity-plan', (_event, { numClasses, classCapacity, num
 
     const pricing = getServicePricing(db)
 
-    // Per-service: children/sessions needed to hit desiredRevenue alone
-    const scenarios: Record<string, { childrenNeeded: number; feasible: boolean; maxRevenue: number; utilization: number }> = {}
+    // Per-service: students/sessions needed to hit desiredRevenue alone
+    const scenarios: Record<string, { studentsNeeded: number; feasible: boolean; maxRevenue: number; utilization: number }> = {}
     for (const [service, price] of Object.entries(pricing)) {
-      const childrenNeeded = price > 0 ? Math.ceil(dr / price) : 0
-      const feasible      = totalCapacity > 0 && childrenNeeded <= totalCapacity
+      const studentsNeeded = price > 0 ? Math.ceil(dr / price) : 0
+      const feasible      = totalCapacity > 0 && studentsNeeded <= totalCapacity
       const maxRevenue    = Number((totalCapacity * price).toFixed(2))
-      const utilization   = totalCapacity > 0 ? Number(Math.min(1, childrenNeeded / totalCapacity).toFixed(4)) : 0
-      scenarios[service]  = { childrenNeeded, feasible, maxRevenue, utilization }
+      const utilization   = totalCapacity > 0 ? Number(Math.min(1, studentsNeeded / totalCapacity).toFixed(4)) : 0
+      scenarios[service]  = { studentsNeeded, feasible, maxRevenue, utilization }
     }
 
     // Recommended mix: 50 % nursery, 30 % hosting, rest sessions
@@ -169,7 +169,7 @@ ipcMain.handle('target:capacity-plan', (_event, { numClasses, classCapacity, num
       metrics: {
         revenuePerClass:  nc > 0 ? Number((dr / nc).toFixed(2)) : 0,
         revenuePerStaff:  ns > 0 ? Number((dr / ns).toFixed(2)) : 0,
-        childrenPerStaff: ns > 0 ? Number((totalCapacity / ns).toFixed(2)) : 0,
+        studentsPerStaff: ns > 0 ? Number((totalCapacity / ns).toFixed(2)) : 0,
         revenueGap:       Number(Math.max(0, dr - recommendedRevenue).toFixed(2)),
       },
     }

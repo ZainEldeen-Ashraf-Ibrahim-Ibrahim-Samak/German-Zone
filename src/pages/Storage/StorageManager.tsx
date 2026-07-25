@@ -11,7 +11,7 @@ import { useProgress } from '../../hooks/useProgress.js'
 interface StorageStats {
   counts: {
     users: number
-    children: number
+    students: number
     payments: number
     employees: number
     salary_payments: number
@@ -31,7 +31,7 @@ interface AuditRow {
 }
 
 interface ImportSummary {
-  children: { imported: number; skipped: number }
+  students: { imported: number; skipped: number }
   payments: { imported: number; skipped: number }
   employees: { imported: number; skipped: number }
   salaryPayments: { imported: number; skipped: number }
@@ -205,7 +205,7 @@ export default function StorageManager() {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: isAr ? 'الأطفال' : 'Children', count: stats.counts.children, icon: '👶' },
+              { label: isAr ? 'الطلاب' : 'Students', count: stats.counts.students, icon: '👶' },
               { label: isAr ? 'الدفعات' : 'Payments', count: stats.counts.payments, icon: '💳' },
               { label: isAr ? 'الموظفون' : 'Employees', count: stats.counts.employees, icon: '👔' },
               { label: isAr ? 'دفعات الرواتب' : 'Salary Payments', count: stats.counts.salary_payments, icon: '💵' },
@@ -304,7 +304,7 @@ export default function StorageManager() {
                 <span className="text-slate-400 font-normal"> — {isAr ? 'سنة' : 'year'} {importResult.year}</span>
               </p>
               {[
-                ['children', isAr ? 'أطفال' : 'children'],
+                ['students', isAr ? 'طلاب' : 'students'],
                 ['payments', isAr ? 'دفعات' : 'payments'],
                 ['employees', isAr ? 'موظفون' : 'employees'],
                 ['salaryPayments', isAr ? 'رواتب' : 'salary payments'],
@@ -362,8 +362,8 @@ export default function StorageManager() {
               <h2 className="font-bold text-red-700">{isAr ? 'مسح جميع البيانات' : 'Clear All Data'}</h2>
               <p className="text-xs text-slate-400">
                 {isAr
-                  ? 'يحذف جميع بيانات الأطفال والرواتب والمصروفات. لا يمكن التراجع عن ذلك.'
-                  : 'Deletes all children, payment, salary, and expense records. Irreversible.'}
+                  ? 'يحذف جميع بيانات الطلاب والرواتب والمصروفات. لا يمكن التراجع عن ذلك.'
+                  : 'Deletes all students, payment, salary, and expense records. Irreversible.'}
               </p>
             </div>
           </div>
@@ -434,8 +434,8 @@ export default function StorageManager() {
         <div className="space-y-4 mt-2">
           <Alert variant="danger" title={isAr ? 'لا يمكن التراجع عن هذا الإجراء' : 'This action cannot be undone'}>
             {isAr
-              ? 'سيتم حذف جميع سجلات الأطفال والدفعات والرواتب والمصروفات من قاعدة البيانات نهائياً. يُنصح بأخذ نسخة احتياطية قبل المتابعة.'
-              : 'All children, payment, salary, and expense records will be permanently deleted. Please create a backup before proceeding.'}
+              ? 'سيتم حذف جميع سجلات الطلاب والدفعات والرواتب والمصروفات من قاعدة البيانات نهائياً. يُنصح بأخذ نسخة احتياطية قبل المتابعة.'
+              : 'All students, payment, salary, and expense records will be permanently deleted. Please create a backup before proceeding.'}
           </Alert>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 mt-4">

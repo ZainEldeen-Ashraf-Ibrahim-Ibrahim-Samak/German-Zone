@@ -16,23 +16,23 @@ const api = {
     delete: (args: any) => ipcRenderer.invoke('users:delete', args),
   },
   
-  // Children
-  children: {
-    get: (args: any) => ipcRenderer.invoke('children:get', args),
-    add: (args: any) => ipcRenderer.invoke('children:add', args),
-    update: (args: any) => ipcRenderer.invoke('children:update', args),
-    deactivate: (args: any) => ipcRenderer.invoke('children:deactivate', args),
-    delete: (args: { id: number }) => ipcRenderer.invoke('children:delete', args),
-    statement: (args: { childId: number }) => ipcRenderer.invoke('children:statement', args),
+  // Students
+  students: {
+    get: (args: any) => ipcRenderer.invoke('students:get', args),
+    add: (args: any) => ipcRenderer.invoke('students:add', args),
+    update: (args: any) => ipcRenderer.invoke('students:update', args),
+    deactivate: (args: any) => ipcRenderer.invoke('students:deactivate', args),
+    delete: (args: { id: number }) => ipcRenderer.invoke('students:delete', args),
+    statement: (args: { studentId: number }) => ipcRenderer.invoke('students:statement', args),
   },
-  childServices: {
-    list: (args: { childId: number }) => ipcRenderer.invoke('childServices:list', args),
-    add: (args: any) => ipcRenderer.invoke('childServices:add', args),
-    update: (args: any) => ipcRenderer.invoke('childServices:update', args),
-    remove: (args: { id: number }) => ipcRenderer.invoke('childServices:remove', args),
+  studentServices: {
+    list: (args: { studentId: number }) => ipcRenderer.invoke('studentServices:list', args),
+    add: (args: any) => ipcRenderer.invoke('studentServices:add', args),
+    update: (args: any) => ipcRenderer.invoke('studentServices:update', args),
+    remove: (args: { id: number }) => ipcRenderer.invoke('studentServices:remove', args),
     previewTeacherCost: (teacher_id: number, lesson_days: number[], teacher_session_rate?: number | null) =>
-      ipcRenderer.invoke('childServices:previewTeacherCost', { teacher_id, lesson_days, teacher_session_rate }) as Promise<{ remaining_sessions: number; expected_cost: number; teacher_session_rate: number }>,
-    getTimetable: (child_id: number) => ipcRenderer.invoke('childServices:getTimetable', { child_id }),
+      ipcRenderer.invoke('studentServices:previewTeacherCost', { teacher_id, lesson_days, teacher_session_rate }) as Promise<{ remaining_sessions: number; expected_cost: number; teacher_session_rate: number }>,
+    getTimetable: (student_id: number) => ipcRenderer.invoke('studentServices:getTimetable', { student_id }),
   },
 
   // Service Teachers
@@ -43,7 +43,7 @@ const api = {
 
   // Teacher Payments
   teacherPayments: {
-    list: (filters: { teacher_id?: number; child_id?: number; month?: number; year?: number }) =>
+    list: (filters: { teacher_id?: number; student_id?: number; month?: number; year?: number }) =>
       ipcRenderer.invoke('teacherPayments:list', filters),
     markPaid: (ids: number[]) => ipcRenderer.invoke('teacherPayments:markPaid', { ids }) as Promise<{ ok: boolean; updated: number }>,
   },
@@ -65,29 +65,29 @@ const api = {
     listTransactions: (payment_id: number) => ipcRenderer.invoke('payments:listTransactions', { payment_id }),
     addTransaction: (args: { payment_id: number; amount: number; payment_method_id?: number | null; paid_date?: string | null; notes?: string | null }) => ipcRenderer.invoke('payments:addTransaction', args),
     deleteTransaction: (id: number) => ipcRenderer.invoke('payments:deleteTransaction', { id }),
-    deleteForChild: (args: { child_id: number; month: string; year: number }) => ipcRenderer.invoke('payments:deleteForChild', args),
+    deleteForStudent: (args: { student_id: number; month: string; year: number }) => ipcRenderer.invoke('payments:deleteForStudent', args),
     deleteBulk: (ids: number[]) => ipcRenderer.invoke('payments:deleteBulk', { ids }) as Promise<{ ok: boolean; deleted: number }>,
     deleteAll: (args: { month: string; year: number }) => ipcRenderer.invoke('payments:deleteAll', args) as Promise<{ ok: boolean; deleted: number }>,
   },
 
   // Transactions (feature 009 — replaces Daily Billing)
   transactions: {
-    list: (args: { range: 'day' | 'week' | 'month' | 'custom'; date?: string; from?: string; to?: string; childId?: number }) =>
+    list: (args: { range: 'day' | 'week' | 'month' | 'custom'; date?: string; from?: string; to?: string; studentId?: number }) =>
       ipcRenderer.invoke('transactions:list', args),
   },
 
-  // Child illness cases + activity/media diary (feature 009)
-  childIllnessCases: {
-    getOpen: (child_id: number) => ipcRenderer.invoke('childIllnessCases:getOpen', { child_id }),
-    list: (child_id: number) => ipcRenderer.invoke('childIllnessCases:list', { child_id }),
-    create: (args: { child_id: number; description?: string; opened_at?: string }) => ipcRenderer.invoke('childIllnessCases:create', args),
-    resolve: (args: { id: number; resolved_at?: string }) => ipcRenderer.invoke('childIllnessCases:resolve', args),
+  // Student illness cases + activity/media diary (feature 009)
+  studentIllnessCases: {
+    getOpen: (student_id: number) => ipcRenderer.invoke('studentIllnessCases:getOpen', { student_id }),
+    list: (student_id: number) => ipcRenderer.invoke('studentIllnessCases:list', { student_id }),
+    create: (args: { student_id: number; description?: string; opened_at?: string }) => ipcRenderer.invoke('studentIllnessCases:create', args),
+    resolve: (args: { id: number; resolved_at?: string }) => ipcRenderer.invoke('studentIllnessCases:resolve', args),
   },
-  childActivities: {
-    list: (child_id: number) => ipcRenderer.invoke('childActivities:list', { child_id }),
-    create: (args: { child_id: number; activity_date?: string; note?: string; media_data_url?: string; media_type?: 'photo' | 'video' | 'file' }) =>
-      ipcRenderer.invoke('childActivities:create', args),
-    delete: (id: number) => ipcRenderer.invoke('childActivities:delete', { id }),
+  studentActivities: {
+    list: (student_id: number) => ipcRenderer.invoke('studentActivities:list', { student_id }),
+    create: (args: { student_id: number; activity_date?: string; note?: string; media_data_url?: string; media_type?: 'photo' | 'video' | 'file' }) =>
+      ipcRenderer.invoke('studentActivities:create', args),
+    delete: (id: number) => ipcRenderer.invoke('studentActivities:delete', { id }),
   },
 
   // Shared Calendar page (feature 009)
@@ -145,19 +145,19 @@ const api = {
   export: {
     full: (args: any) => ipcRenderer.invoke('export:full', args),
     month: (args: any) => ipcRenderer.invoke('export:month', args),
-    child: (args: any) => ipcRenderer.invoke('export:child', args),
+    student: (args: any) => ipcRenderer.invoke('export:student', args),
     salaries: (args: any) => ipcRenderer.invoke('export:salaries', args),
     expenses: (args: any) => ipcRenderer.invoke('export:expenses', args),
     employees: (args: any) => ipcRenderer.invoke('export:employees', args),
     payrollReport: (args: { month: number; year: number; format: 'xlsx' | 'pdf' | 'csv'; lang: string }) =>
       ipcRenderer.invoke('export:payrollReport', args),
-    childReport: (args: { childId: number; format: 'xlsx' | 'pdf' | 'csv'; lang: string }) =>
-      ipcRenderer.invoke('export:childReport', args),
+    studentReport: (args: { studentId: number; format: 'xlsx' | 'pdf' | 'csv'; lang: string }) =>
+      ipcRenderer.invoke('export:studentReport', args),
   },
 
   // Print (feature 007) — branded HTML print preview, handed to window.print()
   print: {
-    preview: (args: { reportType: 'payroll' | 'expenses' | 'child' | 'childReport' | 'month'; [key: string]: any }) => ipcRenderer.invoke('print:preview', args) as Promise<{ html: string }>,
+    preview: (args: { reportType: 'payroll' | 'expenses' | 'student' | 'studentReport' | 'month'; [key: string]: any }) => ipcRenderer.invoke('print:preview', args) as Promise<{ html: string }>,
   },
 
   // Storage
@@ -225,22 +225,22 @@ const api = {
     assignTeachers: (session_id: number, employee_ids: number[]) => ipcRenderer.invoke('sessions:assignTeachers', { session_id, employee_ids }),
     salaryCredit: (session_id: number) => ipcRenderer.invoke('sessions:salaryCredit', { session_id }) as Promise<{ payable: boolean; hasTeachers: boolean; credits: { employee_id: number; name: string; amount: number }[] }>,
     proRateCalc: (args: { reg_date: string; price_per_session: number }) => ipcRenderer.invoke('sessions:proRateCalc', args),
-    childrenForDay: (day_of_week: number) => ipcRenderer.invoke('sessions:childrenForDay', { day_of_week }),
+    studentsForDay: (day_of_week: number) => ipcRenderer.invoke('sessions:studentsForDay', { day_of_week }),
   },
 
   // Attendance
   attendance: {
     getSheet: (sessionId: number) => ipcRenderer.invoke('attendance:getSheet', { session_id: sessionId }),
     record: (sessionId: number, records: any[]) => ipcRenderer.invoke('attendance:record', { session_id: sessionId, records }),
-    delete: (sessionId: number, child_ids: (number | { child_id: number; teacher_id: number | null })[], reason?: string) =>
-      ipcRenderer.invoke('attendance:delete', { session_id: sessionId, child_ids, reason }) as Promise<{ ok: boolean; deleted: number; requested: number }>,
+    delete: (sessionId: number, student_ids: (number | { student_id: number; teacher_id: number | null })[], reason?: string) =>
+      ipcRenderer.invoke('attendance:delete', { session_id: sessionId, student_ids, reason }) as Promise<{ ok: boolean; deleted: number; requested: number }>,
     getConflicts: () => ipcRenderer.invoke('attendance:getConflicts'),
     resolveConflict: (conflict_id: number, final_status: string) => ipcRenderer.invoke('attendance:resolveConflict', { conflict_id, final_status }),
     getSummary: (employee_id: number, month: string, year: number) => ipcRenderer.invoke('attendance:getSummary', { employee_id, month, year }),
-    getChildHistory: (child_id: number) => ipcRenderer.invoke('attendance:getChildHistory', { child_id }),
+    getStudentHistory: (student_id: number) => ipcRenderer.invoke('attendance:getStudentHistory', { student_id }),
     requestEdit: (args: { attendance_record_id: number; requested_status: string; requested_excuse_notes?: string | null; requested_teacher_status?: string | null; reason: string }) =>
       ipcRenderer.invoke('attendance:requestEdit', args),
-    listEditRequests: (args?: { status?: string; child_id?: number; teacher_id?: number }) =>
+    listEditRequests: (args?: { status?: string; student_id?: number; teacher_id?: number }) =>
       ipcRenderer.invoke('attendance:listEditRequests', args ?? {}),
     decideEditRequest: (args: { id: number; decision: 'approve' | 'reject'; decision_notes?: string | null }) =>
       ipcRenderer.invoke('attendance:decideEditRequest', args),

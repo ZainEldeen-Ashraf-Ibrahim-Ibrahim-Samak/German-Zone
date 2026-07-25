@@ -32,8 +32,8 @@ export function getExportHeader(): ExportHeaderData {
 
   return {
     appName: settings['brand_app_name'] || 'أكاديمية مهند الليثي',
-    orgName: settings['brand_org_name'] || 'مركز مهند الليثي للتوحد ونمو الطفل',
-    tagline: settings['brand_tagline'] || 'رعاية متميزة وتنمية مهارات طفلك',
+    orgName: settings['brand_org_name'] || 'مركز مهند الليثي للتوحد ونمو الطالب',
+    tagline: settings['brand_tagline'] || 'رعاية متميزة وتنمية مهارات طالبك',
     phone: settings['brand_phone'] || '+20 123 456 7890',
     address: settings['brand_address'] || 'القاهرة، مصر',
     email: settings['brand_email'] || 'info@zaineldeen.com',

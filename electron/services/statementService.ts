@@ -1,10 +1,10 @@
-export function getChildStatement(child: any, existingPayments: any[], currentDate: Date) {
+export function getStudentStatement(student: any, existingPayments: any[], currentDate: Date) {
   const arabicMonths = [
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
     'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
   ]
 
-  const regDate = new Date(child.reg_date)
+  const regDate = new Date(student.reg_date)
   let startYear = regDate.getFullYear()
   let startMonth = regDate.getMonth()
 
@@ -74,20 +74,20 @@ export function getChildStatement(child: any, existingPayments: any[], currentDa
         })
       }
     } else {
-      // Create empty placeholder rows for each active enrollment of the child
-      // However, we don't have child_services here directly. We just have child.service.
+      // Create empty placeholder rows for each active enrollment of the student
+      // However, we don't have student_services here directly. We just have student.service.
       // But actually, we only need placeholders if we want to show unpaid expected amounts.
-      // Since we don't have the child_services array passed in getChildStatement, 
-      // maybe we should just create a placeholder using the child's default service?
-      // Or we can fetch child_services in the calling code.
-      // For now, if there's no payment, we just insert the default child service as a placeholder.
+      // Since we don't have the student_services array passed in getStudentStatement, 
+      // maybe we should just create a placeholder using the student's default service?
+      // Or we can fetch student_services in the calling code.
+      // For now, if there's no payment, we just insert the default student service as a placeholder.
       rows.push({
         month,
         year,
-        service: child.service,
-        unit: child.unit,
+        service: student.service,
+        unit: student.unit,
         quantity: 0,
-        price: child.price,
+        price: student.price,
         total: 0,
         paid: 0,
         balance: 0,
@@ -118,20 +118,20 @@ export function getChildStatement(child: any, existingPayments: any[], currentDa
   }
 
   return {
-    child: {
-      id: child.id,
-      name: child.name,
-      guardian: child.guardian,
-      guardian_phone: child.guardian_phone,
-      service: child.service,
-      unit: child.unit,
-      price: child.price,
-      reg_date: child.reg_date,
-      is_active: child.is_active,
+    student: {
+      id: student.id,
+      name: student.name,
+      guardian: student.guardian,
+      guardian_phone: student.guardian_phone,
+      service: student.service,
+      unit: student.unit,
+      price: student.price,
+      reg_date: student.reg_date,
+      is_active: student.is_active,
       // Feature 004 — surface photo, teacher, and computed fee on the record
-      photo_url: child.photo_url ?? null,
-      teacher_name: child.teacher_name ?? null,
-      monthly_fee: child.monthly_fee ?? null
+      photo_url: student.photo_url ?? null,
+      teacher_name: student.teacher_name ?? null,
+      monthly_fee: student.monthly_fee ?? null
     },
     rows,
     summary: {

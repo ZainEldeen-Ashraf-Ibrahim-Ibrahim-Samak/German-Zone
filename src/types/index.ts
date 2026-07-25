@@ -9,12 +9,17 @@ export interface User {
   created_at?: string
 }
 
-export type ServiceType = 'حضانة' | 'استضافة' | 'جلسة'
+/** German Zone course levels. Admins can add further services in Settings → Services,
+ *  so this union names the built-in ones rather than constraining the whole domain. */
+export type ServiceType = 'A1' | 'A2' | 'B1' | 'B2' | 'جلسات محادثة'
+
+/** Billing unit. Note 'جلسة' here is the per-session *unit*, unrelated to the
+ *  'جلسات محادثة' speaking-sessions *service*. */
 export type UnitType = 'شهر' | 'يوم' | 'ساعة' | 'جلسة'
 
 export interface ServiceEnrollment {
   id: number
-  child_id: number
+  student_id: number
   service: ServiceType
   unit: UnitType
   price: number
@@ -22,20 +27,20 @@ export interface ServiceEnrollment {
   lesson_days?: number[] | string | null
   extra_lessons?: number
   session_price?: number | null
-  // Per-child override of the assigned teacher's per-session pay rate — "salary type per
-  // child". Falls back to the teacher's own rate, then their salary type's session rate.
+  // Per-student override of the assigned teacher's per-session pay rate — "salary type per
+  // student". Falls back to the teacher's own rate, then their salary type's session rate.
   teacher_session_rate?: number | null
   created_at?: string
   updated_at?: string
   synced?: number
 }
 
-export interface Child {
+export interface Student {
   id: number
   name: string
   guardian: string
   guardian_phone: string
-  child_phone?: string | null
+  student_phone?: string | null
   national_id?: string | null
   service: ServiceType
   unit: UnitType
@@ -48,7 +53,7 @@ export interface Child {
   updated_at: string
   synced: number // 0 or 1
 
-  // Feature 004 — child enrollment enhancements (all optional / additive)
+  // Feature 004 — student enrollment enhancements (all optional / additive)
   photo_url?: string | null
   photo_public_id?: string | null
   teacher_id?: number | null
@@ -70,7 +75,7 @@ export type PaymentStatus = 'paid' | 'partial' | 'unpaid'
 
 export interface Payment {
   id: number
-  child_id: number
+  student_id: number
   service_id?: number
   month: string // Arabic month name
   year: number
@@ -88,7 +93,7 @@ export interface Payment {
   synced: number // 0 or 1
 
   // Optional join field for UI
-  child_name?: string
+  student_name?: string
   // Full scheduled amount for the month regardless of attendance (vs. `quantity`, which for
   // attendance-driven units only counts days/hours attended or absent-unexcused so far)
   expected_quantity?: number
@@ -106,17 +111,17 @@ export interface Payment {
 // Daily Billing entity) — derived read-time from payments/payment_transactions, not a table.
 export interface Transaction {
   id: number
-  child_id: number
-  child_name: string
+  student_id: number
+  student_name: string
   service_name: string
   amount: number
   type: 'charge' | 'payment' | 'refund'
   date: string
 }
 
-export interface ChildIllnessCase {
+export interface StudentIllnessCase {
   id: number
-  child_id: number
+  student_id: number
   status: 'open' | 'resolved'
   description?: string | null
   opened_at: string
@@ -126,9 +131,9 @@ export interface ChildIllnessCase {
   synced: number
 }
 
-export interface ChildActivity {
+export interface StudentActivity {
   id: number
-  child_id: number
+  student_id: number
   activity_date: string
   note?: string | null
   media_url?: string | null
@@ -151,7 +156,7 @@ export interface CalendarEntry {
   date: string
   user_id: number
   user_name: string
-  user_type: 'child' | 'teacher' | 'session'
+  user_type: 'student' | 'teacher' | 'session'
   service_id: number | null
   service_name: string | null
   teacher_id: number | null
@@ -182,7 +187,7 @@ export interface EmployeeRole {
   synced: number
 }
 
-export type SalaryMode = 'fixed_monthly' | 'per_session_fixed' | 'per_session_pct' | 'hybrid' | 'per_child_session'
+export type SalaryMode = 'fixed_monthly' | 'per_session_fixed' | 'per_session_pct' | 'hybrid' | 'per_student_session'
 
 export interface SalaryType {
   id: number
@@ -236,9 +241,9 @@ export interface AttendanceRecord {
   attendance_id?: number | null
   locked?: boolean
   session_id: number
-  child_id: number
-  child_name?: string
-  child_photo_url?: string | null
+  student_id: number
+  student_name?: string
+  student_photo_url?: string | null
   teacher_id?: number | null
   teacher_name?: string | null
   teacher_session_rate?: number | null
@@ -260,8 +265,8 @@ export type EditRequestStatus = 'pending' | 'approved' | 'rejected'
 export interface AttendanceEditRequest {
   id: number
   attendance_record_id: number
-  child_id: number
-  child_name?: string
+  student_id: number
+  student_name?: string
   teacher_id: number | null
   teacher_name?: string | null
   attendance_date: string
@@ -369,8 +374,8 @@ export interface TeacherPayment {
   id: number
   teacher_id: number
   teacher_name?: string
-  child_id: number
-  child_name?: string
+  student_id: number
+  student_name?: string
   attendance_record_id: number
   attendance_date: string
   session_cost: number
@@ -393,7 +398,7 @@ export interface AttendanceHistoryRow {
   teacher_id: number | null
   teacher_name: string | null
   teacher_status: 'present' | 'absent' | null
-  child_status: AttendanceStatus
+  student_status: AttendanceStatus
   payment_generated: boolean
   payment_status: TeacherPaymentStatus | null
   session_cost: number | null
@@ -449,7 +454,7 @@ export interface SyncLog {
   synced_at: string
 }
 
-export interface ChildStatementRow {
+export interface StudentStatementRow {
   month: string
   year: number
   service: string
@@ -463,8 +468,8 @@ export interface ChildStatementRow {
   notes: string
 }
 
-export interface ChildStatement {
-  child: {
+export interface StudentStatement {
+  student: {
     id: number
     name: string
     guardian: string
@@ -478,7 +483,7 @@ export interface ChildStatement {
     teacher_name?: string | null
     monthly_fee?: number | null
   }
-  rows: ChildStatementRow[]
+  rows: StudentStatementRow[]
   summary: {
     activeMonths: number
     totalInvoiced: number

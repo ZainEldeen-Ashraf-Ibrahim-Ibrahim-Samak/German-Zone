@@ -13,8 +13,8 @@ describe('friendlyError', () => {
   })
 
   it('leaves a plain message without a code prefix untouched', () => {
-    const err = new Error("Error invoking remote method 'children:update': Error: الطفل غير موجود / Child not found")
-    expect(friendlyError(err)).toBe('الطفل غير موجود / Child not found')
+    const err = new Error("Error invoking remote method 'students:update': Error: الطالب غير موجود / Student not found")
+    expect(friendlyError(err)).toBe('الطالب غير موجود / Student not found')
   })
 
   it('handles a message with no IPC wrapper at all', () => {

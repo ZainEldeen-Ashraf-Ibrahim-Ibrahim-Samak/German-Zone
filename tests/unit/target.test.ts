@@ -43,7 +43,7 @@ function calcCoveragePct(collected: number, requiredRevenue: number): number {
 
 /**
  * Compute projected monthly revenue from a custom distribution.
- * distribution: { [serviceKey: string]: number } — count of children/units per service
+ * distribution: { [serviceKey: string]: number } — count of students/units per service
  * pricing: { [serviceKey: string]: number } — monthly price per service/unit
  */
 function calcProjectedRevenue(

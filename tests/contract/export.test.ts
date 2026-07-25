@@ -65,17 +65,17 @@ describe('Export IPC Contract tests', () => {
     
     // Check all channels require authentication
     await expect(handlers['export:month'](null, { month: 'يناير', year: 2026, format: 'xlsx', lang: 'ar' })).rejects.toThrow('UNAUTHORIZED')
-    await expect(handlers['export:child'](null, { childId: 1, format: 'xlsx', lang: 'ar' })).rejects.toThrow('UNAUTHORIZED')
+    await expect(handlers['export:student'](null, { studentId: 1, format: 'xlsx', lang: 'ar' })).rejects.toThrow('UNAUTHORIZED')
     await expect(handlers['export:full'](null, { year: 2026, format: 'xlsx', lang: 'ar' })).rejects.toThrow('UNAUTHORIZED')
   })
 
-  it('should allow employees to export month and child statement, but block them from full, salaries, and expenses', async () => {
+  it('should allow employees to export month and student statement, but block them from full, salaries, and expenses', async () => {
     const handlers = getHandlers()
     employeeSession()
 
-    // 1. Should succeed for child statement
-    const childRes = await handlers['export:child'](null, { childId: 1, format: 'xlsx', lang: 'ar' })
-    expect(childRes).toEqual({ filePath: 'mock-save-path.xlsx' })
+    // 1. Should succeed for student statement
+    const studentRes = await handlers['export:student'](null, { studentId: 1, format: 'xlsx', lang: 'ar' })
+    expect(studentRes).toEqual({ filePath: 'mock-save-path.xlsx' })
 
     // 2. Should succeed for month sheet
     const monthRes = await handlers['export:month'](null, { month: 'يناير', year: 2026, format: 'xlsx', lang: 'ar' })

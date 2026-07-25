@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 /**
  * Guardian phone validation (feature 004, FR-001).
  * Egyptian mobile: exactly 11 digits, digits only, starts with "01".
- * Mirrors GUARDIAN_PHONE_RE in electron/ipc/childrenIPC.ts and ChildForm.tsx.
+ * Mirrors GUARDIAN_PHONE_RE in electron/ipc/studentsIPC.ts and StudentForm.tsx.
  */
 const GUARDIAN_PHONE_RE = /^(?:\+?2)?01[0-9]{9}$/
 

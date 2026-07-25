@@ -5,13 +5,13 @@ import { test, expect } from '@playwright/test'
  * Skipped like the other e2e scaffolds (no live app server in this harness);
  * documents the manual/automated flow from quickstart.md.
  */
-test.describe.skip('Enroll child with teacher and computed fee', () => {
+test.describe.skip('Enroll student with teacher and computed fee', () => {
   test('default 8 sessions, extras increase count and fee', async ({ page }) => {
     await page.goto('http://localhost:5173/')
-    await page.click('text=الأطفال')
-    await page.click('text=إضافة طفل')
+    await page.click('text=الطلاب')
+    await page.click('text=إضافة طالب')
 
-    await page.fill('input[name="name"]', 'Fee Test Child')
+    await page.fill('input[name="name"]', 'Fee Test Student')
     await page.fill('input[name="guardian"]', 'Guardian')
     await page.fill('input[name="guardian_phone"]', '01012345678')
 

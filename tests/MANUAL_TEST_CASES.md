@@ -28,9 +28,9 @@
 | ✓ | ID | Title | Precondition | Steps | Expected | Result |
 |---|----|-------|-------------|-------|----------|--------|
 | [ ] | TC-DASH-001 | Dashboard loads without data | Logged in; no payments/expenses for selected month | 1. Open dashboard 2. Select current month | All KPIs show 0; no alerts related to arrears | |
-| [ ] | TC-DASH-002 | Invoiced KPI matches generated payments | Payments generated for 3 children at 2500 EGP each | 1. Open dashboard for that month | Invoiced = 7500 EGP | |
-| [ ] | TC-DASH-003 | Collected KPI reflects actual paid amounts | Two children partially paid | 1. Open dashboard | Collected = sum of paid amounts | |
-| [ ] | TC-DASH-004 | Arrears KPI excludes credit balances | One child overpaid (negative balance) | 1. Open dashboard | Arrears = only positive balances summed | |
+| [ ] | TC-DASH-002 | Invoiced KPI matches generated payments | Payments generated for 3 students at 2500 EGP each | 1. Open dashboard for that month | Invoiced = 7500 EGP | |
+| [ ] | TC-DASH-003 | Collected KPI reflects actual paid amounts | Two students partially paid | 1. Open dashboard | Collected = sum of paid amounts | |
+| [ ] | TC-DASH-004 | Arrears KPI excludes credit balances | One student overpaid (negative balance) | 1. Open dashboard | Arrears = only positive balances summed | |
 | [ ] | TC-DASH-005 | Net profit = collected − expenses − salaries | Known amounts for month | 1. Open dashboard | netProfit = collected − expensesTotal − salariesTotal | |
 | [ ] | TC-DASH-006 | Target gap alert shown when below target | Expenses set; little collection | 1. Open dashboard | Warning alert mentioning gap amount | |
 | [ ] | TC-DASH-007 | Arrears danger alert shown | Unpaid payments exist | 1. Open dashboard | Red alert showing arrears amount | |
@@ -43,55 +43,55 @@
 
 ---
 
-## 3  Children Management (TC-CHLD)
+## 3  Students Management (TC-CHLD)
 
-### 3.1  Children List
-
-| ✓ | ID | Title | Precondition | Steps | Expected | Result |
-|---|----|-------|-------------|-------|----------|--------|
-| [ ] | TC-CHLD-001 | List loads with all active children | At least 2 active children exist | 1. Open children list | Table shows all active children | |
-| [ ] | TC-CHLD-002 | Inactive children hidden by default | One child is inactive | 1. Open children list | Inactive child not shown; toggle "عرض غير النشطين" to show | |
-| [ ] | TC-CHLD-003 | Search by name (Arabic) | Children with Arabic names | 1. Type partial name in search box | Matching children shown; non-matches hidden | |
-| [ ] | TC-CHLD-004 | Filter by service type | Children with different services | 1. Select "حضانة" from service dropdown | Only nursery children shown | |
-| [ ] | TC-CHLD-005 | Search + service filter combined | Mixed data | 1. Search name AND select service | Only children matching both criteria shown | |
-| [ ] | TC-CHLD-006 | Search is case-insensitive for English names | English name child exists | 1. Type lowercase version | Child found | |
-
-### 3.2  Add Child
+### 3.1  Students List
 
 | ✓ | ID | Title | Precondition | Steps | Expected | Result |
 |---|----|-------|-------------|-------|----------|--------|
-| [ ] | TC-CHLD-007 | Add child with nursery service (admin) | Logged in as admin | 1. Click Add 2. Fill all fields 3. Submit | Child appears in list; service type shown | |
-| [ ] | TC-CHLD-008 | Add child with session service (employee) | Logged in as employee | 1. Click Add 2. Fill fields with جلسة service | Child added; employee can add but not edit | |
-| [ ] | TC-CHLD-009 | Guardian phone validation — too short | Add child form | 1. Enter phone `0101234` (7 digits) 2. Submit | Validation error "رقم هاتف ولي الأمر يجب أن يتكوّن من 11 رقماً" | |
-| [ ] | TC-CHLD-010 | Guardian phone validation — not starting with 01 | Add child form | 1. Enter `02012345678` | Validation error | |
-| [ ] | TC-CHLD-011 | Guardian phone validation — valid | Add child form | 1. Enter `01012345678` | Accepted | |
-| [ ] | TC-CHLD-012 | Required fields enforced | Add child form | 1. Leave name empty 2. Submit | Validation error on name field | |
-| [ ] | TC-CHLD-013 | Extra lessons add to monthly fee | Add child form | 1. Set session_price=100 2. Set extra_lessons=2 | monthly_fee preview = (8+2)×100 = 1000 | |
-| [ ] | TC-CHLD-014 | Session price cannot be negative | Add child form | 1. Enter session_price = -50 | Validation error | |
-| [ ] | TC-CHLD-015 | Lesson days multi-select | Add child form | 1. Select Sunday and Tuesday from lesson days | Saved as JSON array; shown as tags | |
+| [ ] | TC-CHLD-001 | List loads with all active students | At least 2 active students exist | 1. Open students list | Table shows all active students | |
+| [ ] | TC-CHLD-002 | Inactive students hidden by default | One student is inactive | 1. Open students list | Inactive student not shown; toggle "عرض غير النشطين" to show | |
+| [ ] | TC-CHLD-003 | Search by name (Arabic) | Students with Arabic names | 1. Type partial name in search box | Matching students shown; non-matches hidden | |
+| [ ] | TC-CHLD-004 | Filter by service type | Students with different services | 1. Select "حضانة" from service dropdown | Only nursery students shown | |
+| [ ] | TC-CHLD-005 | Search + service filter combined | Mixed data | 1. Search name AND select service | Only students matching both criteria shown | |
+| [ ] | TC-CHLD-006 | Search is case-insensitive for English names | English name student exists | 1. Type lowercase version | Student found | |
+
+### 3.2  Add Student
+
+| ✓ | ID | Title | Precondition | Steps | Expected | Result |
+|---|----|-------|-------------|-------|----------|--------|
+| [ ] | TC-CHLD-007 | Add student with nursery service (admin) | Logged in as admin | 1. Click Add 2. Fill all fields 3. Submit | Student appears in list; service type shown | |
+| [ ] | TC-CHLD-008 | Add student with session service (employee) | Logged in as employee | 1. Click Add 2. Fill fields with جلسة service | Student added; employee can add but not edit | |
+| [ ] | TC-CHLD-009 | Guardian phone validation — too short | Add student form | 1. Enter phone `0101234` (7 digits) 2. Submit | Validation error "رقم هاتف ولي الأمر يجب أن يتكوّن من 11 رقماً" | |
+| [ ] | TC-CHLD-010 | Guardian phone validation — not starting with 01 | Add student form | 1. Enter `02012345678` | Validation error | |
+| [ ] | TC-CHLD-011 | Guardian phone validation — valid | Add student form | 1. Enter `01012345678` | Accepted | |
+| [ ] | TC-CHLD-012 | Required fields enforced | Add student form | 1. Leave name empty 2. Submit | Validation error on name field | |
+| [ ] | TC-CHLD-013 | Extra lessons add to monthly fee | Add student form | 1. Set session_price=100 2. Set extra_lessons=2 | monthly_fee preview = (8+2)×100 = 1000 | |
+| [ ] | TC-CHLD-014 | Session price cannot be negative | Add student form | 1. Enter session_price = -50 | Validation error | |
+| [ ] | TC-CHLD-015 | Lesson days multi-select | Add student form | 1. Select Sunday and Tuesday from lesson days | Saved as JSON array; shown as tags | |
 | [ ] | TC-CHLD-016 | Teacher assignment | Teachers exist | 1. Select a teacher from dropdown | teacher_id saved; teacher name shown in list | |
-| [ ] | TC-CHLD-017 | Photo upload | Add child form | 1. Upload photo via camera/file | Photo thumbnail shown; photo_url stored | |
-| [ ] | TC-CHLD-018 | Multi-service enrollment | Add child form | 1. Add two services (حضانة + جلسة) | Both service rows appear in child_services | |
-| [ ] | TC-CHLD-019 | Duplicate child name allowed | Same name child exists | 1. Add child with same name | Allowed (no unique constraint on name) | |
+| [ ] | TC-CHLD-017 | Photo upload | Add student form | 1. Upload photo via camera/file | Photo thumbnail shown; photo_url stored | |
+| [ ] | TC-CHLD-018 | Multi-service enrollment | Add student form | 1. Add two services (حضانة + جلسة) | Both service rows appear in student_services | |
+| [ ] | TC-CHLD-019 | Duplicate student name allowed | Same name student exists | 1. Add student with same name | Allowed (no unique constraint on name) | |
 
-### 3.3  Edit Child
-
-| ✓ | ID | Title | Precondition | Steps | Expected | Result |
-|---|----|-------|-------------|-------|----------|--------|
-| [ ] | TC-CHLD-020 | Admin can edit child | Admin logged in; child exists | 1. Click edit 2. Change name 3. Save | Updated name shown in list | |
-| [ ] | TC-CHLD-021 | Employee cannot edit child | Employee logged in | 1. Click edit button | Forbidden error or button hidden | |
-| [ ] | TC-CHLD-022 | Deactivate child | Admin logged in | 1. Toggle child to inactive | Child disappears from active list | |
-| [ ] | TC-CHLD-023 | Reactivate child | Inactive child exists | 1. Show inactive, toggle active | Child reappears in active list | |
-
-### 3.4  Child Statement
+### 3.3  Edit Student
 
 | ✓ | ID | Title | Precondition | Steps | Expected | Result |
 |---|----|-------|-------------|-------|----------|--------|
-| [ ] | TC-CHLD-024 | Statement shows all months from reg_date | Child registered Feb 2026; current month Jun 2026 | 1. Open child statement | 5 rows: Feb, Mar, Apr, May, Jun 2026 | |
+| [ ] | TC-CHLD-020 | Admin can edit student | Admin logged in; student exists | 1. Click edit 2. Change name 3. Save | Updated name shown in list | |
+| [ ] | TC-CHLD-021 | Employee cannot edit student | Employee logged in | 1. Click edit button | Forbidden error or button hidden | |
+| [ ] | TC-CHLD-022 | Deactivate student | Admin logged in | 1. Toggle student to inactive | Student disappears from active list | |
+| [ ] | TC-CHLD-023 | Reactivate student | Inactive student exists | 1. Show inactive, toggle active | Student reappears in active list | |
+
+### 3.4  Student Statement
+
+| ✓ | ID | Title | Precondition | Steps | Expected | Result |
+|---|----|-------|-------------|-------|----------|--------|
+| [ ] | TC-CHLD-024 | Statement shows all months from reg_date | Student registered Feb 2026; current month Jun 2026 | 1. Open student statement | 5 rows: Feb, Mar, Apr, May, Jun 2026 | |
 | [ ] | TC-CHLD-025 | Paid months show correct amounts | Payments recorded for March | 1. Open statement | March row shows paid amount and "paid" badge | |
 | [ ] | TC-CHLD-026 | Unpaid months show zero and unpaid status | No payment for April | 1. Open statement | April row shows 0 paid, "unpaid" badge | |
 | [ ] | TC-CHLD-027 | Summary totals correct | 3 months × 2500; 2 months paid | 1. Open statement | totalInvoiced = 7500; totalCollected = 5000; balance = 2500 | |
-| [ ] | TC-CHLD-028 | Export statement to PDF | Child statement open | 1. Click Export PDF | PDF generated; downloads/opens | |
+| [ ] | TC-CHLD-028 | Export statement to PDF | Student statement open | 1. Click Export PDF | PDF generated; downloads/opens | |
 
 ---
 
@@ -99,9 +99,9 @@
 
 | ✓ | ID | Title | Precondition | Steps | Expected | Result |
 |---|----|-------|-------------|-------|----------|--------|
-| [ ] | TC-PAY-001 | Generate payments for current month | Active children exist | 1. Select month/year 2. Click Generate | One payment row per active child per service | |
+| [ ] | TC-PAY-001 | Generate payments for current month | Active students exist | 1. Select month/year 2. Click Generate | One payment row per active student per service | |
 | [ ] | TC-PAY-002 | Generate is idempotent (no duplicates) | Payments already generated | 1. Click Generate again | No new rows created; created=0 in response | |
-| [ ] | TC-PAY-003 | Inactive children excluded from generation | One inactive child | 1. Generate payments | No payment row for inactive child | |
+| [ ] | TC-PAY-003 | Inactive students excluded from generation | One inactive student | 1. Generate payments | No payment row for inactive student | |
 | [ ] | TC-PAY-004 | Payment row shows correct total (quantity × price) | Payment generated | 1. View payment grid | total = quantity × price | |
 | [ ] | TC-PAY-005 | Update paid amount | Payment row shown | 1. Enter paid amount in row 2. Save | balance recalculated; status updated | |
 | [ ] | TC-PAY-006 | Status changes to "partial" on partial payment | total = 2500 | 1. Enter paid = 1000 | Status = "partial"; balance = 1500 | |
@@ -110,7 +110,7 @@
 | [ ] | TC-PAY-009 | Client cannot change price (server recalculates) | Payment exists at price 2000 | 1. Intercept and send price=1 | Server ignores client price; uses stored price | |
 | [ ] | TC-PAY-010 | Bulk pay marks all selected as paid | Multiple unpaid payments | 1. Select all rows 2. Click bulk pay | All selected rows → paid, balance = 0 | |
 | [ ] | TC-PAY-011 | Month/year selector filters payments | Payments in Jan and Feb | 1. Select January | Only January payments shown | |
-| [ ] | TC-PAY-012 | Summary row shows totals | 3 children with varying paid | 1. View summary at bottom | totalInvoiced, totalCollected, arrears correct | |
+| [ ] | TC-PAY-012 | Summary row shows totals | 3 students with varying paid | 1. View summary at bottom | totalInvoiced, totalCollected, arrears correct | |
 | [ ] | TC-PAY-013 | Employee can view and update payments | Employee logged in | 1. Open payments page | Payments visible; update allowed | |
 | [ ] | TC-PAY-014 | Notes field saved with payment | Update payment | 1. Enter notes 2. Save | Notes visible in payment row | |
 
@@ -180,10 +180,10 @@
 
 | ✓ | ID | Title | Precondition | Steps | Expected | Result |
 |---|----|-------|-------------|-------|----------|--------|
-| [ ] | TC-TGT-016 | Capacity preview appears when classrooms + capacity entered | Target page | 1. Enter 5 classrooms, 10 capacity | Preview banner shows "إجمالي الطاقة الاستيعابية: 50 طفل" | |
+| [ ] | TC-TGT-016 | Capacity preview appears when classrooms + capacity entered | Target page | 1. Enter 5 classrooms, 10 capacity | Preview banner shows "إجمالي الطاقة الاستيعابية: 50 طالب" | |
 | [ ] | TC-TGT-017 | Capacity plan calculates correctly | Enter 5 classrooms, 10 capacity, 8 staff, 50000 revenue goal | 1. Click "احسب خطة التوزيع المثلى" | Results panel shows capacity=50, per-service scenarios, recommended mix | |
-| [ ] | TC-TGT-018 | Feasibility badge green when children needed ≤ capacity | Small revenue goal vs large capacity | 1. Run calculation | "✅ ضمن الطاقة" badge on all services | |
-| [ ] | TC-TGT-019 | Feasibility badge red when children needed > capacity | Large revenue goal vs small capacity | 1. Run calculation | "❌ يتجاوز الطاقة" badge on over-capacity services | |
+| [ ] | TC-TGT-018 | Feasibility badge green when students needed ≤ capacity | Small revenue goal vs large capacity | 1. Run calculation | "✅ ضمن الطاقة" badge on all services | |
+| [ ] | TC-TGT-019 | Feasibility badge red when students needed > capacity | Large revenue goal vs small capacity | 1. Run calculation | "❌ يتجاوز الطاقة" badge on over-capacity services | |
 | [ ] | TC-TGT-020 | Revenue gap card shown when capacity can't reach goal | recommendedRevenue < desiredRevenue | 1. Run calculation | Red "⚠️ فجوة في الإيراد" card with gap amount | |
 | [ ] | TC-TGT-021 | Surplus card shown when capacity exceeds goal | recommendedRevenue ≥ desiredRevenue | 1. Run calculation | Green "✅ طاقتك تفوق الهدف" card | |
 | [ ] | TC-TGT-022 | Utilisation bars fill left-to-right in Arabic mode | UI in Arabic | 1. Run capacity plan; view scenario bars | All capacity bars fill from LEFT (not reversed) | |
@@ -198,7 +198,7 @@
 | [ ] | TC-TGT-026 | Selecting a future year with no cost data gives targetRequired = 0 | No data for 2028 | 1. Set Year to 2028 2. Click Calculate | targetRequired = 0; projected revenue shown; coverage bar not shown or 0 | |
 | [ ] | TC-TGT-027 | Month and Year dropdowns sit side-by-side | Manual Distribution Calculator card | 1. View the card | Month and Year dropdowns are in a 2-column grid on the same row | |
 | [ ] | TC-TGT-028 | Custom profit % input changes targetRequired | Default 20%; change to 30% | 1. Enter 30 in profit % field 2. Click Calculate | targetRequired increases | |
-| [ ] | TC-TGT-029 | Distribution input changes projected revenue | Enter child counts per service | 1. Set حضانة=10, جلسة=20 2. Click Calculate | Projected revenue = 10×nursery_price + 20×session_price | |
+| [ ] | TC-TGT-029 | Distribution input changes projected revenue | Enter student counts per service | 1. Set حضانة=10, جلسة=20 2. Click Calculate | Projected revenue = 10×nursery_price + 20×session_price | |
 | [ ] | TC-TGT-030 | Coverage bar reflects projected vs required | projectedRevenue = 75% of targetRequired | 1. View result | Bar fills ~75%; amber colour; "لم يتحقق" label | |
 | [ ] | TC-TGT-031 | Suggested units shown for each service | After any calculation | 1. View "الوحدات المقترحة" section | Count per service to meet target; prices shown beside each | |
 | [ ] | TC-TGT-032 | Profit % saved to settings persists | Admin changes profit % | 1. Change and save 2. Reload page | Same profit % shown on reload | |
@@ -275,7 +275,7 @@
 | [ ] | TC-STG-002 | Database size displayed | Admin session | 1. Open storage page | DB size shown in KB/MB | |
 | [ ] | TC-STG-003 | Create backup | Admin session | 1. Click "إنشاء نسخة احتياطية" | File saved to disk; success message shown | |
 | [ ] | TC-STG-004 | Restore backup restores data | Backup exists; DB has new data after backup | 1. Click Restore 2. Select backup file | Data restored to backup state; new data gone | |
-| [ ] | TC-STG-005 | Backup roundtrip — data integrity | Known set of children before backup | 1. Backup 2. Add more children 3. Restore | Exactly the pre-backup children restored | |
+| [ ] | TC-STG-005 | Backup roundtrip — data integrity | Known set of students before backup | 1. Backup 2. Add more students 3. Restore | Exactly the pre-backup students restored | |
 | [ ] | TC-STG-006 | Restore confirms before overwriting | Admin clicks restore | 1. Click Restore | Confirmation dialog appears before proceeding | |
 
 ---
@@ -290,7 +290,7 @@
 | [ ] | TC-SYN-004 | Pull from cloud | Cloud has newer records | 1. Click Pull | Local DB updated with cloud data | |
 | [ ] | TC-SYN-005 | Conflict: cloud wins when cloud is newer | Local record older | 1. Trigger pull after cloud update | Cloud version replaces local | |
 | [ ] | TC-SYN-006 | Conflict: local wins when local is newer | Local record newer | 1. Trigger pull | Local version kept | |
-| [ ] | TC-SYN-007 | Tombstone: deleted record not re-pulled | Child deleted locally | 1. Pull from cloud | Deleted child not restored | |
+| [ ] | TC-SYN-007 | Tombstone: deleted record not re-pulled | Student deleted locally | 1. Pull from cloud | Deleted student not restored | |
 | [ ] | TC-SYN-008 | Sync log shows history | After push/pull | 1. View sync log | Entries show action, table, status, timestamp | |
 | [ ] | TC-SYN-009 | Missing MONGODB_URI shows error | .env has no MONGODB_URI | 1. Click Push | Clear error "MongoDB URI not configured" | |
 
@@ -302,7 +302,7 @@
 |---|----|-------|-------------|-------|----------|--------|
 | [ ] | TC-XPRT-001 | Export full database to Excel | Admin session; some data | 1. Click Export All 2. Select Excel | .xlsx file downloaded with all sheets | |
 | [ ] | TC-XPRT-002 | Export monthly payments to Excel | Payments for current month | 1. Export > Monthly Payments | Sheet contains all payment rows for month | |
-| [ ] | TC-XPRT-003 | Export child statement to PDF | Child selected | 1. Open statement 2. Export PDF | PDF with child name, monthly breakdown, totals | |
+| [ ] | TC-XPRT-003 | Export student statement to PDF | Student selected | 1. Open statement 2. Export PDF | PDF with student name, monthly breakdown, totals | |
 | [ ] | TC-XPRT-004 | Export salaries to Excel | Salaries entered | 1. Export > Salaries | Salary sheet with employee names and amounts | |
 | [ ] | TC-XPRT-005 | Export expenses to Excel | Expenses entered | 1. Export > Expenses | 12-month grid exported | |
 | [ ] | TC-XPRT-006 | Export blocked for employees on admin-only data | Employee session | 1. Try to export salaries/expenses | FORBIDDEN | |
@@ -317,7 +317,7 @@
 | ✓ | ID | Title | Precondition | Steps | Expected | Result |
 |---|----|-------|-------------|-------|----------|--------|
 | [ ] | TC-IMP-001 | Import blocked for employees | Employee session | 1. Try import | FORBIDDEN | |
-| [ ] | TC-IMP-002 | Import valid Excel workbook | Admin session; valid .xlsx file | 1. Click Import 2. Select file | Success summary: X children, Y payments imported | |
+| [ ] | TC-IMP-002 | Import valid Excel workbook | Admin session; valid .xlsx file | 1. Click Import 2. Select file | Success summary: X students, Y payments imported | |
 | [ ] | TC-IMP-003 | Import is idempotent (no duplicates on re-import) | Already imported | 1. Import same file again | Same record counts; no duplicates | |
 | [ ] | TC-IMP-004 | Invalid rows reported but don't crash | File with bad rows | 1. Import file | rowErrors > 0; valid rows still imported | |
 | [ ] | TC-IMP-005 | Settings (pricing) imported from settings sheet | Settings sheet has pricing data | 1. Import | nursery_monthly, hosting_monthly updated | |
@@ -344,10 +344,10 @@
 
 | ✓ | ID | Title | Role | Action | Expected | Result |
 |---|----|-------|------|--------|----------|--------|
-| [ ] | TC-RBAC-001 | Children read | Employee | View children list | Allowed | |
-| [ ] | TC-RBAC-002 | Children add | Employee | Add new child | Allowed | |
-| [ ] | TC-RBAC-003 | Children update | Employee | Edit existing child | FORBIDDEN | |
-| [ ] | TC-RBAC-004 | Children deactivate | Employee | Toggle child inactive | FORBIDDEN | |
+| [ ] | TC-RBAC-001 | Students read | Employee | View students list | Allowed | |
+| [ ] | TC-RBAC-002 | Students add | Employee | Add new student | Allowed | |
+| [ ] | TC-RBAC-003 | Students update | Employee | Edit existing student | FORBIDDEN | |
+| [ ] | TC-RBAC-004 | Students deactivate | Employee | Toggle student inactive | FORBIDDEN | |
 | [ ] | TC-RBAC-005 | Payments view | Employee | View payment grid | Allowed | |
 | [ ] | TC-RBAC-006 | Payments update | Employee | Record payment | Allowed | |
 | [ ] | TC-RBAC-007 | Expenses view | Employee | Navigate to expenses | FORBIDDEN | |
@@ -390,13 +390,13 @@
 
 | ✓ | ID | Title | Steps | Expected | Result |
 |---|----|-------|-------|----------|--------|
-| [ ] | TC-PERF-001 | List renders 200+ children | Seed 200 children; open children list | Loads in < 3 seconds; no browser hang | |
-| [ ] | TC-PERF-002 | Payment grid with 200 rows | Generate for 200 children; open payment grid | Scrollable; no freeze | |
+| [ ] | TC-PERF-001 | List renders 200+ students | Seed 200 students; open students list | Loads in < 3 seconds; no browser hang | |
+| [ ] | TC-PERF-002 | Payment grid with 200 rows | Generate for 200 students; open payment grid | Scrollable; no freeze | |
 | [ ] | TC-PERF-003 | Export 12 months of data | Full year data exists; export full DB | File generated < 30 seconds | |
 | [ ] | TC-PERF-004 | Import large workbook | 300-row Excel file; import | Completes with progress; no timeout | |
-| [ ] | TC-PERF-005 | Empty state messages | No children in DB; open children list | "لا توجد بيانات" or equivalent empty state | |
+| [ ] | TC-PERF-005 | Empty state messages | No students in DB; open students list | "لا توجد بيانات" or equivalent empty state | |
 | [ ] | TC-PERF-006 | Concurrent IPC calls | Rapid clicking of generate | No duplicate records created | |
-| [ ] | TC-PERF-007 | Very long Arabic names | Child name 100 chars; add and view | Name truncated with ellipsis in table; full name in form | |
+| [ ] | TC-PERF-007 | Very long Arabic names | Student name 100 chars; add and view | Name truncated with ellipsis in table; full name in form | |
 
 ---
 
@@ -404,13 +404,13 @@
 
 | ✓ | ID | Title | Steps | Expected | Result |
 |---|----|-------|-------|----------|--------|
-| [ ] | TC-INT-001 | Delete child cascades payments | Delete (deactivate) child with payments; view payments | Payments remain linked but child shown as inactive | |
+| [ ] | TC-INT-001 | Delete student cascades payments | Delete (deactivate) student with payments; view payments | Payments remain linked but student shown as inactive | |
 | [ ] | TC-INT-002 | Payment total always = quantity × price | Update quantity to 2; view payment | total = 2 × price, server computed | |
 | [ ] | TC-INT-003 | Balance always = total − paid | Set total=2500, paid=1000; view balance | balance = 1500 always | |
 | [ ] | TC-INT-004 | Status consistent with paid/balance | Set paid = total; check status | Status = "paid"; no mismatch possible | |
 | [ ] | TC-INT-005 | Backup file is valid SQLite | Create backup; open with DB browser | Valid SQLite; all tables present | |
 | [ ] | TC-INT-006 | Settings key uniqueness | Update same key twice; view settings | Only latest value stored (no duplicates) | |
-| [ ] | TC-INT-007 | Child services uniqueness per child | Add same service twice to same child | Only one service row per service type | |
+| [ ] | TC-INT-007 | Student services uniqueness per student | Add same service twice to same student | Only one service row per service type | |
 
 ---
 

@@ -2,8 +2,8 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { requireAdmin } from './_guard.js'
 import { getCurrentUser } from './authIPC.js'
-import { getChildStatement } from '../services/statementService.js'
-import type { Child } from '../../src/types/index.js'
+import { getStudentStatement } from '../services/statementService.js'
+import type { Student } from '../../src/types/index.js'
 
 function checkAuth() {
   const user = getCurrentUser()
@@ -23,11 +23,11 @@ function validateGuardianPhone(phone: string): void {
   }
 }
 
-function validateChildPhone(phone: string | null): void {
+function validateStudentPhone(phone: string | null): void {
   if (phone && phone.toString().trim() !== '') {
     if (!GUARDIAN_PHONE_RE.test(phone.toString().trim())) {
       throw new Error(
-        'رقم هاتف الطفل يجب أن يكون بالتنسيق الصحيح (مثال: 01012345678 أو +201012345678) / Child phone must be a valid format (e.g., 01012345678, 201012345678, or +201012345678)'
+        'رقم هاتف الطالب يجب أن يكون بالتنسيق الصحيح (مثال: 01012345678 أو +201012345678) / Student phone must be a valid format (e.g., 01012345678, 201012345678, or +201012345678)'
       )
     }
   }
@@ -83,22 +83,22 @@ function buildLessonFields(src: any): {
   }
 }
 
-ipcMain.handle('children:get', async (_event, { search, service, activeOnly }) => {
+ipcMain.handle('students:get', async (_event, { search, service, activeOnly }) => {
   try {
     checkAuth()
     const db = getDb()
     
-    let query = 'SELECT * FROM children WHERE 1=1'
+    let query = 'SELECT * FROM students WHERE 1=1'
     const params: any[] = []
     
     if (search && search.trim() !== '') {
       const searchPattern = `%${search.trim()}%`
-      query += ' AND (name LIKE ? OR guardian LIKE ? OR guardian_phone LIKE ? OR child_phone LIKE ? OR national_id LIKE ?)'
+      query += ' AND (name LIKE ? OR guardian LIKE ? OR guardian_phone LIKE ? OR student_phone LIKE ? OR national_id LIKE ?)'
       params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
     }
     
     if (service) {
-      query += ' AND id IN (SELECT child_id FROM child_services WHERE service = ?)'
+      query += ' AND id IN (SELECT student_id FROM student_services WHERE service = ?)'
       params.push(service)
     }
     
@@ -109,61 +109,61 @@ ipcMain.handle('children:get', async (_event, { search, service, activeOnly }) =
     
     query += ' ORDER BY name ASC'
     
-    const rows = db.prepare(query).all(...params) as Child[]
+    const rows = db.prepare(query).all(...params) as Student[]
     for (const row of rows) {
-      row.services = db.prepare('SELECT * FROM child_services WHERE child_id = ?').all(row.id) as any[]
+      row.services = db.prepare('SELECT * FROM student_services WHERE student_id = ?').all(row.id) as any[]
     }
     return rows
   } catch (error: any) {
-    console.error('Failed to get children:', error)
-    throw new Error(error.message || 'Failed to get children')
+    console.error('Failed to get students:', error)
+    throw new Error(error.message || 'Failed to get students')
   }
 })
 
-ipcMain.handle('children:add', async (_event, childInput) => {
+ipcMain.handle('students:add', async (_event, studentInput) => {
   try {
-    // Employees (not only admins) may create children (feature 004, FR-012).
+    // Employees (not only admins) may create students (feature 004, FR-012).
     checkAuth()
     const db = getDb()
 
-    const { name, guardian, guardian_phone, child_phone, national_id, reg_date, notes, services } = childInput
-    const enrollments = services || (childInput.service ? [{ service: childInput.service, unit: childInput.unit, price: childInput.price }] : [])
+    const { name, guardian, guardian_phone, student_phone, national_id, reg_date, notes, services } = studentInput
+    const enrollments = services || (studentInput.service ? [{ service: studentInput.service, unit: studentInput.unit, price: studentInput.price }] : [])
 
     if (!name || !guardian || !guardian_phone || enrollments.length === 0 || !reg_date) {
       throw new Error('جميع الحقول الإلزامية مطلوبة / Missing required fields')
     }
 
     validateGuardianPhone(guardian_phone)
-    if (child_phone) {
-      validateChildPhone(child_phone)
+    if (student_phone) {
+      validateStudentPhone(student_phone)
     }
 
     // Duplicate services are now allowed — each enrollment can have its own teacher/days
 
-    const lesson = buildLessonFields(childInput)
+    const lesson = buildLessonFields(studentInput)
     const now = new Date().toISOString()
 
     const tx = db.transaction(() => {
       const first = enrollments[0]
       const result = db.prepare(`
-        INSERT INTO children (
-          name, guardian, guardian_phone, child_phone, national_id,
+        INSERT INTO students (
+          name, guardian, guardian_phone, student_phone, national_id,
           service, unit, price, reg_date, notes,
           photo_url, photo_public_id, teacher_id, lesson_days,
           sessions_baseline, extra_lessons, session_price, monthly_fee,
           is_active, created_at, updated_at, synced
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
       `).run(
-        name, guardian, guardian_phone, child_phone || null, national_id || null,
+        name, guardian, guardian_phone, student_phone || null, national_id || null,
         first.service, first.unit, first.price, reg_date, notes || null,
-        childInput.photo_url || null, childInput.photo_public_id || null,
+        studentInput.photo_url || null, studentInput.photo_public_id || null,
         lesson.teacher_id, lesson.lesson_days,
         lesson.sessions_baseline, lesson.extra_lessons, lesson.session_price, lesson.monthly_fee,
         now, now
       )
 
-      const childId = Number(result.lastInsertRowid)
-      const insertSvc = db.prepare(`INSERT INTO child_services (child_id, service, unit, price, teacher_id, lesson_days, extra_lessons, session_price, teacher_session_rate, created_at, updated_at, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`)
+      const studentId = Number(result.lastInsertRowid)
+      const insertSvc = db.prepare(`INSERT INTO student_services (student_id, service, unit, price, teacher_id, lesson_days, extra_lessons, session_price, teacher_session_rate, created_at, updated_at, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`)
 
       for (const s of enrollments) {
         const sTeacherId = s.teacher_id != null && s.teacher_id !== '' ? Number(s.teacher_id) : null
@@ -171,41 +171,41 @@ ipcMain.handle('children:add', async (_event, childInput) => {
         const sExtraLessons = s.extra_lessons != null ? Number(s.extra_lessons) : 0
         const sSessionPrice = s.session_price != null && s.session_price !== '' ? Number(s.session_price) : null
         const sTeacherSessionRate = s.teacher_session_rate != null && s.teacher_session_rate !== '' ? Number(s.teacher_session_rate) : null
-        insertSvc.run(childId, s.service, s.unit, s.price, sTeacherId, sLessonDays, sExtraLessons, sSessionPrice, sTeacherSessionRate, now, now)
+        insertSvc.run(studentId, s.service, s.unit, s.price, sTeacherId, sLessonDays, sExtraLessons, sSessionPrice, sTeacherSessionRate, now, now)
       }
-      return childId
+      return studentId
     })
     
     const createdId = tx()
-    const createdChild = db.prepare('SELECT * FROM children WHERE id = ?').get(createdId) as Child
-    createdChild.services = db.prepare('SELECT * FROM child_services WHERE child_id = ?').all(createdId) as any[]
-    return createdChild
+    const createdStudent = db.prepare('SELECT * FROM students WHERE id = ?').get(createdId) as Student
+    createdStudent.services = db.prepare('SELECT * FROM student_services WHERE student_id = ?').all(createdId) as any[]
+    return createdStudent
   } catch (error: any) {
-    console.error('Failed to add child:', error)
-    throw new Error(error.message || 'Failed to add child')
+    console.error('Failed to add student:', error)
+    throw new Error(error.message || 'Failed to add student')
   }
 })
 
-ipcMain.handle('children:update', async (_event, { id, patch }) => {
+ipcMain.handle('students:update', async (_event, { id, patch }) => {
   try {
     requireAdmin()
     const db = getDb()
     
     if (!id || !patch) {
-      throw new Error('Child ID and patch data are required')
+      throw new Error('Student ID and patch data are required')
     }
     
-    // Check if child exists (load lesson/fee fields for merge + recompute)
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(id) as any
-    if (!child) {
-      throw new Error('الطفل غير موجود / Child not found')
+    // Check if student exists (load lesson/fee fields for merge + recompute)
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(id) as any
+    if (!student) {
+      throw new Error('الطالب غير موجود / Student not found')
     }
 
     if (patch.guardian_phone !== undefined) {
       validateGuardianPhone(patch.guardian_phone)
     }
-    if (patch.child_phone !== undefined) {
-      validateChildPhone(patch.child_phone)
+    if (patch.student_phone !== undefined) {
+      validateStudentPhone(patch.student_phone)
     }
 
     const tx = db.transaction(() => {
@@ -218,11 +218,11 @@ ipcMain.handle('children:update', async (_event, { id, patch }) => {
         patch.price = enrollments[0].price
       }
 
-      let query = 'UPDATE children SET '
+      let query = 'UPDATE students SET '
       const params: any[] = []
 
       const allowedKeys = [
-        'name', 'guardian', 'guardian_phone', 'child_phone', 'national_id',
+        'name', 'guardian', 'guardian_phone', 'student_phone', 'national_id',
         'service', 'unit', 'price', 'reg_date', 'notes', 'is_active',
         // Feature 004 — directly settable enrollment fields
         'photo_url', 'photo_public_id'
@@ -240,11 +240,11 @@ ipcMain.handle('children:update', async (_event, { id, patch }) => {
       const lessonKeys = ['teacher_id', 'lesson_days', 'sessions_baseline', 'extra_lessons', 'session_price']
       if (lessonKeys.some((k) => patch[k] !== undefined)) {
         const merged = buildLessonFields({
-          teacher_id: patch.teacher_id !== undefined ? patch.teacher_id : child.teacher_id,
-          lesson_days: patch.lesson_days !== undefined ? patch.lesson_days : child.lesson_days,
-          sessions_baseline: patch.sessions_baseline !== undefined ? patch.sessions_baseline : child.sessions_baseline,
-          extra_lessons: patch.extra_lessons !== undefined ? patch.extra_lessons : child.extra_lessons,
-          session_price: patch.session_price !== undefined ? patch.session_price : child.session_price,
+          teacher_id: patch.teacher_id !== undefined ? patch.teacher_id : student.teacher_id,
+          lesson_days: patch.lesson_days !== undefined ? patch.lesson_days : student.lesson_days,
+          sessions_baseline: patch.sessions_baseline !== undefined ? patch.sessions_baseline : student.sessions_baseline,
+          extra_lessons: patch.extra_lessons !== undefined ? patch.extra_lessons : student.extra_lessons,
+          session_price: patch.session_price !== undefined ? patch.session_price : student.session_price,
         })
         for (const [k, v] of Object.entries(merged)) {
           query += `${k} = ?, `
@@ -261,14 +261,14 @@ ipcMain.handle('children:update', async (_event, { id, patch }) => {
       }
 
       if (enrollments) {
-        // A child can now have more than one enrollment with the SAME service name (feature
+        // A student can now have more than one enrollment with the SAME service name (feature
         // 006 — multiple teachers for the same service), so service NAME can no longer
         // disambiguate which payment belongs to which enrollment. Existing rows are matched
         // and updated IN PLACE by id (preserving their id, and therefore every payment's
         // service_id FK, untouched) instead of deleting everything and re-linking by name —
         // that old approach could collapse two same-named enrollments' payments onto a single
-        // service_id and hit payments' UNIQUE(child_id, service_id, month, year) constraint.
-        const existingServices = db.prepare('SELECT id FROM child_services WHERE child_id = ?').all(id) as { id: number }[]
+        // service_id and hit payments' UNIQUE(student_id, service_id, month, year) constraint.
+        const existingServices = db.prepare('SELECT id FROM student_services WHERE student_id = ?').all(id) as { id: number }[]
         const existingIds = new Set(existingServices.map((e) => e.id))
         const incomingIds = new Set(enrollments.filter((s: any) => s.id != null).map((s: any) => Number(s.id)))
 
@@ -276,16 +276,16 @@ ipcMain.handle('children:update', async (_event, { id, patch }) => {
         const removedIds = [...existingIds].filter((eid) => !incomingIds.has(eid))
         if (removedIds.length > 0) {
           const placeholders = removedIds.map(() => '?').join(',')
-          db.prepare(`UPDATE payments SET service_id = NULL WHERE child_id = ? AND service_id IN (${placeholders})`).run(id, ...removedIds)
-          db.prepare(`DELETE FROM child_services WHERE id IN (${placeholders})`).run(...removedIds)
+          db.prepare(`UPDATE payments SET service_id = NULL WHERE student_id = ? AND service_id IN (${placeholders})`).run(id, ...removedIds)
+          db.prepare(`DELETE FROM student_services WHERE id IN (${placeholders})`).run(...removedIds)
         }
 
         const updateSvc = db.prepare(`
-          UPDATE child_services
+          UPDATE student_services
           SET service = ?, unit = ?, price = ?, teacher_id = ?, lesson_days = ?, extra_lessons = ?, session_price = ?, teacher_session_rate = ?, updated_at = ?, synced = 0
-          WHERE id = ? AND child_id = ?
+          WHERE id = ? AND student_id = ?
         `)
-        const insertSvc = db.prepare(`INSERT INTO child_services (child_id, service, unit, price, teacher_id, lesson_days, extra_lessons, session_price, teacher_session_rate, created_at, updated_at, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`)
+        const insertSvc = db.prepare(`INSERT INTO student_services (student_id, service, unit, price, teacher_id, lesson_days, extra_lessons, session_price, teacher_session_rate, created_at, updated_at, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`)
         for (const s of enrollments) {
           const sTeacherId = s.teacher_id != null && s.teacher_id !== '' ? Number(s.teacher_id) : null
           const sLessonDays = Array.isArray(s.lesson_days) ? JSON.stringify(s.lesson_days) : (s.lesson_days || null)
@@ -301,105 +301,105 @@ ipcMain.handle('children:update', async (_event, { id, patch }) => {
         }
 
         // Only brand-new enrollments (no prior id — never had a payment linked to them) fall
-        // back to matching by name, and only among child_services rows that still have no
+        // back to matching by name, and only among student_services rows that still have no
         // payments pointing at them.
         db.prepare(`
           UPDATE payments
           SET service_id = (
-            SELECT cs.id FROM child_services cs
-            WHERE cs.child_id = payments.child_id AND cs.service = payments.service
+            SELECT cs.id FROM student_services cs
+            WHERE cs.student_id = payments.student_id AND cs.service = payments.service
               AND NOT EXISTS (SELECT 1 FROM payments p2 WHERE p2.service_id = cs.id)
             LIMIT 1
           )
-          WHERE child_id = ? AND service_id IS NULL
+          WHERE student_id = ? AND service_id IS NULL
         `).run(id)
       }
     })
     
     tx()
     
-    const updatedChild = db.prepare('SELECT * FROM children WHERE id = ?').get(id) as Child
-    updatedChild.services = db.prepare('SELECT * FROM child_services WHERE child_id = ?').all(id) as any[]
-    return updatedChild
+    const updatedStudent = db.prepare('SELECT * FROM students WHERE id = ?').get(id) as Student
+    updatedStudent.services = db.prepare('SELECT * FROM student_services WHERE student_id = ?').all(id) as any[]
+    return updatedStudent
   } catch (error: any) {
-    console.error('Failed to update child:', error)
-    throw new Error(error.message || 'Failed to update child')
+    console.error('Failed to update student:', error)
+    throw new Error(error.message || 'Failed to update student')
   }
 })
 
-ipcMain.handle('children:deactivate', async (_event, { id }) => {
+ipcMain.handle('students:deactivate', async (_event, { id }) => {
   try {
     requireAdmin()
     const db = getDb()
     
-    const child = db.prepare('SELECT id FROM children WHERE id = ?').get(id)
-    if (!child) {
-      throw new Error('الطفل غير موجود / Child not found')
+    const student = db.prepare('SELECT id FROM students WHERE id = ?').get(id)
+    if (!student) {
+      throw new Error('الطالب غير موجود / Student not found')
     }
     
-    db.prepare('UPDATE children SET is_active = 0, updated_at = ?, synced = 0 WHERE id = ?').run(
+    db.prepare('UPDATE students SET is_active = 0, updated_at = ?, synced = 0 WHERE id = ?').run(
       new Date().toISOString(),
       id
     )
     
     return { ok: true }
   } catch (error: any) {
-    console.error('Failed to deactivate child:', error)
-    throw new Error(error.message || 'Failed to deactivate child')
+    console.error('Failed to deactivate student:', error)
+    throw new Error(error.message || 'Failed to deactivate student')
   }
 })
 
 
-// Hard delete — only allowed for children already deactivated (is_active = 0).
-// All dependent tables reference children(id) with ON DELETE CASCADE, so their
-// rows (services, payments, attendance, ...) are removed with the child.
-ipcMain.handle('children:delete', async (_event, { id }) => {
+// Hard delete — only allowed for students already deactivated (is_active = 0).
+// All dependent tables reference students(id) with ON DELETE CASCADE, so their
+// rows (services, payments, attendance, ...) are removed with the student.
+ipcMain.handle('students:delete', async (_event, { id }) => {
   try {
     requireAdmin()
     const db = getDb()
 
-    const child = db.prepare('SELECT id, is_active FROM children WHERE id = ?').get(id) as any
-    if (!child) {
-      throw new Error('الطفل غير موجود / Child not found')
+    const student = db.prepare('SELECT id, is_active FROM students WHERE id = ?').get(id) as any
+    if (!student) {
+      throw new Error('الطالب غير موجود / Student not found')
     }
-    if (child.is_active !== 0) {
-      throw new Error('لا يمكن حذف طفل نشط — يجب إلغاء تفعيله أولاً / Cannot delete an active child — deactivate first')
+    if (student.is_active !== 0) {
+      throw new Error('لا يمكن حذف طالب نشط — يجب إلغاء تفعيله أولاً / Cannot delete an active student — deactivate first')
     }
 
-    db.prepare('DELETE FROM children WHERE id = ?').run(id)
+    db.prepare('DELETE FROM students WHERE id = ?').run(id)
 
     return { ok: true }
   } catch (error: any) {
-    console.error('Failed to delete child:', error)
-    throw new Error(error.message || 'Failed to delete child')
+    console.error('Failed to delete student:', error)
+    throw new Error(error.message || 'Failed to delete student')
   }
 })
 
 
-ipcMain.handle('children:statement', async (_event, { childId }) => {
+ipcMain.handle('students:statement', async (_event, { studentId }) => {
   try {
     checkAuth()
-    if (!childId) {
-      throw new Error('Child ID is required')
+    if (!studentId) {
+      throw new Error('Student ID is required')
     }
     const db = getDb()
     
-    const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-    if (!child) {
-      throw new Error('الطفل غير موجود / Child not found')
+    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+    if (!student) {
+      throw new Error('الطالب غير موجود / Student not found')
     }
 
     // Resolve the assigned teacher's name for display (feature 004, FR-013).
-    if (child.teacher_id) {
-      const teacher = db.prepare('SELECT name FROM employees WHERE id = ?').get(child.teacher_id) as any
-      child.teacher_name = teacher?.name ?? null
+    if (student.teacher_id) {
+      const teacher = db.prepare('SELECT name FROM employees WHERE id = ?').get(student.teacher_id) as any
+      student.teacher_name = teacher?.name ?? null
     }
 
-    const payments = db.prepare('SELECT * FROM payments WHERE child_id = ?').all(childId) as any[]
+    const payments = db.prepare('SELECT * FROM payments WHERE student_id = ?').all(studentId) as any[]
 
-    return getChildStatement(child, payments, new Date())
+    return getStudentStatement(student, payments, new Date())
   } catch (error: any) {
-    console.error('Failed to get child statement:', error)
-    throw new Error(error.message || 'Failed to get child statement')
+    console.error('Failed to get student statement:', error)
+    throw new Error(error.message || 'Failed to get student statement')
   }
 })

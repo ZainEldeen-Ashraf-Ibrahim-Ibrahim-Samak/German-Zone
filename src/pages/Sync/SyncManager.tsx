@@ -11,9 +11,9 @@ import { useProgress } from '../../hooks/useProgress.js'
 
 const getEntityName = (entity: string, isAr: boolean) => {
   const map: Record<string, { ar: string; en: string }> = {
-    children: { ar: 'الأطفال', en: 'Children' },
-    child_services: { ar: 'خدمات الأطفال', en: 'Child Services' },
-    payments: { ar: 'دفعات الأطفال', en: 'Children Payments' },
+    students: { ar: 'الطلاب', en: 'Students' },
+    student_services: { ar: 'خدمات الطلاب', en: 'Student Services' },
+    payments: { ar: 'دفعات الطلاب', en: 'Students Payments' },
     employees: { ar: 'الموظفين', en: 'Employees' },
     salary_payments: { ar: 'الرواتب', en: 'Salary Payments' },
     expenses: { ar: 'المصروفات', en: 'Expenses' },

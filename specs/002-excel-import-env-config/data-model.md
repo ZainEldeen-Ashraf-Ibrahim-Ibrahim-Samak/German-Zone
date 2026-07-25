@@ -17,13 +17,13 @@ This feature introduces **no new tables**. It maps workbook sheets onto the exis
 
 All sheets: data starts at **row 4**, columns are 1-based with **2 blank lead columns** (first data column = index 3 / "C"). Read formula cells via their `.result`.
 
-### children ← `👶 بيانات الأطفال`
+### children ← `👶 بيانات الطلاب`
 | Col (idx) | Workbook header | → column |
 |-----------|-----------------|----------|
-| 4 (D) | اسم الطفل | name |
+| 4 (D) | اسم الطالب | name |
 | 5 (E) | اسم ولي الأمر | guardian |
 | 6 (F) | رقم هاتف ولي الأمر | guardian_phone |
-| 7 (G) | رقم هاتف الطفل | child_phone |
+| 7 (G) | رقم هاتف الطالب | child_phone |
 | 8 (H) | الرقم القومي | national_id |
 | 9 (I) | الخدمة | service |
 | 10 (J) | الوحدة | unit |
@@ -36,7 +36,7 @@ Defaults: `is_active=1`, `created_at=updated_at=now`, `synced=0`.
 ### payments ← monthly sheets `يناير`…`ديسمبر`
 | Col (idx) | Header | → column |
 |-----------|--------|----------|
-| 4 (D) | اسم الطفل (formula→result) | (match child) |
+| 4 (D) | اسم الطالب (formula→result) | (match child) |
 | 5 (E) | الخدمة | service |
 | 6 (F) | الوحدة | unit |
 | 7 (G) | الكمية | quantity |
@@ -94,7 +94,7 @@ When a required field is missing for an imported record:
 | net_salary | base+housing+transport |
 | actual_paid | month net, else base_salary |
 
-Prefer real values from `👶 بيانات الأطفال` whenever the child exists there.
+Prefer real values from `👶 بيانات الطلاب` whenever the child exists there.
 
 ## Match keys (idempotency / non-destructive)
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useChildrenStore } from '../../store/useChildrenStore.js'
+import { useStudentsStore } from '../../store/useStudentsStore.js'
 import { useAuthStore } from '../../store/useAuthStore.js'
 import { useExport } from '../../hooks/useExport.js'
 import { SearchBar } from '../../components/ui/SearchBar.js'
@@ -13,12 +13,12 @@ import { Card } from '../../components/ui/Card.js'
 import { Alert } from '../../components/ui/Alert.js'
 import { Pagination } from '../../components/ui/Pagination.js'
 import { Modal } from '../../components/ui/Modal.js'
-import type { Child } from '../../types/index.js'
+import type { Student } from '../../types/index.js'
 
 type SortKey = 'id' | 'name' | 'guardian' | 'price' | 'reg_date' | 'is_active'
 type SortOrder = 'asc' | 'desc'
 
-export default function ChildrenList() {
+export default function StudentsList() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
 
@@ -26,40 +26,40 @@ export default function ChildrenList() {
   const isAdmin = user?.role === 'admin'
 
   const {
-    children,
+    students,
     isLoading,
     error,
     filters,
     setFilters,
-    fetchChildren,
-    deactivateChild,
-    deleteChild,
+    fetchStudents,
+    deactivateStudent,
+    deleteStudent,
     clearError,
-  } = useChildrenStore()
+  } = useStudentsStore()
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [sortKey, setSortKey] = useState<SortKey>('id')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
-  
+
   // Deactivate modal state
-  const [deactivateTarget, setDeactivateTarget] = useState<Child | null>(null)
+  const [deactivateTarget, setDeactivateTarget] = useState<Student | null>(null)
   const [isDeactivating, setIsDeactivating] = useState(false)
 
-  // Hard-delete modal state (only offered for inactive children)
-  const [deleteTarget, setDeleteTarget] = useState<Child | null>(null)
+  // Hard-delete modal state (only offered for inactive students)
+  const [deleteTarget, setDeleteTarget] = useState<Student | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Fetch children when filters change
+  // Fetch students when filters change
   useEffect(() => {
-    fetchChildren()
+    fetchStudents()
     setCurrentPage(1)
   }, [filters])
 
   // Sorting logic
-  const sortedChildren = useMemo(() => {
-    return [...children].sort((a, b) => {
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
       const aVal = a[sortKey]
       const bVal = b[sortKey]
 
@@ -78,15 +78,15 @@ export default function ChildrenList() {
 
       return 0
     })
-  }, [children, sortKey, sortOrder, i18n.language])
+  }, [students, sortKey, sortOrder, i18n.language])
 
   // Pagination logic
-  const paginatedChildren = useMemo(() => {
+  const paginatedStudents = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage
-    return sortedChildren.slice(startIndex, startIndex + itemsPerPage)
-  }, [sortedChildren, currentPage, itemsPerPage])
+    return sortedStudents.slice(startIndex, startIndex + itemsPerPage)
+  }, [sortedStudents, currentPage, itemsPerPage])
 
-  const totalPages = Math.ceil(sortedChildren.length / itemsPerPage)
+  const totalPages = Math.ceil(sortedStudents.length / itemsPerPage)
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -97,22 +97,22 @@ export default function ChildrenList() {
     }
   }
 
-  // Handle child deactivation
+  // Handle student deactivation
   const handleConfirmDeactivate = async () => {
     if (!deactivateTarget) return
     setIsDeactivating(true)
-    const success = await deactivateChild(deactivateTarget.id)
+    const success = await deactivateStudent(deactivateTarget.id)
     setIsDeactivating(false)
     if (success) {
       setDeactivateTarget(null)
     }
   }
 
-  // Handle permanent child deletion (inactive children only)
+  // Handle permanent student deletion (inactive students only)
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return
     setIsDeleting(true)
-    const success = await deleteChild(deleteTarget.id)
+    const success = await deleteStudent(deleteTarget.id)
     setIsDeleting(false)
     if (success) {
       setDeleteTarget(null)
@@ -158,9 +158,9 @@ export default function ChildrenList() {
       key: 'index',
       header: t('index'),
       className: 'w-12 text-center',
-      render: (child: Child) => (
+      render: (student: Student) => (
         <span className="font-mono text-slate-400 text-sm">
-          {sortedChildren.findIndex((c) => c.id === child.id) + 1}
+          {sortedStudents.findIndex((c) => c.id === student.id) + 1}
         </span>
       ),
     },
@@ -171,20 +171,20 @@ export default function ChildrenList() {
           onClick={() => handleSort('name')}
           className="flex items-center gap-1 hover:text-slate-900 transition-colors"
         >
-          {t('child_name')} {sortKey === 'name' && (sortOrder === 'asc' ? '▲' : '▼')}
+          {t('student_name')} {sortKey === 'name' && (sortOrder === 'asc' ? '▲' : '▼')}
         </button>
       ),
-      render: (child: Child) => (
+      render: (student: Student) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-            {child.photo_url ? (
-              <img src={child.photo_url} alt={child.name} className="w-full h-full object-cover" />
+            {student.photo_url ? (
+              <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" />
             ) : (
               <span className="text-sm text-slate-300">🧒</span>
             )}
           </div>
-          <div className="font-semibold text-slate-900 hover:text-primary cursor-pointer" onClick={() => navigate(`/children/${child.id}/statement`)}>
-            {child.name}
+          <div className="font-semibold text-slate-900 hover:text-primary cursor-pointer" onClick={() => navigate(`/students/${student.id}/statement`)}>
+            {student.name}
           </div>
         </div>
       ),
@@ -199,21 +199,21 @@ export default function ChildrenList() {
           {t('guardian')} {sortKey === 'guardian' && (sortOrder === 'asc' ? '▲' : '▼')}
         </button>
       ),
-      render: (child: Child) => child.guardian,
+      render: (student: Student) => student.guardian,
     },
     {
       key: 'guardian_phone',
       header: t('guardian_phone'),
-      render: (child: Child) => (
-        <span className="font-mono text-slate-600">{child.guardian_phone}</span>
+      render: (student: Student) => (
+        <span className="font-mono text-slate-600">{student.guardian_phone}</span>
       ),
     },
     {
       key: 'service',
       header: t('service'),
-      render: (child: Child) => {
-        const enrollments = child.services?.length ? child.services : [{ service: child.service, unit: child.unit, price: child.price }];
-        
+      render: (student: Student) => {
+        const enrollments = student.services?.length ? student.services : [{ service: student.service, unit: student.unit, price: student.price }];
+
         return (
           <div className="flex flex-wrap gap-1">
             {enrollments.map((s: any, idx: number) => {
@@ -221,9 +221,9 @@ export default function ChildrenList() {
                 s.service === 'حضانة'
                   ? 'info'
                   : s.service === 'استضافة'
-                  ? 'warning'
-                  : 'success'
-              
+                    ? 'warning'
+                    : 'success'
+
               let label: string = s.service
               if (i18n.language === 'en') {
                 if (s.service === 'حضانة') label = t('services.nursery')
@@ -246,8 +246,8 @@ export default function ChildrenList() {
           {t('price')} {sortKey === 'price' && (sortOrder === 'asc' ? '▲' : '▼')}
         </button>
       ),
-      render: (child: Child) => {
-        const enrollments = child.services?.length ? child.services : [{ service: child.service, unit: child.unit, price: child.price }];
+      render: (student: Student) => {
+        const enrollments = student.services?.length ? student.services : [{ service: student.service, unit: student.unit, price: student.price }];
         return (
           <div className="space-y-1">
             {enrollments.map((s: any, idx: number) => (
@@ -272,8 +272,8 @@ export default function ChildrenList() {
           {t('reg_date')} {sortKey === 'reg_date' && (sortOrder === 'asc' ? '▲' : '▼')}
         </button>
       ),
-      render: (child: Child) => (
-        <span className="font-mono text-slate-500">{child.reg_date}</span>
+      render: (student: Student) => (
+        <span className="font-mono text-slate-500">{student.reg_date}</span>
       ),
     },
     {
@@ -286,9 +286,9 @@ export default function ChildrenList() {
           {t('status')} {sortKey === 'is_active' && (sortOrder === 'asc' ? '▲' : '▼')}
         </button>
       ),
-      render: (child: Child) => (
-        <Badge variant={child.is_active === 1 ? 'success' : 'neutral'}>
-          {child.is_active === 1 ? t('active') : t('inactive')}
+      render: (student: Student) => (
+        <Badge variant={student.is_active === 1 ? 'success' : 'neutral'}>
+          {student.is_active === 1 ? t('active') : t('inactive')}
         </Badge>
       ),
     },
@@ -296,12 +296,12 @@ export default function ChildrenList() {
       key: 'actions',
       header: t('actions'),
       className: 'w-20 text-center',
-      render: (child: Child) => (
+      render: (student: Student) => (
         <div className="flex items-center gap-2 justify-start">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/children/${child.id}/statement`)}
+            onClick={() => navigate(`/students/${student.id}/statement`)}
             title={t('statement')}
           >
             {t('statement')}
@@ -309,7 +309,7 @@ export default function ChildrenList() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/children/${child.id}/details`)}
+            onClick={() => navigate(`/students/${student.id}/details`)}
           >
             {i18n.language === 'ar' ? 'التفاصيل' : 'Details'}
           </Button>
@@ -319,16 +319,16 @@ export default function ChildrenList() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate(`/children/${child.id}/edit`)}
+                onClick={() => navigate(`/students/${student.id}/edit`)}
                 title={t('edit')}
               >
                 {t('edit')}
               </Button>
-              {child.is_active === 1 ? (
+              {student.is_active === 1 ? (
                 <Button
                   variant="danger"
                   size="sm"
-                  onClick={() => setDeactivateTarget(child)}
+                  onClick={() => setDeactivateTarget(student)}
                   title={t('delete')}
                 >
                   {t('delete')}
@@ -337,7 +337,7 @@ export default function ChildrenList() {
                 <Button
                   variant="danger"
                   size="sm"
-                  onClick={() => setDeleteTarget(child)}
+                  onClick={() => setDeleteTarget(student)}
                   title={i18n.language === 'ar' ? 'حذف نهائي' : 'Delete permanently'}
                 >
                   {i18n.language === 'ar' ? 'حذف نهائي' : 'Delete permanently'}
@@ -355,14 +355,14 @@ export default function ChildrenList() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('children')}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t('students')}</h1>
           <p className="text-sm text-slate-500 mt-1">
             {i18n.language === 'ar'
-              ? `إجمالي الأطفال المسجلين: ${children.length}`
-              : `Total children registered: ${children.length}`}
+              ? `إجمالي الطلاب المسجلين: ${students.length}`
+              : `Total students registered: ${students.length}`}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -380,10 +380,10 @@ export default function ChildrenList() {
           >
             📕 {i18n.language === 'ar' ? 'تصدير PDF' : 'PDF Export'}
           </Button>
-          
-          {/* Employees (not only admins) can add children — feature 004, FR-012 */}
-          <Button variant="primary" onClick={() => navigate('/children/new')}>
-            {t('add_child')}
+
+          {/* Employees (not only admins) can add students — feature 004, FR-012 */}
+          <Button variant="primary" onClick={() => navigate('/students/new')}>
+            {t('add_student')}
           </Button>
         </div>
       </div>
@@ -451,13 +451,13 @@ export default function ChildrenList() {
       <div className="space-y-4">
         <Table
           columns={columns}
-          data={paginatedChildren}
+          data={paginatedStudents}
           keyExtractor={(item) => item.id}
           isLoading={isLoading}
           emptyMessage={
             i18n.language === 'ar'
-              ? 'لم يتم العثور على أطفال يطابقون خيارات البحث'
-              : 'No children found matching the search criteria'
+              ? 'لم يتم العثور على طلاب يطابقون خيارات البحث'
+              : 'No students found matching the search criteria'
           }
         />
 
@@ -478,10 +478,10 @@ export default function ChildrenList() {
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
             {i18n.language === 'ar'
-              ? `سيتم إلغاء تفعيل الطفل: ${deactivateTarget?.name}. لن يظهر في القوائم النشطة أو كشوف دفع الشهور القادمة.`
+              ? `سيتم إلغاء تفعيل الطالب: ${deactivateTarget?.name}. لن يظهر في القوائم النشطة أو كشوف دفع الشهور القادمة.`
               : `This will deactivate: ${deactivateTarget?.name}. They will no longer appear in active lists or future billing months.`}
           </p>
-          
+
           <div className="flex justify-end gap-3 pt-2">
             <Button
               variant="outline"
@@ -501,7 +501,7 @@ export default function ChildrenList() {
         </div>
       </Modal>
 
-      {/* Permanent Delete Confirmation Modal (inactive children only) */}
+      {/* Permanent Delete Confirmation Modal (inactive students only) */}
       <Modal
         isOpen={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
@@ -510,8 +510,8 @@ export default function ChildrenList() {
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
             {i18n.language === 'ar'
-              ? `سيتم حذف الطفل "${deleteTarget?.name}" نهائياً مع جميع سجلاته (الخدمات، المدفوعات، الحضور). لا يمكن التراجع عن هذا الإجراء.`
-              : `Child "${deleteTarget?.name}" will be permanently deleted along with all their records (services, payments, attendance). This action cannot be undone.`}
+              ? `سيتم حذف الطالب "${deleteTarget?.name}" نهائياً مع جميع سجلاته (الخدمات، المدفوعات، الحضور). لا يمكن التراجع عن هذا الإجراء.`
+              : `Student "${deleteTarget?.name}" will be permanently deleted along with all their records (services, payments, attendance). This action cannot be undone.`}
           </p>
 
           <div className="flex justify-end gap-3 pt-2">

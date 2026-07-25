@@ -7,7 +7,7 @@ interface AttendanceState {
   isLoading: boolean
   error: string | null
   fetchSheet: (sessionId: number) => Promise<void>
-  recordBulk: (sessionId: number, records: { child_id: number; teacher_id?: number | null; status: string; excuse_notes?: string; teacher_status?: 'present' | 'absent' }[]) => Promise<boolean>
+  recordBulk: (sessionId: number, records: { student_id: number; teacher_id?: number | null; status: string; excuse_notes?: string; teacher_status?: 'present' | 'absent' }[]) => Promise<boolean>
   fetchSummary: (employeeId: number, month: string, year: number) => Promise<void>
   clearError: () => void
 }

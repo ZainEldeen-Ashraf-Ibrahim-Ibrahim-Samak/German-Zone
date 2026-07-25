@@ -120,8 +120,8 @@ ipcMain.handle('branding:reset', () => {
     // Default branding settings
     const defaultBranding = {
       brand_app_name: 'أكاديمية مهند الليثي',
-      brand_org_name: 'مركز مهند الليثي للتوحد ونمو الطفل',
-      brand_tagline: 'رعاية متميزة وتنمية مهارات طفلك',
+      brand_org_name: 'مركز مهند الليثي للتوحد ونمو الطالب',
+      brand_tagline: 'رعاية متميزة وتنمية مهارات طالبك',
       brand_primary_color: '#0f766e',
       brand_accent_color: '#f59e0b',
       brand_phone: '+20 123 456 7890',

@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs'
 import fs from 'node:fs'
 import { getDb } from '../db/connection.js'
 import { getExportHeader, type ExportHeaderData } from './exportHeader.js'
-import { getChildStatement } from './statementService.js'
+import { getStudentStatement } from './statementService.js'
 
 const arabicMonths = [
   'يناير',
@@ -214,8 +214,8 @@ function generateMonthSheet(
 
   // Columns definition
   const headers = lang === 'ar'
-    ? ['اسم الطفل 👶', 'ولي الأمر 👤', 'الهاتف 📞', 'الخدمة ⚙️', 'الوحدة 📦', 'الكمية 🔢', 'السعر 💰', 'الإجمالي 💵', 'المحصل ✅', 'المتأخرات ⚠️', 'الحالة 📊', 'ملاحظات 📝']
-    : ['Child Name 👶', 'Guardian 👤', 'Phone 📞', 'Service ⚙️', 'Unit 📦', 'Qty 🔢', 'Price 💰', 'Total 💵', 'Paid ✅', 'Arrears ⚠️', 'Status 📊', 'Notes 📝']
+    ? ['اسم الطالب 👶', 'ولي الأمر 👤', 'الهاتف 📞', 'الخدمة ⚙️', 'الوحدة 📦', 'الكمية 🔢', 'السعر 💰', 'الإجمالي 💵', 'المحصل ✅', 'المتأخرات ⚠️', 'الحالة 📊', 'ملاحظات 📝']
+    : ['Student Name 👶', 'Guardian 👤', 'Phone 📞', 'Service ⚙️', 'Unit 📦', 'Qty 🔢', 'Price 💰', 'Total 💵', 'Paid ✅', 'Arrears ⚠️', 'Status 📊', 'Notes 📝']
 
   // Headers
   const headerRow = worksheet.getRow(startRow)
@@ -231,9 +231,9 @@ function generateMonthSheet(
   // Fetch payments — filtered to the selected payment IDs when provided (empty/omitted = all)
   const hasSelection = Array.isArray(paymentIds) && paymentIds.length > 0
   const payments = db.prepare(`
-    SELECT p.id, c.name as child_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes
+    SELECT p.id, c.name as student_name, c.guardian, c.guardian_phone, p.service, p.unit, p.quantity, p.price, p.total, p.paid, p.balance, p.status, p.notes
     FROM payments p
-    JOIN children c ON p.child_id = c.id
+    JOIN students c ON p.student_id = c.id
     WHERE p.month = ? AND p.year = ?
     ${hasSelection ? `AND p.id IN (${paymentIds!.map(() => '?').join(',')})` : ''}
   `).all(month, year, ...(hasSelection ? paymentIds! : [])) as any[]
@@ -242,7 +242,7 @@ function generateMonthSheet(
   let currentRow = startRow + 1
   for (const p of payments) {
     const rowValues = [
-      p.child_name,
+      p.student_name,
       p.guardian,
       p.guardian_phone,
       p.service,
@@ -297,20 +297,20 @@ function generateMonthSheet(
   autofitColumns(worksheet)
 }
 
-// Generate children roster sheet
-function generateChildrenSheet(
+// Generate students roster sheet
+function generateStudentsSheet(
   worksheet: ExcelJS.Worksheet,
   workbook: ExcelJS.Workbook,
   brand: ExportHeaderData,
   lang: string
 ) {
   const db = getDb()
-  const title = lang === 'ar' ? 'سجل بيانات الأطفال المسجلين' : 'Children Roster'
+  const title = lang === 'ar' ? 'سجل بيانات الطلاب المسجلين' : 'Students Roster'
   const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, title)
 
   const headers = lang === 'ar'
-    ? ['اسم الطفل', 'ولي الأمر', 'هاتف ولي الأمر', 'هاتف الطفل', 'الرقم القومي', 'الخدمة الأساسية', 'الوحدة المحتسبة', 'السعر المتفق عليه', 'تاريخ التسجيل', 'الحالة', 'ملاحظات']
-    : ['Child Name', 'Guardian', 'Guardian Phone', 'Child Phone', 'National ID', 'Default Service', 'Billing Unit', 'Agreed Price', 'Reg Date', 'Status', 'Notes']
+    ? ['اسم الطالب', 'ولي الأمر', 'هاتف ولي الأمر', 'هاتف الطالب', 'الرقم القومي', 'الخدمة الأساسية', 'الوحدة المحتسبة', 'السعر المتفق عليه', 'تاريخ التسجيل', 'الحالة', 'ملاحظات']
+    : ['Student Name', 'Guardian', 'Guardian Phone', 'Student Phone', 'National ID', 'Default Service', 'Billing Unit', 'Agreed Price', 'Reg Date', 'Status', 'Notes']
 
   const headerRow = worksheet.getRow(startRow)
   headerRow.values = headers
@@ -322,10 +322,10 @@ function generateChildrenSheet(
     cell.alignment = { vertical: 'middle', horizontal: 'center' }
   })
 
-  const children = db.prepare('SELECT name, guardian, guardian_phone, child_phone, national_id, service, unit, price, reg_date, is_active, notes FROM children').all() as any[]
+  const students = db.prepare('SELECT name, guardian, guardian_phone, student_phone, national_id, service, unit, price, reg_date, is_active, notes FROM students').all() as any[]
 
   let currentRow = startRow + 1
-  for (const c of children) {
+  for (const c of students) {
     const statusStr = c.is_active 
       ? (lang === 'ar' ? 'نشط' : 'Active') 
       : (lang === 'ar' ? 'غير نشط' : 'Inactive')
@@ -334,7 +334,7 @@ function generateChildrenSheet(
       c.name,
       c.guardian,
       c.guardian_phone,
-      c.child_phone || '',
+      c.student_phone || '',
       c.national_id || '',
       c.service,
       c.unit,
@@ -689,23 +689,23 @@ function generateExpensesSheet(
   autofitColumns(worksheet)
 }
 
-// Feature 007, FR-007 — the full Child Report: personal info, attendance history, assigned
+// Feature 007, FR-007 — the full Student Report: personal info, attendance history, assigned
 // teacher(s), enrolled services, computed attendance percentage, payment history, and notes, all
-// in one document (distinct from generateChildStatementSheet below, which covers only the
+// in one document (distinct from generateStudentStatementSheet below, which covers only the
 // financial/payment ledger for the Financial Transactions Report).
-function generateChildReportSheet(
+function generateStudentReportSheet(
   worksheet: ExcelJS.Worksheet,
   workbook: ExcelJS.Workbook,
   brand: ExportHeaderData,
-  childId: number,
+  studentId: number,
   lang: string
 ) {
   const db = getDb()
   const isAr = lang === 'ar'
-  const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-  if (!child) throw new Error(`Child not found with ID: ${childId}`)
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+  if (!student) throw new Error(`Student not found with ID: ${studentId}`)
 
-  const title = isAr ? `تقرير الطفل الشامل: ${child.name}` : `Full Child Report: ${child.name}`
+  const title = isAr ? `تقرير الطالب الشامل: ${student.name}` : `Full Student Report: ${student.name}`
   let row = writeBrandingHeader(worksheet, workbook, brand, lang, title)
 
   const sectionTitle = (text: string) => {
@@ -726,21 +726,21 @@ function generateChildReportSheet(
 
   // ── Personal Information ──────────────────────────────────────────────
   sectionTitle(isAr ? '📋 البيانات الشخصية' : '📋 Personal Information')
-  kv(isAr ? 'الاسم' : 'Name', child.name)
-  kv(isAr ? 'ولي الأمر' : 'Guardian', child.guardian)
-  kv(isAr ? 'هاتف ولي الأمر' : 'Guardian Phone', child.guardian_phone)
-  kv(isAr ? 'تاريخ التسجيل' : 'Registration Date', child.reg_date)
-  kv(isAr ? 'الحالة' : 'Status', child.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive'))
+  kv(isAr ? 'الاسم' : 'Name', student.name)
+  kv(isAr ? 'ولي الأمر' : 'Guardian', student.guardian)
+  kv(isAr ? 'هاتف ولي الأمر' : 'Guardian Phone', student.guardian_phone)
+  kv(isAr ? 'تاريخ التسجيل' : 'Registration Date', student.reg_date)
+  kv(isAr ? 'الحالة' : 'Status', student.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'غير نشط' : 'Inactive'))
   row += 1
 
   // ── Enrolled Services & Assigned Teacher(s) ─────────────────────────────
   sectionTitle(isAr ? '🏷️ الخدمات المشترك بها والمعلمون' : '🏷️ Enrolled Services & Assigned Teacher(s)')
   const services = db.prepare(`
     SELECT cs.service, cs.unit, cs.price, e.name as teacher_name
-    FROM child_services cs
+    FROM student_services cs
     LEFT JOIN employees e ON e.id = cs.teacher_id
-    WHERE cs.child_id = ?
-  `).all(childId) as any[]
+    WHERE cs.student_id = ?
+  `).all(studentId) as any[]
   const svcHeaderRow = worksheet.getRow(row)
   svcHeaderRow.values = isAr ? ['الخدمة', 'الوحدة', 'السعر', 'المعلم'] : ['Service', 'Unit', 'Price', 'Teacher']
   svcHeaderRow.eachCell((cell) => {
@@ -767,22 +767,22 @@ function generateChildReportSheet(
       ss.session_date as attendance_date,
       e.name as teacher_name,
       ar.teacher_status,
-      ar.status as child_status
+      ar.status as student_status
     FROM attendance_records ar
     JOIN scheduled_sessions ss ON ss.id = ar.session_id
     LEFT JOIN employees e ON e.id = ar.attended_teacher_id
-    WHERE ar.child_id = ?
+    WHERE ar.student_id = ?
     ORDER BY ss.session_date DESC
-  `).all(childId) as any[]
+  `).all(studentId) as any[]
 
-  const attendedCount = attendanceRows.filter((r) => r.child_status === 'attended').length
+  const attendedCount = attendanceRows.filter((r) => r.student_status === 'attended').length
   const attendancePct = attendanceRows.length > 0 ? Math.round((attendedCount / attendanceRows.length) * 100) : null
   kv(isAr ? 'نسبة الحضور' : 'Attendance Percentage', attendancePct != null ? `${attendancePct}%` : (isAr ? 'غير متاح' : 'N/A'))
 
   const attHeaderRow = worksheet.getRow(row)
   attHeaderRow.values = isAr
-    ? ['التاريخ', 'المعلم', 'حالة المعلم', 'حالة الطفل']
-    : ['Date', 'Teacher', 'Teacher Status', 'Child Status']
+    ? ['التاريخ', 'المعلم', 'حالة المعلم', 'حالة الطالب']
+    : ['Date', 'Teacher', 'Teacher Status', 'Student Status']
   attHeaderRow.eachCell((cell) => {
     cell.font = { name: FONT_FAMILY, size: 10, bold: true }
     cell.fill = SUBHEADER_FILL
@@ -790,7 +790,7 @@ function generateChildReportSheet(
   })
   row += 1
   for (const a of attendanceRows) {
-    worksheet.getRow(row).values = [a.attendance_date, a.teacher_name || '', a.teacher_status || '', a.child_status]
+    worksheet.getRow(row).values = [a.attendance_date, a.teacher_name || '', a.teacher_status || '', a.student_status]
     row += 1
   }
   if (attendanceRows.length === 0) {
@@ -803,9 +803,9 @@ function generateChildReportSheet(
   // ── Payment History ──────────────────────────────────────────────────
   sectionTitle(isAr ? '💰 السجل المالي' : '💰 Payment History')
   const existingPayments = db.prepare(
-    'SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE child_id = ?'
-  ).all(childId) as any[]
-  const statement = getChildStatement(child, existingPayments, new Date())
+    'SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE student_id = ?'
+  ).all(studentId) as any[]
+  const statement = getStudentStatement(student, existingPayments, new Date())
 
   const payHeaderRow = worksheet.getRow(row)
   payHeaderRow.values = isAr
@@ -830,30 +830,30 @@ function generateChildReportSheet(
 
   // ── Notes ────────────────────────────────────────────────────────────
   sectionTitle(isAr ? '📝 ملاحظات' : '📝 Notes')
-  worksheet.getCell(`A${row}`).value = child.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.')
+  worksheet.getCell(`A${row}`).value = student.notes || (isAr ? 'لا توجد ملاحظات.' : 'No notes.')
   worksheet.getCell(`A${row}`).font = { name: FONT_FAMILY, size: 10 }
   worksheet.mergeCells(`A${row}:F${row}`)
 
   autofitColumns(worksheet)
 }
 
-// Generate single child statement sheet
-function generateChildStatementSheet(
+// Generate single student statement sheet
+function generateStudentStatementSheet(
   worksheet: ExcelJS.Worksheet,
   workbook: ExcelJS.Workbook,
   brand: ExportHeaderData,
-  childId: number,
+  studentId: number,
   lang: string
 ) {
   const db = getDb()
-  const child = db.prepare('SELECT * FROM children WHERE id = ?').get(childId) as any
-  if (!child) {
-    throw new Error(`Child not found with ID: ${childId}`)
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any
+  if (!student) {
+    throw new Error(`Student not found with ID: ${studentId}`)
   }
 
   const title = lang === 'ar'
-    ? `كشف حساب الطفل: ${child.name}`
-    : `Account Statement: ${child.name}`
+    ? `كشف حساب الطالب: ${student.name}`
+    : `Account Statement: ${student.name}`
 
   const startRow = writeBrandingHeader(worksheet, workbook, brand, lang, title)
 
@@ -861,16 +861,16 @@ function generateChildStatementSheet(
   const detailsRow1 = worksheet.getRow(startRow)
   detailsRow1.height = 20
   detailsRow1.getCell(1).value = lang === 'ar' ? 'اسم ولي الأمر:' : 'Guardian:'
-  detailsRow1.getCell(2).value = child.guardian
+  detailsRow1.getCell(2).value = student.guardian
   detailsRow1.getCell(4).value = lang === 'ar' ? 'الهاتف:' : 'Phone:'
-  detailsRow1.getCell(5).value = child.guardian_phone
+  detailsRow1.getCell(5).value = student.guardian_phone
   
   const detailsRow2 = worksheet.getRow(startRow + 1)
   detailsRow2.height = 20
   detailsRow2.getCell(1).value = lang === 'ar' ? 'الخدمة الأساسية:' : 'Service:'
-  detailsRow2.getCell(2).value = child.service
+  detailsRow2.getCell(2).value = student.service
   detailsRow2.getCell(4).value = lang === 'ar' ? 'تاريخ التسجيل:' : 'Reg Date:'
-  detailsRow2.getCell(5).value = child.reg_date
+  detailsRow2.getCell(5).value = student.reg_date
 
   // Styling sub-header labels
   for (const r of [startRow, startRow + 1]) {
@@ -896,9 +896,9 @@ function generateChildStatementSheet(
     cell.alignment = { vertical: 'middle', horizontal: 'center' }
   })
 
-  // Get historical child payments via statement service
-  const existingPayments = db.prepare('SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE child_id = ?').all(childId) as any[]
-  const statement = getChildStatement(child, existingPayments, new Date())
+  // Get historical student payments via statement service
+  const existingPayments = db.prepare('SELECT month, year, service, unit, quantity, price, total, paid, balance, status, notes FROM payments WHERE student_id = ?').all(studentId) as any[]
+  const statement = getStudentStatement(student, existingPayments, new Date())
 
   let currentRow = tableHeaderRowIdx + 1
   for (const p of statement.rows) {
@@ -953,11 +953,11 @@ function translateMonthName(mAr: string, lang: string): string {
 
 // Main excel builder handler mapping to paths
 export async function buildExcelFile(
-  type: 'full' | 'month' | 'child' | 'childReport' | 'salaries' | 'expenses' | 'employees' | 'payrollReport',
+  type: 'full' | 'month' | 'student' | 'studentReport' | 'salaries' | 'expenses' | 'employees' | 'payrollReport',
   params: any,
   savePath: string
 ): Promise<void> {
-  const { month, year, childId, lang = 'ar' } = params
+  const { month, year, studentId, lang = 'ar' } = params
   const workbook = new ExcelJS.Workbook()
   const brand = getExportHeader()
 
@@ -974,14 +974,14 @@ export async function buildExcelFile(
     generatePayrollReportSheet(ws, workbook, brand, { month: Number(params.month), year: Number(params.year) }, lang)
   }
 
-  else if (type === 'childReport') {
-    const ws = workbook.addWorksheet(lang === 'ar' ? 'تقرير الطفل' : 'Child Report')
-    generateChildReportSheet(ws, workbook, brand, Number(childId), lang)
+  else if (type === 'studentReport') {
+    const ws = workbook.addWorksheet(lang === 'ar' ? 'تقرير الطالب' : 'Student Report')
+    generateStudentReportSheet(ws, workbook, brand, Number(studentId), lang)
   }
 
-  else if (type === 'child') {
+  else if (type === 'student') {
     const ws = workbook.addWorksheet(lang === 'ar' ? 'كشف الحساب' : 'Statement')
-    generateChildStatementSheet(ws, workbook, brand, Number(childId), lang)
+    generateStudentStatementSheet(ws, workbook, brand, Number(studentId), lang)
   }
   
   else if (type === 'salaries') {
@@ -1054,9 +1054,9 @@ export async function buildExcelFile(
     }
     autofitColumns(wsDash)
 
-    // 2. Children list tab
-    const wsKids = workbook.addWorksheet(lang === 'ar' ? 'الأطفال' : 'Children')
-    generateChildrenSheet(wsKids, workbook, brand, lang)
+    // 2. Students list tab
+    const wsKids = workbook.addWorksheet(lang === 'ar' ? 'الطلاب' : 'Students')
+    generateStudentsSheet(wsKids, workbook, brand, lang)
 
     // 3. Salaries tab
     const wsSal = workbook.addWorksheet(lang === 'ar' ? 'الرواتب' : 'Salaries')

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 /**
  * Unit tests for buildLessonFields normalization (feature 004, FR-008–FR-011).
- * Replicates the private buildLessonFields() in electron/ipc/childrenIPC.ts.
+ * Replicates the private buildLessonFields() in electron/ipc/studentsIPC.ts.
  * Test this file whenever that function changes to keep parity.
  */
 

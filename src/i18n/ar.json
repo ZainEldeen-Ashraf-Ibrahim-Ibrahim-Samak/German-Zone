@@ -2,7 +2,7 @@
   "translation": {
     "app_name": "أكاديمية مهند الليثي",
     "dashboard": "لوحة القيادة",
-    "children": "الأطفال",
+    "students": "الطلاب",
     "payments": "المدفوعات",
     "generate_daily_payments": "توليد مطالبات اليوم",
     "daily_billing": "الفواتير اليومية",
@@ -59,9 +59,11 @@
       "dec": "ديسمبر"
     },
     "services": {
-      "nursery": "حضانة",
-      "hosting": "استضافة",
-      "session": "جلسة"
+      "a1": "A1",
+      "a2": "A2",
+      "b1": "B1",
+      "b2": "B2",
+      "speaking": "جلسات محادثة"
     },
     "units": {
       "month": "شهر",
@@ -69,10 +71,10 @@
       "hour": "ساعة",
       "session": "جلسة"
     },
-    "child_name": "اسم الطفل",
+    "student_name": "اسم الطالب",
     "guardian": "ولي الأمر",
     "guardian_phone": "هاتف ولي الأمر",
-    "child_phone": "هاتف الطفل",
+    "student_phone": "هاتف الطالب",
     "national_id": "الرقم القومي",
     "price": "السعر",
     "reg_date": "تاريخ التسجيل",
@@ -80,17 +82,17 @@
     "status": "الحالة",
     "active_only": "نشط فقط",
     "all_records": "كل السجلات",
-    "deactivate_confirm": "هل أنت متأكد من إلغاء تفعيل هذا الطفل؟",
-    "child_details": "تفاصيل الطفل",
+    "deactivate_confirm": "هل أنت متأكد من إلغاء تفعيل هذا الطالب؟",
+    "student_details": "تفاصيل الطالب",
     "statement": "كشف الحساب",
-    "add_child": "إضافة طفل",
-    "edit_child": "تعديل بيانات الطفل",
+    "add_student": "إضافة طالب",
+    "edit_student": "تعديل بيانات الطالب",
     "invoiced": "المطلوب سداده",
     "collected": "المحصل",
     "arrears": "المتأخرات",
     "generate_payments": "توليد مطالبات الشهر",
     "bulk_pay_selected": "سداد كامل للمحددين",
-    "no_payments": "لا توجد مطالبات مسجلة لهذا الشهر. اضغط على الزر لتوليدها تلقائياً للأطفال النشطين.",
+    "no_payments": "لا توجد مطالبات مسجلة لهذا الشهر. اضغط على الزر لتوليدها تلقائياً للطلاب النشطين.",
     "select_month": "اختر الشهر",
     "select_year": "اختر السنة",
     "index": "م",
@@ -116,8 +118,8 @@
     "digits_optional": "14 رقماً، اختياري",
     "back_to_list": "عودة للقائمة",
     "enrolled_services": "الخدمات المشترك بها",
-    "child_phone_own": "رقم هاتف الطفل الخاص",
-    "child_phone_placeholder": "رقم هاتف الطفل الخاص (مثال: 010... أو +2010...)",
+    "student_phone_own": "رقم هاتف الطالب الخاص",
+    "student_phone_placeholder": "رقم هاتف الطالب الخاص (مثال: 010... أو +2010...)",
     "guardian_phone_placeholder": "رقم الهاتف المحمول (مثال: 010... أو +2010...)",
     "check_updates": "التحقق من التحديثات",
     "checking": "جاري التحقق...",
@@ -197,7 +199,7 @@
     "service_price_hourly": "السعر بالساعة (جنيه)",
     "service_builtin_badge": "افتراضية",
     "service_custom_badge": "مخصصة",
-    "delete_service_confirm": "حذف هذه الخدمة؟ يجب إعادة تسجيل الأطفال المشتركين فيها أولاً.",
+    "delete_service_confirm": "حذف هذه الخدمة؟ يجب إعادة تسجيل الطلاب المشتركين فيها أولاً.",
     "sessions_page_title": "الجلسات",
     "add_session": "إضافة جلسة",
     "edit_session": "تعديل الجلسة",
@@ -221,6 +223,6 @@
     "prorate_adjust_hint": "يمكنك تعديل هذا المبلغ",
     "confirm_first_payment": "تأكيد الدفعة الأولى",
     "uploading_photo": "جارٍ رفع الصورة...",
-    "photo_upload_failed": "فشل رفع الصورة — تم حفظ الطفل بدون صورة"
+    "photo_upload_failed": "فشل رفع الصورة — تم حفظ الطالب بدون صورة"
   }
 }

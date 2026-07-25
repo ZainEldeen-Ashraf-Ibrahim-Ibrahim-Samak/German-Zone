@@ -55,7 +55,7 @@ export default function MonthlyPayments() {
 
   const {
     payments,
-    byChild,
+    byStudent,
     summary,
     isLoading,
     error,
@@ -66,7 +66,7 @@ export default function MonthlyPayments() {
     generatePayments,
     updatePayment,
     bulkPay,
-    deleteChildPayments,
+    deleteStudentPayments,
     deleteSelectedPayments,
     deleteAllPayments,
     clearError,
@@ -114,14 +114,14 @@ export default function MonthlyPayments() {
     }))
   }, [])
 
-  const filteredByChild = useMemo(() => {
-    let data = byChild ?? []
-    // Name filter: match child name or guardian name
+  const filteredByStudent = useMemo(() => {
+    let data = byStudent ?? []
+    // Name filter: match student name or guardian name
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
       data = data.filter((g: any) =>
-        g.child_name?.toLowerCase().includes(q) ||
-        g.child_guardian?.toLowerCase().includes(q)
+        g.student_name?.toLowerCase().includes(q) ||
+        g.student_guardian?.toLowerCase().includes(q)
       )
     }
     // Phone filter: digits-only partial match
@@ -129,7 +129,7 @@ export default function MonthlyPayments() {
       const digits = phoneQuery.trim().replace(/\D/g, '')
       if (digits.length >= 3) {
         data = data.filter((g: any) => {
-          const phone = (g.child_guardian_phone ?? '').replace(/\D/g, '')
+          const phone = (g.student_guardian_phone ?? '').replace(/\D/g, '')
           return phone.includes(digits)
         })
       }
@@ -138,7 +138,7 @@ export default function MonthlyPayments() {
       data = data.filter((g: any) => g.status === statusFilter)
     }
     return data
-  }, [byChild, searchQuery, phoneQuery, statusFilter])
+  }, [byStudent, searchQuery, phoneQuery, statusFilter])
 
   const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setPeriod(e.target.value, currentYear)
@@ -255,8 +255,8 @@ export default function MonthlyPayments() {
           <h1 className="text-2xl font-bold text-slate-900">{t('payments')}</h1>
           <p className="text-sm text-slate-500 mt-1">
             {i18n.language === 'ar'
-              ? 'متابعة سداد اشتراكات ومطالبات الأطفال الشهرية.'
-              : 'Track and record monthly child billing and collections.'}
+              ? 'متابعة سداد اشتراكات ومطالبات الطلاب الشهرية.'
+              : 'Track and record monthly student billing and collections.'}
           </p>
         </div>
 
@@ -338,7 +338,7 @@ export default function MonthlyPayments() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isAr ? 'بحث باسم الطفل أو الأب…' : 'Search by child or father name…'}
+                placeholder={isAr ? 'بحث باسم الطالب أو الأب…' : 'Search by student or father name…'}
                 className="w-full rounded-lg border border-slate-300 bg-white py-2 ps-9 pe-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
               />
               {searchQuery && (
@@ -379,32 +379,31 @@ export default function MonthlyPayments() {
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                  statusFilter === s
-                    ? s === 'all'
-                      ? 'bg-slate-700 text-white border-slate-700'
-                      : s === 'paid'
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${statusFilter === s
+                  ? s === 'all'
+                    ? 'bg-slate-700 text-white border-slate-700'
+                    : s === 'paid'
                       ? 'bg-emerald-600 text-white border-emerald-600'
                       : s === 'partial'
-                      ? 'bg-amber-500 text-white border-amber-500'
-                      : 'bg-red-500 text-white border-red-500'
-                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-                }`}
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-red-500 text-white border-red-500'
+                  : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                  }`}
               >
                 {s === 'all'
                   ? isAr ? 'الكل' : 'All'
                   : s === 'paid'
-                  ? isAr ? 'مدفوع' : 'Paid'
-                  : s === 'partial'
-                  ? isAr ? 'جزئي' : 'Partial'
-                  : isAr ? 'غير مدفوع' : 'Unpaid'}
+                    ? isAr ? 'مدفوع' : 'Paid'
+                    : s === 'partial'
+                      ? isAr ? 'جزئي' : 'Partial'
+                      : isAr ? 'غير مدفوع' : 'Unpaid'}
               </button>
             ))}
             {(searchQuery || phoneQuery || statusFilter !== 'all') && (
               <span className="text-xs text-slate-400 ms-1">
                 {isAr
-                  ? `${filteredByChild.length} من ${byChild?.length ?? 0}`
-                  : `${filteredByChild.length} of ${byChild?.length ?? 0}`}
+                  ? `${filteredByStudent.length} من ${byStudent?.length ?? 0}`
+                  : `${filteredByStudent.length} of ${byStudent?.length ?? 0}`}
               </span>
             )}
           </div>
@@ -476,7 +475,7 @@ export default function MonthlyPayments() {
                         className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
                       />
                     </th>
-                    <th scope="col" className="px-4 py-3 text-start font-semibold">{t('child_name')}</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">{t('student_name')}</th>
                     <th scope="col" className="px-4 py-3 text-start font-semibold">{t('service')}</th>
                     <th scope="col" className="px-4 py-3 text-start font-semibold">{t('price')}</th>
                     <th scope="col" className="px-4 py-3 text-start font-semibold">{i18n.language === 'ar' ? 'الكمية' : 'Qty'}</th>
@@ -490,33 +489,33 @@ export default function MonthlyPayments() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredByChild && filteredByChild.length > 0 ? filteredByChild.map((childGroup) => {
-                    const childPaymentIds = childGroup.services.map((s: any) => s.id)
-                    const isAllSelected = childPaymentIds.every((id: number) => selectedIds.includes(id))
-                    
-                    const handleToggleChildSelect = () => {
+                  {filteredByStudent && filteredByStudent.length > 0 ? filteredByStudent.map((studentGroup) => {
+                    const studentPaymentIds = studentGroup.services.map((s: any) => s.id)
+                    const isAllSelected = studentPaymentIds.every((id: number) => selectedIds.includes(id))
+
+                    const handleToggleStudentSelect = () => {
                       if (isAllSelected) {
-                        setSelectedIds(prev => prev.filter(id => !childPaymentIds.includes(id)))
+                        setSelectedIds(prev => prev.filter(id => !studentPaymentIds.includes(id)))
                       } else {
-                        setSelectedIds(prev => [...new Set([...prev, ...childPaymentIds])])
+                        setSelectedIds(prev => [...new Set([...prev, ...studentPaymentIds])])
                       }
                     }
 
-                    const totalExpectedSessions = childGroup.totalExpectedSessions
-                    const totalExpectedPayment = childGroup.totalExpectedPayment
+                    const totalExpectedSessions = studentGroup.totalExpectedSessions
+                    const totalExpectedPayment = studentGroup.totalExpectedPayment
                     // Expected total minus what's been collected this month minus any credit
                     // carried in from prior months — how much more is needed to cover the month.
-                    const remainingToPay = childGroup.remainingAfterWallet
+                    const remainingToPay = studentGroup.remainingAfterWallet
 
                     return (
-                      <React.Fragment key={childGroup.child_id}>
+                      <React.Fragment key={studentGroup.student_id}>
                         <tr className="bg-primary/5">
                           <td colSpan={12} className="px-4 py-2">
                             <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
                               <span>
                                 <span className="font-semibold text-slate-500">{isAr ? 'إجمالي الجلسات المتوقعة: ' : 'Total Expected Sessions: '}</span>
                                 <span className="font-bold text-slate-800">
-                                  {childGroup.totalSessions} {isAr ? 'من' : 'of'} {totalExpectedSessions}
+                                  {studentGroup.totalSessions} {isAr ? 'من' : 'of'} {totalExpectedSessions}
                                 </span>
                               </span>
                               <span>
@@ -525,8 +524,8 @@ export default function MonthlyPayments() {
                               </span>
                               <span>
                                 <span className="font-semibold text-slate-500">{isAr ? 'رصيد المحفظة: ' : 'Wallet Balance: '}</span>
-                                {childGroup.walletCredit > 0 ? (
-                                  <span className="font-bold text-emerald-700">{formatCurrency(childGroup.walletCredit)}</span>
+                                {studentGroup.walletCredit > 0 ? (
+                                  <span className="font-bold text-emerald-700">{formatCurrency(studentGroup.walletCredit)}</span>
                                 ) : (
                                   <span className="font-bold text-slate-400">{isAr ? 'لا يوجد رصيد في المحفظة' : 'Nothing in wallet'}</span>
                                 )}
@@ -544,50 +543,50 @@ export default function MonthlyPayments() {
                           <td className="px-4 py-3 text-center">
                             <input
                               type="checkbox"
-                              checked={isAllSelected && childPaymentIds.length > 0}
-                              onChange={handleToggleChildSelect}
+                              checked={isAllSelected && studentPaymentIds.length > 0}
+                              onChange={handleToggleStudentSelect}
                               className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
                             />
                           </td>
                           <td className="px-4 py-3 text-start">
                             <div className="font-bold text-slate-900 whitespace-nowrap">
-                              {childGroup.child_guardian
-                                ? `${childGroup.child_name} / ${childGroup.child_guardian}`
-                                : childGroup.child_name}
+                              {studentGroup.student_guardian
+                                ? `${studentGroup.student_name} / ${studentGroup.student_guardian}`
+                                : studentGroup.student_name}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-500 font-semibold" colSpan={4}>
-                            {i18n.language === 'ar' ? `إجمالي الطفل (${childGroup.services.length} خدمات)` : `Child Total (${childGroup.services.length} services)`}
+                            {i18n.language === 'ar' ? `إجمالي الطالب (${studentGroup.services.length} خدمات)` : `Student Total (${studentGroup.services.length} services)`}
                           </td>
                           <td className="px-4 py-3 font-mono font-bold text-slate-800 whitespace-nowrap text-start">
-                            {formatCurrency(childGroup.totalInvoiced)}
+                            {formatCurrency(studentGroup.totalInvoiced)}
                           </td>
                           <td className="px-4 py-3 font-mono font-bold text-slate-800 whitespace-nowrap text-start">
-                            {formatCurrency(childGroup.totalCollected)}
+                            {formatCurrency(studentGroup.totalCollected)}
                           </td>
                           <td className="px-4 py-3 font-mono whitespace-nowrap text-start">
-                            {childGroup.balance < 0 ? (
+                            {studentGroup.balance < 0 ? (
                               <span className="text-emerald-600 font-bold">
-                                {formatCurrency(Math.abs(childGroup.balance))} ({i18n.language === 'ar' ? 'رصيد' : 'Credit'})
+                                {formatCurrency(Math.abs(studentGroup.balance))} ({i18n.language === 'ar' ? 'رصيد' : 'Credit'})
                               </span>
-                            ) : childGroup.balance > 0 ? (
-                              <span className="text-red-600 font-bold">{formatCurrency(childGroup.balance)}</span>
+                            ) : studentGroup.balance > 0 ? (
+                              <span className="text-red-600 font-bold">{formatCurrency(studentGroup.balance)}</span>
                             ) : (
                               <span className="text-slate-400 font-bold">0.00</span>
                             )}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-start">
-                            {getStatusBadge(childGroup.status)}
+                            {getStatusBadge(studentGroup.status)}
                           </td>
                           <td colSpan={2} className="px-4 py-3 text-center">
-                            {isAdmin && childGroup.child_is_active === 0 && (
+                            {isAdmin && studentGroup.student_is_active === 0 && (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 className="text-red-500 hover:text-red-700 hover:bg-red-50 text-xs py-1 h-auto font-semibold"
                                 onClick={() => {
-                                  if (window.confirm(isAr ? `هل أنت متأكد من حذف مطالبات ${childGroup.child_name} لهذا الشهر؟` : `Are you sure you want to delete payments for ${childGroup.child_name} for this month?`)) {
-                                    deleteChildPayments(childGroup.child_id)
+                                  if (window.confirm(isAr ? `هل أنت متأكد من حذف مطالبات ${studentGroup.student_name} لهذا الشهر؟` : `Are you sure you want to delete payments for ${studentGroup.student_name} for this month?`)) {
+                                    deleteStudentPayments(studentGroup.student_id)
                                   }
                                 }}
                               >
@@ -599,7 +598,7 @@ export default function MonthlyPayments() {
                         <tr className="bg-white">
                           <td colSpan={12} className="px-4 pb-2 pt-0">
                             <div className="flex flex-wrap gap-2">
-                              {childGroup.services.map((payment: any) => (
+                              {studentGroup.services.map((payment: any) => (
                                 <div
                                   key={payment.id}
                                   className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 flex items-center gap-2"
@@ -616,7 +615,7 @@ export default function MonthlyPayments() {
                             </div>
                           </td>
                         </tr>
-                        {childGroup.services.map((payment: any) => (
+                        {studentGroup.services.map((payment: any) => (
                           <PaymentRow
                             key={payment.id}
                             payment={payment}
@@ -671,11 +670,11 @@ export default function MonthlyPayments() {
         <p className="text-sm text-slate-600">
           {confirmDeleteMode === 'selected'
             ? (isAr
-                ? `سيتم حذف ${selectedIds.length} مطالبة نهائياً، بما في ذلك أي دفعات جزئية مسجلة عليها. لا يمكن التراجع عن هذا الإجراء.`
-                : `This will permanently delete ${selectedIds.length} payment record${selectedIds.length !== 1 ? 's' : ''}, including any partial-payment installments recorded on them. This cannot be undone.`)
+              ? `سيتم حذف ${selectedIds.length} مطالبة نهائياً، بما في ذلك أي دفعات جزئية مسجلة عليها. لا يمكن التراجع عن هذا الإجراء.`
+              : `This will permanently delete ${selectedIds.length} payment record${selectedIds.length !== 1 ? 's' : ''}, including any partial-payment installments recorded on them. This cannot be undone.`)
             : (isAr
-                ? `سيتم حذف جميع مطالبات ${monthOptions.find(m => m.value === currentMonth)?.label ?? currentMonth} ${currentYear} (${payments.length} مطالبة) نهائياً، بما في ذلك أي دفعات جزئية مسجلة عليها. لا يمكن التراجع عن هذا الإجراء.`
-                : `This will permanently delete ALL payments for ${monthOptions.find(m => m.value === currentMonth)?.label ?? currentMonth} ${currentYear} (${payments.length} record${payments.length !== 1 ? 's' : ''}), including any partial-payment installments recorded on them. This cannot be undone.`)}
+              ? `سيتم حذف جميع مطالبات ${monthOptions.find(m => m.value === currentMonth)?.label ?? currentMonth} ${currentYear} (${payments.length} مطالبة) نهائياً، بما في ذلك أي دفعات جزئية مسجلة عليها. لا يمكن التراجع عن هذا الإجراء.`
+              : `This will permanently delete ALL payments for ${monthOptions.find(m => m.value === currentMonth)?.label ?? currentMonth} ${currentYear} (${payments.length} record${payments.length !== 1 ? 's' : ''}), including any partial-payment installments recorded on them. This cannot be undone.`)}
         </p>
       </Modal>
     </div>

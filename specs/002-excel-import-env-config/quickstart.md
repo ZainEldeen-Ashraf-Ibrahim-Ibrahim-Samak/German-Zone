@@ -44,7 +44,7 @@ Re-running the import on the same file imports **0** new rows (everything report
 
 ## 4. Verify
 
-- **Children**: master roster (`👶 بيانات الأطفال`) appears with guardian, phone, unit, price.
+- **Children**: master roster (`👶 بيانات الطلاب`) appears with guardian, phone, unit, price.
 - **Payments**: each of the 12 month sheets produced a payment per listed child; status recomputed from paid vs total.
 - **Salaries**: 11 employees with base/allowances/net; monthly salary payments present.
 - **Expenses**: each item × non-zero month present.

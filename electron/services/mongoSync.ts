@@ -137,14 +137,14 @@ export function getConnectionStatus(): { connected: boolean; error: string | nul
 
 const sharedOptions: mongoose.SchemaOptions = { versionKey: false, _id: false }
 
-// ── Children ─────────────────────────────────────────────────────────────────
+// ── Students ─────────────────────────────────────────────────────────────────
 
-const childSchema = new Schema({
+const studentSchema = new Schema({
   id: { type: Number, required: true, unique: true },
   name: String,
   guardian: String,
   guardian_phone: String,
-  child_phone: String,
+  student_phone: String,
   national_id: String,
   service: String,
   unit: String,
@@ -166,14 +166,14 @@ const childSchema = new Schema({
   synced: Number
 }, sharedOptions)
 
-export const ChildModel: Model<any> = mongoose.models['sync_children'] ||
-  mongoose.model('sync_children', childSchema)
+export const StudentModel: Model<any> = mongoose.models['sync_students'] ||
+  mongoose.model('sync_students', studentSchema)
 
 // ── Payments ─────────────────────────────────────────────────────────────────
 
 const paymentSchema = new Schema({
   id: { type: Number, required: true, unique: true },
-  child_id: Number,
+  student_id: Number,
   service_id: Number,
   service: String,
   unit: String,
@@ -197,11 +197,11 @@ const paymentSchema = new Schema({
 export const PaymentModel: Model<any> = mongoose.models['sync_payments'] ||
   mongoose.model('sync_payments', paymentSchema)
 
-// ── Child Services ─────────────────────────────────────────────────────────────
+// ── Student Services ─────────────────────────────────────────────────────────────
 
-const childServiceSchema = new Schema({
+const studentServiceSchema = new Schema({
   id: { type: Number, required: true, unique: true },
-  child_id: Number,
+  student_id: Number,
   service: String,
   unit: String,
   price: Number,
@@ -211,8 +211,8 @@ const childServiceSchema = new Schema({
   synced: Number
 }, sharedOptions)
 
-export const ChildServiceModel: Model<any> = mongoose.models['sync_child_services'] ||
-  mongoose.model('sync_child_services', childServiceSchema)
+export const StudentServiceModel: Model<any> = mongoose.models['sync_student_services'] ||
+  mongoose.model('sync_student_services', studentServiceSchema)
 
 // ── Users ────────────────────────────────────────────────────────────────────
 
@@ -415,7 +415,7 @@ export const SessionTeacherModel: Model<any> = mongoose.models['sync_session_tea
 const attendanceRecordSchema = new Schema({
   id: { type: Number, required: true, unique: true },
   session_id: Number,
-  child_id: Number,
+  student_id: Number,
   status: String,
   excuse_notes: String,
   recorded_by: Number,
@@ -513,7 +513,7 @@ export const ServiceTeacherModel: Model<any> = mongoose.models['sync_service_tea
 const teacherPaymentSchema = new Schema({
   id: { type: Number, required: true, unique: true },
   teacher_id: Number,
-  child_id: Number,
+  student_id: Number,
   attendance_record_id: Number,
   attendance_date: String,
   session_cost: Number,
@@ -531,7 +531,7 @@ export const TeacherPaymentModel: Model<any> = mongoose.models['sync_teacher_pay
 const attendanceEditRequestSchema = new Schema({
   id: { type: Number, required: true, unique: true },
   attendance_record_id: Number,
-  child_id: Number,
+  student_id: Number,
   teacher_id: Number,
   attendance_date: String,
   original_status: String,
@@ -592,11 +592,11 @@ const notificationSchema = new Schema({
 export const NotificationModel: Model<any> = mongoose.models['sync_notifications'] ||
   mongoose.model('sync_notifications', notificationSchema)
 
-// ── Child Illness Cases (feature 009) ───────────────────────────────────────────
+// ── Student Illness Cases (feature 009) ───────────────────────────────────────────
 
-const childIllnessCaseSchema = new Schema({
+const studentIllnessCaseSchema = new Schema({
   id: { type: Number, required: true, unique: true },
-  child_id: Number,
+  student_id: Number,
   status: String,
   description: String,
   opened_at: String,
@@ -606,14 +606,14 @@ const childIllnessCaseSchema = new Schema({
   synced: Number
 }, sharedOptions)
 
-export const ChildIllnessCaseModel: Model<any> = mongoose.models['sync_child_illness_cases'] ||
-  mongoose.model('sync_child_illness_cases', childIllnessCaseSchema)
+export const StudentIllnessCaseModel: Model<any> = mongoose.models['sync_student_illness_cases'] ||
+  mongoose.model('sync_student_illness_cases', studentIllnessCaseSchema)
 
-// ── Child Activities / Diary (feature 009, media hosted on Cloudinary) ─────────
+// ── Student Activities / Diary (feature 009, media hosted on Cloudinary) ─────────
 
-const childActivitySchema = new Schema({
+const studentActivitySchema = new Schema({
   id: { type: Number, required: true, unique: true },
-  child_id: Number,
+  student_id: Number,
   activity_date: String,
   note: String,
   media_url: String,
@@ -624,8 +624,8 @@ const childActivitySchema = new Schema({
   synced: Number
 }, sharedOptions)
 
-export const ChildActivityModel: Model<any> = mongoose.models['sync_child_activities'] ||
-  mongoose.model('sync_child_activities', childActivitySchema)
+export const StudentActivityModel: Model<any> = mongoose.models['sync_student_activities'] ||
+  mongoose.model('sync_student_activities', studentActivitySchema)
 
 // ── Entity registry ───────────────────────────────────────────────────────────
 
@@ -634,8 +634,8 @@ export const SYNC_ENTITIES: {
   model: Model<any>
   table: string
 }[] = [
-  { name: 'children', model: ChildModel, table: 'children' },
-  { name: 'child_services', model: ChildServiceModel, table: 'child_services' },
+  { name: 'students', model: StudentModel, table: 'students' },
+  { name: 'student_services', model: StudentServiceModel, table: 'student_services' },
   { name: 'payments', model: PaymentModel, table: 'payments' },
   { name: 'employees', model: EmployeeModel, table: 'employees' },
   { name: 'salary_payments', model: SalaryPaymentModel, table: 'salary_payments' },
@@ -659,6 +659,6 @@ export const SYNC_ENTITIES: {
   { name: 'attendance_edit_requests', model: AttendanceEditRequestModel, table: 'attendance_edit_requests' },
   { name: 'attendance_audit_log', model: AttendanceAuditLogModel, table: 'attendance_audit_log' },
   { name: 'notifications', model: NotificationModel, table: 'notifications' },
-  { name: 'child_illness_cases', model: ChildIllnessCaseModel, table: 'child_illness_cases' },
-  { name: 'child_activities', model: ChildActivityModel, table: 'child_activities' },
+  { name: 'student_illness_cases', model: StudentIllnessCaseModel, table: 'student_illness_cases' },
+  { name: 'student_activities', model: StudentActivityModel, table: 'student_activities' },
 ]

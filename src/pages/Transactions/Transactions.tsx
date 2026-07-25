@@ -14,7 +14,7 @@ export default function Transactions() {
     setRange, setDate, setFrom, setTo, fetchTransactions,
   } = useTransactionsStore()
 
-  // Client-side refinement over the fetched date-range results — search by child name and
+  // Client-side refinement over the fetched date-range results — search by student name and
   // narrow by service/type, since the backend only knows how to slice by date.
   const [search, setSearch] = useState('')
   const [serviceFilter, setServiceFilter] = useState('')
@@ -56,7 +56,7 @@ export default function Transactions() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return transactions.filter((t) => {
-      if (q && !t.child_name?.toLowerCase().includes(q)) return false
+      if (q && !t.student_name?.toLowerCase().includes(q)) return false
       if (serviceFilter && t.service_name !== serviceFilter) return false
       if (typeFilter && t.type !== typeFilter) return false
       return true
@@ -97,8 +97,8 @@ export default function Transactions() {
 
       <div className="flex flex-wrap items-end gap-4 bg-white border border-slate-200/80 p-4 rounded-lg shadow-sm">
         <Input
-          label={isAr ? 'بحث باسم الطفل' : 'Search by child name'}
-          placeholder={isAr ? 'اكتب اسم الطفل...' : 'Type a child name...'}
+          label={isAr ? 'بحث باسم الطالب' : 'Search by student name'}
+          placeholder={isAr ? 'اكتب اسم الطالب...' : 'Type a student name...'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -125,7 +125,7 @@ export default function Transactions() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead>
             <tr>
-              <th className="px-4 py-2 text-start text-xs font-medium text-slate-500">{isAr ? 'الطفل' : 'Child'}</th>
+              <th className="px-4 py-2 text-start text-xs font-medium text-slate-500">{isAr ? 'الطالب' : 'Student'}</th>
               <th className="px-4 py-2 text-start text-xs font-medium text-slate-500">{isAr ? 'الخدمة' : 'Service'}</th>
               <th className="px-4 py-2 text-start text-xs font-medium text-slate-500">{isAr ? 'النوع' : 'Type'}</th>
               <th className="px-4 py-2 text-start text-xs font-medium text-slate-500">{isAr ? 'المبلغ' : 'Amount'}</th>
@@ -144,7 +144,7 @@ export default function Transactions() {
             ) : (
               filtered.map((t) => (
                 <tr key={t.id}>
-                  <td className="px-4 py-2 text-sm text-slate-900">{t.child_name}</td>
+                  <td className="px-4 py-2 text-sm text-slate-900">{t.student_name}</td>
                   <td className="px-4 py-2 text-sm text-slate-700">{t.service_name}</td>
                   <td className="px-4 py-2 text-sm text-slate-700">{typeLabel(t.type)}</td>
                   <td className="px-4 py-2 text-sm font-medium text-slate-900">{Number(t.amount).toFixed(2)} {isAr ? 'ج.م' : 'EGP'}</td>

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge.js'
 import { Button } from '../../components/ui/Button.js'
 import type { Payment } from '../../types/index.js'
+import { serviceLabel } from '../../utils/services.js'
 import type { PaymentMethod } from '../../store/usePaymentMethodsStore.js'
 
 interface PaymentRowProps {
@@ -98,14 +99,7 @@ export default function PaymentRow({
   }
 
   // Localize service and unit
-  const localizedService = () => {
-    if (i18n.language === 'en') {
-      if (payment.service === 'حضانة') return t('services.nursery')
-      if (payment.service === 'استضافة') return t('services.hosting')
-      if (payment.service === 'جلسة') return t('services.session')
-    }
-    return payment.service
-  }
+  const localizedService = () => serviceLabel(payment.service, i18n.language)
 
   const localizedUnit = () => {
     if (payment.unit === 'شهر') return t('units.month')
@@ -133,9 +127,9 @@ export default function PaymentRow({
         />
       </td>
 
-      {/* Child Name */}
+      {/* Student Name */}
       <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap text-start">
-        {payment.child_name || `Child #${payment.child_id}`}
+        {payment.student_name || `Student #${payment.student_id}`}
       </td>
 
       {/* Service Type & Unit */}
