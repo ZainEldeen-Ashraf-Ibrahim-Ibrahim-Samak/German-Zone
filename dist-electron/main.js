@@ -1,4 +1,4 @@
-import { a as closeDb, c as DB_FILENAME, i as isSessionService, l as LEGACY_DB_FILENAME, n as SERVICE_NAMES, o as getDb, r as SPEAKING, s as initDb, t as RECOMMENDED_MIX_WEIGHTS } from "./services-CCTLx17J.js";
+import { a as closeDb, c as DB_FILENAME, i as isSessionService, n as SERVICE_NAMES, o as getDb, r as SPEAKING, s as initDb, t as RECOMMENDED_MIX_WEIGHTS } from "./services-CpxdxcoZ.js";
 import { createRequire } from "node:module";
 import path from "node:path";
 import nodeCrypto from "crypto";
@@ -14779,7 +14779,7 @@ var require_NsisUpdater = /* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.NsisUpdater = NsisUpdater;
 }));
 //#endregion
-//#region electron/db/legacyDataMigration.ts
+//#region electron/db/migrations/index.ts
 var import_main = (/* @__PURE__ */ __commonJSMin(((exports) => {
 	var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
 		if (k2 === void 0) k2 = k;
@@ -14906,94 +14906,6 @@ var import_main = (/* @__PURE__ */ __commonJSMin(((exports) => {
 		}
 	});
 })))();
-/**
-* Electron derives `userData` from the app name, so the German Zone rebrand moved
-* it out from under every existing installation — the database, branding logos and
-* fonts would all appear to have vanished. This runs once on startup, before the
-* database is opened, and copies the previous installation's userData across.
-*
-* Copies rather than moves: if anything goes wrong the original data is still
-* sitting in the old directory, and these files are small.
-*/
-/** userData directory names used before the rebrand (dev used the package name,
-*  packaged builds used electron-builder's productName). */
-var LEGACY_USER_DATA_DIRS = ["nursery-management-system", "Nursery Autism Management System"];
-function copyFileIfExists(from, to) {
-	if (!fs.existsSync(from)) return false;
-	fs.copyFileSync(from, to);
-	return true;
-}
-/**
-* Copy a database and its write-ahead log siblings together. The -wal file holds
-* committed-but-not-yet-checkpointed transactions and is bound to the database's
-* filename, so renaming the database without it silently discards recent writes.
-*/
-function copyDatabase(fromDb, toDb) {
-	fs.copyFileSync(fromDb, toDb);
-	for (const suffix of ["-wal", "-shm"]) copyFileIfExists(fromDb + suffix, toDb + suffix);
-}
-/** Candidate previous locations, most likely first. */
-function legacyCandidates(userData) {
-	const parent = path.dirname(userData);
-	const candidates = [];
-	candidates.push({
-		dir: userData,
-		db: path.join(userData, LEGACY_DB_FILENAME)
-	});
-	for (const name of LEGACY_USER_DATA_DIRS) {
-		const dir = path.join(parent, name);
-		if (path.resolve(dir) === path.resolve(userData)) continue;
-		candidates.push({
-			dir,
-			db: path.join(dir, LEGACY_DB_FILENAME)
-		});
-		candidates.push({
-			dir,
-			db: path.join(dir, DB_FILENAME)
-		});
-	}
-	return candidates;
-}
-/**
-* Returns the path migrated from, or null when there was nothing to do
-* (fresh install, or the migration already ran).
-*/
-function migrateLegacyUserData() {
-	let userData;
-	try {
-		userData = app.getPath("userData");
-	} catch {
-		return null;
-	}
-	const targetDb = path.join(userData, DB_FILENAME);
-	if (fs.existsSync(targetDb)) return null;
-	for (const { dir, db } of legacyCandidates(userData)) {
-		if (!fs.existsSync(db)) continue;
-		if (path.resolve(db) === path.resolve(targetDb)) continue;
-		try {
-			fs.mkdirSync(userData, { recursive: true });
-			copyDatabase(db, targetDb);
-			const legacyBranding = path.join(dir, "branding");
-			const targetBranding = path.join(userData, "branding");
-			if (fs.existsSync(legacyBranding) && !fs.existsSync(targetBranding)) fs.cpSync(legacyBranding, targetBranding, { recursive: true });
-			console.log(`Migrated existing data from ${db} -> ${targetDb}`);
-			return db;
-		} catch (error) {
-			console.error(`Failed to migrate legacy data from ${db}:`, error);
-			for (const suffix of [
-				"",
-				"-wal",
-				"-shm"
-			]) try {
-				fs.rmSync(targetDb + suffix, { force: true });
-			} catch {}
-			return null;
-		}
-	}
-	return null;
-}
-//#endregion
-//#region electron/db/migrations/index.ts
 var migrations = [
 	{
 		name: "001_initial_schema",
@@ -18105,15 +18017,15 @@ async function seedDatabase(db) {
 			},
 			{
 				key: "brand_tagline",
-				value: "رعاية متميزة وتنمية مهارات طالبك"
+				value: "تعلّم الألمانية بثقة"
 			},
 			{
 				key: "brand_primary_color",
-				value: seedSetting("SEED_BRAND_PRIMARY_COLOR", "#0f766e")
+				value: seedSetting("SEED_BRAND_PRIMARY_COLOR", "#1F2937")
 			},
 			{
 				key: "brand_accent_color",
-				value: seedSetting("SEED_BRAND_ACCENT_COLOR", "#f59e0b")
+				value: seedSetting("SEED_BRAND_ACCENT_COLOR", "#EAB308")
 			},
 			{
 				key: "brand_phone",
@@ -29761,7 +29673,7 @@ ipcMain.handle("storage:import", async (event, args) => {
 			if (result.canceled || result.filePaths.length === 0) throw new Error("Import cancelled");
 			filePath = result.filePaths[0];
 		}
-		const { importFromWorkbook } = await import("./importService-BHfQrKM0.js");
+		const { importFromWorkbook } = await import("./importService-2y2xytZN.js");
 		return { imported: await importFromWorkbook(filePath, progressReporter(event, "import")) };
 	} catch (error) {
 		console.error("storage:import error:", error);
@@ -29888,13 +29800,31 @@ function describeConnectFailure(err) {
 	}
 	return genericMsg;
 }
+/**
+* Database used when the connection string doesn't name one.
+*
+* German Zone runs alongside the old nursery app, and several collections are named
+* the same in both (sync_payments, sync_users, sync_employees, sync_settings…). If both
+* apps fell back to the driver's default database they would sync into each other's
+* records, so German Zone claims its own database by name. Overridable with
+* MONGO_DB_NAME, and a database spelled out in the URI always wins.
+*/
+var DEFAULT_SYNC_DB_NAME = process.env.MONGO_DB_NAME || "germanzone";
+/** True when the connection string already specifies a database to use. */
+function uriNamesDatabase(uri) {
+	const afterScheme = uri.replace(/^mongodb(\+srv)?:\/\//, "");
+	const afterHost = afterScheme.slice(afterScheme.indexOf("/") + 1);
+	if (!afterScheme.includes("/")) return false;
+	return afterHost.split("?")[0].length > 0;
+}
 async function connectMongo(uri) {
 	if (isConnected) return;
 	try {
 		const finalUri = await convertSrvToStandardUri(uri);
 		await mongoose.connect(finalUri, {
 			serverSelectionTimeoutMS: 1e4,
-			connectTimeoutMS: 1e4
+			connectTimeoutMS: 1e4,
+			...uriNamesDatabase(uri) ? {} : { dbName: DEFAULT_SYNC_DB_NAME }
 		});
 		isConnected = true;
 		connectionError = null;
@@ -32016,7 +31946,6 @@ app.whenReady().then(async () => {
 		return;
 	}
 	try {
-		migrateLegacyUserData();
 		const db = initDb();
 		runMigrations(db);
 		await seedDatabase(db);
