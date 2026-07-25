@@ -3,20 +3,6 @@ import type { User } from '../types/index.js'
 import { friendlyError } from '../utils/errors.js'
 
 const TOKEN_STORAGE_KEY = 'germanzone_auth_token'
-const LEGACY_TOKEN_STORAGE_KEY = 'nursery_auth_token'
-
-/** Carry a session over from a pre-rebrand build so the rename doesn't sign everyone out. */
-function readStoredToken(): string | null {
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
-  if (token) return token
-
-  const legacy = localStorage.getItem(LEGACY_TOKEN_STORAGE_KEY)
-  if (legacy) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, legacy)
-    localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY)
-  }
-  return legacy
-}
 
 interface AuthState {
   user: User | null
@@ -87,7 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // On a fresh app start the in-memory session is gone — restore it from the
       // persisted JWT so the user stays logged in across restarts.
       if (!result || !result.user) {
-        const token = readStoredToken()
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY)
         if (token) {
           result = await window.api.auth.restore({ token })
         }
@@ -96,7 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (result && result.user) {
         set({
           user: result.user,
-          token: readStoredToken(),
+          token: localStorage.getItem(TOKEN_STORAGE_KEY),
           isAuthenticated: true,
           isLoading: false,
         })

@@ -100,6 +100,26 @@ function describeConnectFailure(err: any): string {
   return genericMsg
 }
 
+/**
+ * Database used when the connection string doesn't name one.
+ *
+ * German Zone runs alongside the old nursery app, and several collections are named
+ * the same in both (sync_payments, sync_users, sync_employees, sync_settings…). If both
+ * apps fell back to the driver's default database they would sync into each other's
+ * records, so German Zone claims its own database by name. Overridable with
+ * MONGO_DB_NAME, and a database spelled out in the URI always wins.
+ */
+const DEFAULT_SYNC_DB_NAME = process.env.MONGO_DB_NAME || 'germanzone'
+
+/** True when the connection string already specifies a database to use. */
+function uriNamesDatabase(uri: string): boolean {
+  // Strip the scheme, then look for a non-empty path segment before any '?' query string.
+  const afterScheme = uri.replace(/^mongodb(\+srv)?:\/\//, '')
+  const afterHost = afterScheme.slice(afterScheme.indexOf('/') + 1)
+  if (!afterScheme.includes('/')) return false
+  return afterHost.split('?')[0].length > 0
+}
+
 export async function connectMongo(uri: string): Promise<void> {
   if (isConnected) return
 
@@ -107,7 +127,8 @@ export async function connectMongo(uri: string): Promise<void> {
     const finalUri = await convertSrvToStandardUri(uri);
     await mongoose.connect(finalUri, {
       serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000
+      connectTimeoutMS: 10000,
+      ...(uriNamesDatabase(uri) ? {} : { dbName: DEFAULT_SYNC_DB_NAME }),
     })
     isConnected = true
     connectionError = null

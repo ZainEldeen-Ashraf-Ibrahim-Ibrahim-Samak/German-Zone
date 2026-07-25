@@ -6,7 +6,6 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { initDb, closeDb } from './db/connection.js'
-import { migrateLegacyUserData } from './db/legacyDataMigration.js'
 import { runMigrations } from './db/migrations/index.js'
 import { seedDatabase } from './db/seed.js'
 
@@ -104,10 +103,6 @@ app.whenReady().then(async () => {
 
   // Initialize Database, run migrations and seed
   try {
-    // Bring a pre-rebrand installation's database and branding across before the
-    // database is opened, so existing centres keep their data after the rename.
-    migrateLegacyUserData()
-
     const db = initDb()
     runMigrations(db)
     await seedDatabase(db)

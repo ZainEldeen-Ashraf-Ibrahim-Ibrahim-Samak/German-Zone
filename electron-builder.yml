@@ -1,9 +1,7 @@
-# appId and the publish repo intentionally keep their original values: NSIS and
-# electron-updater identify an installation by appId, so changing it would make the
-# German Zone build install alongside the old one rather than upgrade it, and existing
-# centres would stop receiving updates. The rebrand is therefore limited to user-facing
-# names. Existing databases and branding assets are carried across by the userData
-# migration in electron/db/legacyDataMigration.ts, which runs on first launch.
+# German Zone is a separate application from the old nursery system, not an upgrade
+# of it. The distinct appId makes NSIS install it alongside the existing app rather
+# than replacing it, and productName gives it its own userData directory, so the two
+# keep entirely separate databases and can be run on the same machine.
 appId: com.germanzone.management
 productName: German Zone
 publish:
