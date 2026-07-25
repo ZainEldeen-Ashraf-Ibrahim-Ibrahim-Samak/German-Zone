@@ -7,9 +7,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Environment — never commit real secrets
-.env
-
 # Dependencies
 node_modules/
 
@@ -40,3 +37,6 @@ Thumbs.db
 *.sln
 *.sw?
 *.tmp
+
+.env
+

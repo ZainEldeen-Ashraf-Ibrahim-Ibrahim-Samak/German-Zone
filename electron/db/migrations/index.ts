@@ -1123,6 +1123,137 @@ const migrations: Migration[] = [
         CREATE UNIQUE INDEX IF NOT EXISTS idx_edit_requests_one_pending ON attendance_edit_requests(attendance_record_id) WHERE status = 'pending';
       `)
     }
+  },
+  {
+    // ── German Zone rebrand ────────────────────────────────────────────────────
+    // The centre teaches language courses, so the domain noun changes from
+    // "child" to "student" everywhere. Migrations 001-042 are left untouched as
+    // the historical record (they already ran on installed databases); this
+    // migration is the single point where the schema takes on the new names, so
+    // fresh installs and existing installs converge on identical schemas.
+    //
+    // ALTER TABLE ... RENAME propagates the new name into every other table's
+    // REFERENCES clause, but only while foreign_keys is ON — which it is at the
+    // connection level (see connection.ts) — so this runs in the normal
+    // transactional path rather than the noTransaction one.
+    name: '043_rename_children_to_students',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE children RENAME TO students;
+        ALTER TABLE students RENAME COLUMN child_phone TO student_phone;
+
+        ALTER TABLE child_services RENAME TO student_services;
+        ALTER TABLE student_services RENAME COLUMN child_id TO student_id;
+
+        ALTER TABLE child_illness_cases RENAME TO student_illness_cases;
+        ALTER TABLE student_illness_cases RENAME COLUMN child_id TO student_id;
+
+        ALTER TABLE child_activities RENAME TO student_activities;
+        ALTER TABLE student_activities RENAME COLUMN child_id TO student_id;
+
+        ALTER TABLE payments RENAME COLUMN child_id TO student_id;
+        ALTER TABLE attendance_records RENAME COLUMN child_id TO student_id;
+        ALTER TABLE attendance_edit_requests RENAME COLUMN child_id TO student_id;
+        ALTER TABLE teacher_payments RENAME COLUMN child_id TO student_id;
+      `)
+
+      // SQLite rewrites an index's *definition* to follow a renamed table/column
+      // but keeps the index's own name, so rebuild the four child-named indexes.
+      db.exec(`
+        DROP INDEX IF EXISTS idx_attendance_records_child;
+        DROP INDEX IF EXISTS idx_child_activities_child_date;
+        DROP INDEX IF EXISTS idx_child_services_child;
+        DROP INDEX IF EXISTS idx_illness_cases_child_status;
+
+        CREATE INDEX IF NOT EXISTS idx_attendance_records_student ON attendance_records(student_id);
+        CREATE INDEX IF NOT EXISTS idx_student_activities_student_date ON student_activities(student_id, activity_date);
+        CREATE INDEX IF NOT EXISTS idx_student_services_student ON student_services(student_id);
+        CREATE INDEX IF NOT EXISTS idx_illness_cases_student_status ON student_illness_cases(student_id, status);
+      `)
+
+      // Tombstones address rows by table name; rewrite the pending ones so
+      // deletes recorded before the rename still resolve after it.
+      db.exec(`
+        UPDATE tombstones SET entity = 'students'         WHERE entity = 'children';
+        UPDATE tombstones SET entity = 'student_services' WHERE entity = 'child_services';
+      `)
+    }
+  },
+  {
+    // The 'per_child_session' salary mode is a stored enum value pinned by a CHECK
+    // constraint, and SQLite cannot ALTER a CHECK in place — so rebuild the table
+    // (same pattern as 040/041) with the value renamed to 'per_student_session'.
+    name: '044_salary_types_per_student_session',
+    noTransaction: true,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS salary_types_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          mode TEXT NOT NULL CHECK(mode IN ('fixed_monthly','per_session_fixed','per_session_pct','hybrid','per_student_session')),
+          monthly_rate REAL,
+          session_rate REAL,
+          session_pct REAL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+
+        INSERT INTO salary_types_new
+          (id, name, mode, monthly_rate, session_rate, session_pct, created_at, updated_at, synced)
+        SELECT id, name,
+               CASE mode WHEN 'per_child_session' THEN 'per_student_session' ELSE mode END,
+               monthly_rate, session_rate, session_pct, created_at, updated_at, synced
+        FROM salary_types;
+
+        DROP TABLE salary_types;
+        ALTER TABLE salary_types_new RENAME TO salary_types;
+      `)
+    }
+  },
+  {
+    // German Zone offers CEFR course levels rather than the old nursery service
+    // types. The service name is denormalised onto students/payments/student_services
+    // rows, so every stored copy is rewritten in step with service_definitions.
+    // Existing enrolments are mapped onto the nearest new service; B1 and B2 are
+    // added fresh (no historical rows can reference them).
+    name: '045_german_zone_service_levels',
+    up: (db) => {
+      const renames: [string, string][] = [
+        ['حضانة', 'A1'],
+        ['استضافة', 'A2'],
+        ['جلسة', 'جلسات محادثة'],
+      ]
+
+      for (const [oldName, newName] of renames) {
+        // If an admin already created a service under the new name, fold the old
+        // one into it instead of tripping service_definitions.name's UNIQUE index.
+        const clash = db.prepare('SELECT id FROM service_definitions WHERE name = ?').get(newName) as { id: number } | undefined
+        if (clash) {
+          db.prepare('DELETE FROM service_definitions WHERE name = ?').run(oldName)
+        } else {
+          db.prepare('UPDATE service_definitions SET name = ?, is_custom = 0 WHERE name = ?').run(newName, oldName)
+        }
+
+        db.prepare('UPDATE students          SET service = ? WHERE service = ?').run(newName, oldName)
+        db.prepare('UPDATE student_services  SET service = ? WHERE service = ?').run(newName, oldName)
+        db.prepare('UPDATE payments          SET service = ? WHERE service = ?').run(newName, oldName)
+      }
+
+      // Carry A1's pricing over as the starting point for the higher levels;
+      // an admin can adjust each in Settings → Services.
+      const a1 = db.prepare('SELECT price_monthly, price_daily, price_hourly FROM service_definitions WHERE name = ?')
+        .get('A1') as { price_monthly: number | null; price_daily: number | null; price_hourly: number | null } | undefined
+
+      const now = new Date().toISOString()
+      for (const level of ['B1', 'B2']) {
+        db.prepare(`
+          INSERT OR IGNORE INTO service_definitions
+            (name, is_custom, price_monthly, price_daily, price_hourly, created_at, updated_at, synced)
+          VALUES (?, 0, ?, ?, ?, ?, ?, 0)
+        `).run(level, a1?.price_monthly ?? null, a1?.price_daily ?? null, a1?.price_hourly ?? null, now, now)
+      }
+    }
   }
 ]
 
