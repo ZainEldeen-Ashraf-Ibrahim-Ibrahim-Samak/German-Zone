@@ -16054,6 +16054,15 @@ var migrations = [
           VALUES (?, 0, ?, ?, ?, ?, ?, 0)
         `).run(level, a1?.price_monthly ?? null, a1?.price_daily ?? null, a1?.price_hourly ?? null, now, now);
 		}
+	},
+	{
+		name: "046_attendance_edit_approval_setting",
+		up: (db) => {
+			db.exec(`
+        INSERT OR IGNORE INTO settings (key, value, updated_at, synced)
+        VALUES ('attendance_edit_requires_approval', 'false', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 0);
+      `);
+		}
 	}
 ];
 function runMigrations(db) {
@@ -23416,6 +23425,17 @@ ipcMain.handle("notifications:markRead", async (_event, args) => {
 *   teacher absent (any student status)            → not payable
 * Exported for direct unit testing without touching the database.
 */
+/**
+* Whether the feature-007 approval workflow is active. Default OFF — employees record, edit and
+* delete attendance directly, same as admins. An admin can switch it on in Settings → Security,
+* which re-locks saved records for employees and routes their changes through edit/delete requests.
+* Stored in `settings` (key identity), so the choice syncs to MongoDB with every other setting.
+*/
+function attendanceEditRequiresApproval(db) {
+	const row = db.prepare(`SELECT value FROM settings WHERE key = 'attendance_edit_requires_approval'`).get();
+	const value = String(row?.value ?? "false").trim().toLowerCase();
+	return value === "true" || value === "1" || value === "yes";
+}
 function isPaymentEligible(teacherStatus, studentStatus) {
 	if (teacherStatus !== "present") return false;
 	return studentStatus === "attended" || studentStatus === "absent_unexcused";
@@ -23530,6 +23550,7 @@ ipcMain.handle("attendance:getSheet", async (_event, { session_id }) => {
 	try {
 		checkAuth$10();
 		const db = getDb();
+		const requiresApproval = attendanceEditRequiresApproval(db);
 		const session = db.prepare("SELECT session_date FROM scheduled_sessions WHERE id = ?").get(session_id);
 		let dayOfWeek = null;
 		if (session?.session_date) {
@@ -23594,7 +23615,7 @@ ipcMain.handle("attendance:getSheet", async (_event, { session_id }) => {
 				teacher_name: teacher?.name ?? null,
 				teacher_session_rate: cand.teacher_id != null ? resolveTeacherSessionRate(db, cand.teacher_id, cand.student_id) : null,
 				attendance_id: ar?.id ?? null,
-				locked: !!ar,
+				locked: requiresApproval && !!ar,
 				status: ar?.status ?? null,
 				excuse_notes: ar?.excuse_notes ?? null,
 				recorded_by: ar?.recorded_by ?? null,
@@ -23631,6 +23652,7 @@ ipcMain.handle("attendance:record", async (_event, args) => {
 		const db = getDb();
 		const user = getCurrentUser();
 		const isAdmin = user?.role === "admin";
+		const requiresApproval = attendanceEditRequiresApproval(db);
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const results = [];
 		const sessionId = args?.session_id;
@@ -23651,7 +23673,7 @@ ipcMain.handle("attendance:record", async (_event, args) => {
 				else attended_teacher_id = db.prepare("SELECT teacher_id FROM students WHERE id = ?").get(student_id)?.teacher_id ?? null;
 				const attendanceDate = db.prepare("SELECT session_date FROM scheduled_sessions WHERE id = ?").get(session_id)?.session_date;
 				const existingRecord = attended_teacher_id == null ? db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL").get(session_id, student_id) : db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?").get(session_id, student_id, attended_teacher_id);
-				if (existingRecord && !isAdmin) {
+				if (existingRecord && !isAdmin && requiresApproval) {
 					results.push({
 						...existingRecord,
 						locked: true
@@ -23675,7 +23697,7 @@ ipcMain.handle("attendance:record", async (_event, args) => {
               synced = 0
           `).run(session_id, student_id, status, excuse_notes, user?.id ?? null, now, now, attended_teacher_id, teacher_status);
 				const savedRecord = attended_teacher_id == null ? db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL").get(session_id, student_id) : db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?").get(session_id, student_id, attended_teacher_id);
-				if (existingRecord && isAdmin && user) writeAuditLog(db, {
+				if (existingRecord && user) writeAuditLog(db, {
 					attendance_record_id: savedRecord.id,
 					edit_request_id: null,
 					old_status: existingRecord.status,
@@ -23685,7 +23707,7 @@ ipcMain.handle("attendance:record", async (_event, args) => {
 					new_excuse_notes: excuse_notes,
 					new_teacher_status: teacher_status,
 					changed_by: user.id,
-					approved_by: user.id,
+					approved_by: isAdmin ? user.id : null,
 					reason: null,
 					changed_at: now
 				});
@@ -23716,7 +23738,7 @@ ipcMain.handle("attendance:delete", async (_event, { session_id, student_ids, re
 		checkAuth$10();
 		const db = getDb();
 		const user = getCurrentUser();
-		const isAdmin = user.role === "admin";
+		const canDeleteDirectly = user.role === "admin" || !attendanceEditRequiresApproval(db);
 		const items = (Array.isArray(student_ids) ? student_ids : []).map((it) => typeof it === "object" ? {
 			student_id: it.student_id,
 			teacher_id: it.teacher_id
@@ -23735,7 +23757,7 @@ ipcMain.handle("attendance:delete", async (_event, { session_id, student_ids, re
 		db.transaction(() => {
 			for (const item of items) {
 				const records = item.teacher_id !== void 0 ? item.teacher_id == null ? db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL").all(session_id, item.student_id) : db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?").all(session_id, item.student_id, item.teacher_id) : db.prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ?").all(session_id, item.student_id);
-				if (!isAdmin) {
+				if (!canDeleteDirectly) {
 					for (const record of records) {
 						if (db.prepare(`SELECT 1 FROM attendance_edit_requests WHERE attendance_record_id = ? AND status = 'pending'`).get(record.id)) continue;
 						const session = db.prepare("SELECT session_date FROM scheduled_sessions WHERE id = ?").get(record.session_id);
@@ -23885,6 +23907,7 @@ ipcMain.handle("attendance:requestEdit", async (_event, args) => {
 		const user = getCurrentUser();
 		if (user.role === "admin") throw new Error("Admins edit attendance directly and do not need to submit an edit request");
 		const db = getDb();
+		if (!attendanceEditRequiresApproval(db)) throw new Error("Attendance edit approval is disabled — edit the attendance record directly");
 		const { attendance_record_id, requested_status, requested_excuse_notes = null, requested_teacher_status = null, reason } = args;
 		if (!reason || !String(reason).trim()) throw new Error("A reason is required to request an attendance edit");
 		const record = db.prepare("SELECT * FROM attendance_records WHERE id = ?").get(attendance_record_id);
