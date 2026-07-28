@@ -13,6 +13,18 @@ import type { Db } from '../db/connection.js'
  *   teacher absent (any student status)            → not payable
  * Exported for direct unit testing without touching the database.
  */
+/**
+ * Whether the feature-007 approval workflow is active. Default OFF — employees record, edit and
+ * delete attendance directly, same as admins. An admin can switch it on in Settings → Security,
+ * which re-locks saved records for employees and routes their changes through edit/delete requests.
+ * Stored in `settings` (key identity), so the choice syncs to MongoDB with every other setting.
+ */
+export function attendanceEditRequiresApproval(db: Db): boolean {
+  const row = db.prepare(`SELECT value FROM settings WHERE key = 'attendance_edit_requires_approval'`).get() as { value: string } | undefined
+  const value = String(row?.value ?? 'false').trim().toLowerCase()
+  return value === 'true' || value === '1' || value === 'yes'
+}
+
 export function isPaymentEligible(teacherStatus: 'present' | 'absent' | null | undefined, studentStatus: string): boolean {
   if (teacherStatus !== 'present') return false
   return studentStatus === 'attended' || studentStatus === 'absent_unexcused'
@@ -165,6 +177,7 @@ ipcMain.handle('attendance:getSheet', async (_event, { session_id }) => {
   try {
     checkAuth()
     const db = getDb()
+    const requiresApproval = attendanceEditRequiresApproval(db)
     // Get session date to compute weekday
     const session = db.prepare('SELECT session_date FROM scheduled_sessions WHERE id = ?').get(session_id) as any
     let dayOfWeek: number | null = null
@@ -243,8 +256,9 @@ ipcMain.handle('attendance:getSheet', async (_event, { session_id }) => {
         teacher_session_rate: cand.teacher_id != null ? resolveTeacherSessionRate(db, cand.teacher_id, cand.student_id) : null,
         attendance_id: ar?.id ?? null,
         // Locked the moment the row exists (feature 007, research.md #4) — non-admin callers
-        // must route further changes through attendance:requestEdit.
-        locked: !!ar,
+        // must route further changes through attendance:requestEdit. Only when the approval
+        // setting is on; by default nothing is locked and employees edit directly.
+        locked: requiresApproval && !!ar,
         status: ar?.status ?? null,
         excuse_notes: ar?.excuse_notes ?? null,
         recorded_by: ar?.recorded_by ?? null,
@@ -285,6 +299,7 @@ ipcMain.handle('attendance:record', async (_event, args) => {
     const db = getDb()
     const user = getCurrentUser()
     const isAdmin = user?.role === 'admin'
+    const requiresApproval = attendanceEditRequiresApproval(db)
     const now = new Date().toISOString()
     const results: any[] = []
 
@@ -327,11 +342,12 @@ ipcMain.handle('attendance:record', async (_event, args) => {
           ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL').get(session_id, student_id) as any
           : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?').get(session_id, student_id, attended_teacher_id) as any
 
-        // Attendance locking (feature 007, FR-011/FR-012): a row that already exists is
-        // "locked" — the moment it was first saved. Non-admins can no longer overwrite it
-        // directly; they must go through attendance:requestEdit instead. Admins may still edit
-        // directly, but every such edit is audit-logged as if it had gone through approval.
-        if (existingRecord && !isAdmin) {
+        // Attendance locking (feature 007, FR-011/FR-012), now opt-in: when
+        // `attendance_edit_requires_approval` is on, a row that already exists is "locked" — the
+        // moment it was first saved. Non-admins can no longer overwrite it directly; they must go
+        // through attendance:requestEdit instead. With the setting off (the default) everyone
+        // edits directly. Either way every edit to an existing row is audit-logged.
+        if (existingRecord && !isAdmin && requiresApproval) {
           results.push({ ...existingRecord, locked: true })
           continue
         }
@@ -360,9 +376,11 @@ ipcMain.handle('attendance:record', async (_event, args) => {
           ? db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id IS NULL').get(session_id, student_id) as any
           : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ? AND attended_teacher_id = ?').get(session_id, student_id, attended_teacher_id) as any
 
-        // A direct admin edit to a row that already existed is itself an attendance
-        // modification and must be audit-logged (FR-021), same as an approved edit request.
-        if (existingRecord && isAdmin && user) {
+        // Any direct edit to a row that already existed is itself an attendance modification and
+        // must be audit-logged (FR-021), same as an approved edit request — including an
+        // employee's direct edit when the approval setting is off (approved_by stays NULL then,
+        // since no one approved it).
+        if (existingRecord && user) {
           writeAuditLog(db, {
             attendance_record_id: savedRecord.id,
             edit_request_id: null,
@@ -373,7 +391,7 @@ ipcMain.handle('attendance:record', async (_event, args) => {
             new_excuse_notes: excuse_notes,
             new_teacher_status: teacher_status,
             changed_by: user.id,
-            approved_by: user.id,
+            approved_by: isAdmin ? user.id : null,
             reason: null,
             changed_at: now
           })
@@ -426,7 +444,8 @@ ipcMain.handle('attendance:record', async (_event, args) => {
 // Each item may be a plain student_id (legacy — deletes every teacher row for that student) or
 // { student_id, teacher_id } (precise — deletes only that student's row for that specific teacher,
 // since a student can now have more than one teacher's row in the same session).
-// Admins delete immediately. Employees do NOT delete — each matched record becomes a pending
+// Admins delete immediately, and so do employees unless the `attendance_edit_requires_approval`
+// setting is on. When it is, an employee does NOT delete — each matched record becomes a pending
 // 'delete' request in attendance_edit_requests for an admin to approve (recording NEW
 // attendance stays direct for employees; only removing a saved record needs approval).
 ipcMain.handle('attendance:delete', async (_event, { session_id, student_ids, reason }) => {
@@ -434,7 +453,8 @@ ipcMain.handle('attendance:delete', async (_event, { session_id, student_ids, re
     checkAuth()
     const db = getDb()
     const user = getCurrentUser()!
-    const isAdmin = user.role === 'admin'
+    // With the approval setting off (the default) an employee deletes directly, like an admin.
+    const canDeleteDirectly = user.role === 'admin' || !attendanceEditRequiresApproval(db)
     const rawItems: any[] = Array.isArray(student_ids) ? student_ids : []
     const items: { student_id: number; teacher_id: number | null | undefined }[] = rawItems.map((it) =>
       typeof it === 'object' ? { student_id: it.student_id, teacher_id: it.teacher_id } : { student_id: it, teacher_id: undefined }
@@ -453,8 +473,8 @@ ipcMain.handle('attendance:delete', async (_event, { session_id, student_ids, re
           : db.prepare('SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ?').all(session_id, item.student_id)
         ) as any[]
 
-        if (!isAdmin) {
-          // Employee path: submit one pending delete request per record instead of deleting.
+        if (!canDeleteDirectly) {
+          // Employee path (approval required): submit one pending delete request per record.
           for (const record of records) {
             const existingPending = db.prepare(
               `SELECT 1 FROM attendance_edit_requests WHERE attendance_record_id = ? AND status = 'pending'`
@@ -623,6 +643,9 @@ ipcMain.handle('attendance:requestEdit', async (_event, args) => {
       throw new Error('Admins edit attendance directly and do not need to submit an edit request')
     }
     const db = getDb()
+    if (!attendanceEditRequiresApproval(db)) {
+      throw new Error('Attendance edit approval is disabled — edit the attendance record directly')
+    }
     const { attendance_record_id, requested_status, requested_excuse_notes = null, requested_teacher_status = null, reason } = args
 
     if (!reason || !String(reason).trim()) {

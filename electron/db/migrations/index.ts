@@ -1254,6 +1254,20 @@ const migrations: Migration[] = [
         `).run(level, a1?.price_monthly ?? null, a1?.price_daily ?? null, a1?.price_hourly ?? null, now, now)
       }
     }
+  },
+  {
+    // Attendance edit approval is now opt-in: by default employees edit and delete
+    // attendance records directly, exactly like admins. Turning this setting on in
+    // Settings → Security restores the feature-007 workflow (locked records + edit /
+    // delete requests routed to an admin). Stored in `settings` so it syncs to MongoDB
+    // with every other setting.
+    name: '046_attendance_edit_approval_setting',
+    up: (db) => {
+      db.exec(`
+        INSERT OR IGNORE INTO settings (key, value, updated_at, synced)
+        VALUES ('attendance_edit_requires_approval', 'false', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 0);
+      `)
+    }
   }
 ]
 

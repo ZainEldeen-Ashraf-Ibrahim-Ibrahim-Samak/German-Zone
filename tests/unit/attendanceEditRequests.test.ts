@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
@@ -36,6 +36,8 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
     db = initDb()
     runMigrations(db)
     const now = new Date().toISOString()
+    // The approval workflow is opt-in (default off) — this suite exercises it switched on.
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at, synced) VALUES ('attendance_edit_requires_approval', 'true', ?, 0)`).run(now)
     db.prepare(`INSERT INTO users (id, username, password, role, is_active, created_at) VALUES (1, 'admin', 'x', 'admin', 1, ?)`).run(now)
     db.prepare(`INSERT INTO users (id, username, password, role, is_active, created_at) VALUES (2, 'emp', 'x', 'employee', 1, ?)`).run(now)
     const salaryTypeId = Number(db.prepare(`
@@ -225,5 +227,70 @@ describe('Attendance Edit Request lifecycle (feature 007, FR-014…FR-020)', () 
     expect(delRes.deleted).toBe(1)
     expect(delRes.requested).toBe(0)
     expect(db.prepare('SELECT * FROM attendance_records WHERE id = ?').get(recId)).toBeFalsy()
+  })
+
+  describe('with attendance_edit_requires_approval off (the default)', () => {
+    const getSheet = getHandler('attendance:getSheet')
+    const deleteAttendance = getHandler('attendance:delete')
+    let session5: number
+
+    beforeAll(() => {
+      db.prepare(`UPDATE settings SET value = 'false', synced = 0 WHERE key = 'attendance_edit_requires_approval'`).run()
+      const now = new Date().toISOString()
+      session5 = Number(db.prepare(`
+        INSERT INTO scheduled_sessions (session_date, created_at, updated_at) VALUES ('2026-07-08', ?, ?)
+      `).run(now, now).lastInsertRowid)
+    })
+
+    afterAll(() => {
+      db.prepare(`UPDATE settings SET value = 'true', synced = 0 WHERE key = 'attendance_edit_requires_approval'`).run()
+    })
+
+    it('an employee overwrites an existing record directly, and it is still audit-logged', async () => {
+      setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
+      const first = await record(null, {
+        session_id: session5,
+        records: [{ student_id: studentId, teacher_id: teacherId, status: 'attended', teacher_status: 'present' }]
+      })
+      const recId = first[0].id
+
+      const second = await record(null, {
+        session_id: session5,
+        records: [{ student_id: studentId, teacher_id: teacherId, status: 'absent_excused', teacher_status: 'present' }]
+      })
+      expect(second[0].locked).toBeUndefined()
+      expect((db.prepare('SELECT status FROM attendance_records WHERE id = ?').get(recId) as any).status).toBe('absent_excused')
+
+      // Audited with approved_by NULL — nobody approved it.
+      const audit = db.prepare('SELECT * FROM attendance_audit_log WHERE attendance_record_id = ? ORDER BY id DESC').all(recId) as any[]
+      expect(audit.length).toBe(1)
+      expect(audit[0].changed_by).toBe(2)
+      expect(audit[0].approved_by).toBeNull()
+    })
+
+    it('the sheet reports no row as locked', async () => {
+      setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
+      const rows = await getSheet(null, { session_id: session5 }) as any[]
+      expect(rows.some((r) => r.locked)).toBe(false)
+    })
+
+    it('attendance:requestEdit is refused because direct editing is allowed', async () => {
+      setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
+      const rec = db.prepare('SELECT id FROM attendance_records WHERE session_id = ?').get(session5) as any
+      await expect(requestEdit(null, {
+        attendance_record_id: rec.id,
+        requested_status: 'attended',
+        reason: 'should not be needed'
+      })).rejects.toThrow(/disabled/i)
+    })
+
+    it('an employee attendance:delete removes the record instead of filing a request', async () => {
+      setCurrentUser({ id: 2, username: 'emp', role: 'employee', is_active: 1 })
+      const rec = db.prepare('SELECT id FROM attendance_records WHERE session_id = ?').get(session5) as any
+      const delRes = await deleteAttendance(null, { session_id: session5, student_ids: [{ student_id: studentId, teacher_id: teacherId }] })
+      expect(delRes.deleted).toBe(1)
+      expect(delRes.requested).toBe(0)
+      expect(db.prepare('SELECT * FROM attendance_records WHERE id = ?').get(rec.id)).toBeFalsy()
+    })
   })
 })

@@ -77,8 +77,22 @@ export default function SecuritySettings() {
   const [autoInterval, setAutoInterval] = useState('30')
   const [autoIntervalError, setAutoIntervalError] = useState<string | undefined>()
 
+  // ── Attendance edit approval (settings key: attendance_edit_requires_approval) ──
+  // Off by default: employees change attendance directly. On: saved records lock for
+  // employees and their edits/deletes go to an admin as requests.
+  const [attendanceApproval, setAttendanceApproval] = useState(false)
+  const [attendanceApprovalSaving, setAttendanceApprovalSaving] = useState(false)
+  const [attendanceApprovalError, setAttendanceApprovalError] = useState<string | null>(null)
+
   useEffect(() => {
     fetchStatus()
+    window.api.settings
+      .get()
+      .then((data: Record<string, string>) => {
+        const raw = String(data?.attendance_edit_requires_approval ?? 'false').trim().toLowerCase()
+        setAttendanceApproval(raw === 'true' || raw === '1' || raw === 'yes')
+      })
+      .catch(() => { /* keep the default (off) if settings cannot be read */ })
   }, [])
 
   // Sync interval input when persisted value loads after restart
@@ -155,6 +169,24 @@ export default function SecuritySettings() {
       return
     }
     await setAutoSync(!autoSyncEnabled, interval || 30)
+  }
+
+  const handleToggleAttendanceApproval = async () => {
+    const next = !attendanceApproval
+    setAttendanceApprovalError(null)
+    setAttendanceApprovalSaving(true)
+    try {
+      await window.api.settings.update({ attendance_edit_requires_approval: next ? 'true' : 'false' })
+      setAttendanceApproval(next)
+    } catch (err: any) {
+      let msg = err.message || 'Failed to save setting'
+      if (msg.includes('Error invoking remote method')) {
+        msg = msg.replace(/^Error: Error invoking remote method '[^']+': /, '')
+      }
+      setAttendanceApprovalError(msg)
+    } finally {
+      setAttendanceApprovalSaving(false)
+    }
   }
 
   return (
@@ -379,6 +411,48 @@ export default function SecuritySettings() {
             ℹ {isAr ? 'المزامنة التلقائية مفعّلة — ستعمل تلقائياً عند إعادة الاتصال.' : 'Auto-sync is enabled — it will run automatically once reconnected.'}
           </p>
         )}
+      </Card>
+
+      {/* ── Attendance edit approval ─────────────────────────────────────── */}
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-slate-800 flex items-center gap-2">
+              📝 {isAr ? 'موافقة تعديل الحضور' : 'Attendance Edit Approval'}
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              {isAr
+                ? 'عند التفعيل، لا يستطيع الموظف تعديل أو حذف حضور محفوظ مباشرة — يُرسل طلباً لمراجعة المسؤول. عند الإيقاف (الوضع الافتراضي) يعدّل الموظف الحضور مباشرة.'
+                : 'When on, an employee cannot change or delete a saved attendance record directly — they submit a request for an admin to review. When off (the default) employees edit attendance directly.'}
+            </p>
+          </div>
+          <Badge variant={attendanceApproval ? 'success' : 'neutral'}>
+            {attendanceApproval ? (isAr ? 'مفعّل' : 'Required') : isAr ? 'موقف' : 'Off'}
+          </Badge>
+        </div>
+
+        {attendanceApprovalError && (
+          <Alert variant="danger" onClose={() => setAttendanceApprovalError(null)}>
+            {attendanceApprovalError}
+          </Alert>
+        )}
+
+        <Button
+          variant={attendanceApproval ? 'danger' : 'primary'}
+          onClick={handleToggleAttendanceApproval}
+          isLoading={attendanceApprovalSaving}
+          disabled={attendanceApprovalSaving}
+        >
+          {attendanceApproval
+            ? isAr ? 'إيقاف طلب الموافقة' : 'Disable Approval Requirement'
+            : isAr ? 'تفعيل طلب الموافقة' : 'Require Approval'}
+        </Button>
+
+        <p className="text-xs text-slate-400">
+          {isAr
+            ? 'ℹ هذا الإعداد يُزامن مع قاعدة البيانات السحابية مع باقي الإعدادات.'
+            : 'ℹ This setting syncs to the cloud database along with the other settings.'}
+        </p>
       </Card>
     </div>
   )

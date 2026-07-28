@@ -31,6 +31,9 @@ describe('Attendance lock (feature 007, FR-011/FR-012): existing row blocks non-
     db = initDb()
     runMigrations(db)
     const now = new Date().toISOString()
+    // Locking is opt-in (attendance_edit_requires_approval defaults to false) — switch it on,
+    // since this suite is specifically about the locked behaviour.
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at, synced) VALUES ('attendance_edit_requires_approval', 'true', ?, 0)`).run(now)
     db.prepare(`INSERT INTO users (id, username, password, role, is_active, created_at) VALUES (1, 'admin', 'x', 'admin', 1, ?)`).run(now)
     db.prepare(`INSERT INTO users (id, username, password, role, is_active, created_at) VALUES (2, 'emp', 'x', 'employee', 1, ?)`).run(now)
 
