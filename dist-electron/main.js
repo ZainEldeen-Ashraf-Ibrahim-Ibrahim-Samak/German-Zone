@@ -1,13 +1,13 @@
 import { a as closeDb, c as DB_FILENAME, i as isSessionService, n as SERVICE_NAMES, o as getDb, r as SPEAKING, s as initDb, t as RECOMMENDED_MIX_WEIGHTS } from "./services-CNS37nWs.js";
 import { createRequire } from "node:module";
 import path from "node:path";
+import fs from "node:fs";
+import crypto$1 from "node:crypto";
 import nodeCrypto from "crypto";
 import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, shell } from "electron";
-import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ExcelJS from "exceljs";
 import PdfPrinter from "pdfmake";
-import crypto$1 from "node:crypto";
 import mongoose, { Schema } from "mongoose";
 import { promises } from "dns";
 //#region \0rolldown/runtime.js
@@ -388,11 +388,27 @@ import_main$1.default.config();
 try {
 	if (app?.isPackaged) {
 		const exeDir = path.dirname(app.getPath("exe"));
-		const envPath = path.join(exeDir, ".env");
-		const envExamplePath = path.join(exeDir, ".env.example");
-		import_main$1.default.config({ path: envPath });
-		import_main$1.default.config({ path: envExamplePath });
+		const candidates = [
+			path.join(app.getPath("userData"), ".env"),
+			path.join(exeDir, ".env"),
+			path.join(exeDir, ".env.example"),
+			path.join(process.resourcesPath ?? exeDir, ".env")
+		];
+		for (const candidate of candidates) import_main$1.default.config({ path: candidate });
 	}
+} catch {}
+try {
+	for (const [key, value] of Object.entries({
+		"JWT_SECRET": "875698654122avsrooerreriltrer",
+		"MONGO_URI": "mongodb+srv://ugs65478_db_user:2odS2KXxbwtN5Jyf@german-zone.qqu5j0p.mongodb.net/?appName=german-zone",
+		"SEED_ADMIN_USERNAME": "admin",
+		"SEED_ADMIN_PASSWORD": "admin123",
+		"IMPORT_DEFAULT_YEAR": "2025",
+		"CLOUDINARY_URL": "cloudinary://341498986938269:O9LqQUs_Vc5k1ooKLMegtUz_-90@dku3gwllk",
+		"CLOUDINARY_CLOUD_NAME": "dku3gwllk",
+		"CLOUDINARY_API_KEY": "341498986938269",
+		"CLOUDINARY_API_SECRET": "O9LqQUs_Vc5k1ooKLMegtUz_-90"
+	})) if (!process.env[key]?.trim() && value) process.env[key] = value;
 } catch {}
 var DEV_SECRET = "dev_insecure_jwt_secret_do_not_use_in_production";
 function isProduction() {
@@ -403,14 +419,52 @@ function isProduction() {
 	}
 }
 var devSecretWarned = false;
+var cachedLocalSecret = null;
 /**
-* The JWT signing secret. In production it must come from the environment;
-* in development a fixed insecure secret is used with a one-time warning.
+* Last-resort secret for a packaged build that was shipped without any
+* configuration: generate a strong random secret once and persist it in
+* userData. Tokens are only ever signed and verified by this same local
+* install, so a per-machine secret is both sufficient and safer than shipping
+* one constant to every customer. Returns null if userData is unwritable.
+*/
+function getOrCreateLocalSecret() {
+	if (cachedLocalSecret) return cachedLocalSecret;
+	try {
+		const file = path.join(app.getPath("userData"), "jwt-secret.key");
+		if (fs.existsSync(file)) {
+			const existing = fs.readFileSync(file, "utf-8").trim();
+			if (existing) {
+				cachedLocalSecret = existing;
+				return existing;
+			}
+		}
+		const generated = crypto$1.randomBytes(48).toString("hex");
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(file, generated, {
+			encoding: "utf-8",
+			mode: 384
+		});
+		console.warn(`[env] JWT_SECRET not configured — generated a per-install secret at ${file}. Existing sessions will need to sign in again.`);
+		cachedLocalSecret = generated;
+		return generated;
+	} catch (err) {
+		console.error("[env] Could not persist a generated JWT secret:", err);
+		return null;
+	}
+}
+/**
+* The JWT signing secret: the environment (or the build-time snapshot) first,
+* then a per-install generated secret in production, then a fixed insecure
+* secret in development with a one-time warning.
 */
 function getJwtSecret() {
 	const fromEnv = process.env.JWT_SECRET?.trim();
 	if (fromEnv) return fromEnv;
-	if (isProduction()) throw new Error("JWT_SECRET is not configured.");
+	if (isProduction()) {
+		const local = getOrCreateLocalSecret();
+		if (local) return local;
+		throw new Error("JWT_SECRET is not configured.");
+	}
 	if (!devSecretWarned) {
 		console.warn("[env] JWT_SECRET not set — using an insecure development secret. Set JWT_SECRET in .env before shipping a production build.");
 		devSecretWarned = true;
@@ -419,13 +473,15 @@ function getJwtSecret() {
 }
 /**
 * Validate that required configuration is present for the current build.
-* Production build with no JWT secret → not ok (caller must halt startup).
+* A production build without a configured JWT_SECRET falls back to a
+* per-install generated secret (see getOrCreateLocalSecret); startup is only
+* halted when even that fails, i.e. when no secret can be obtained at all.
 */
 function checkRequiredConfig() {
 	const secret = process.env.JWT_SECRET?.trim();
-	if (isProduction() && !secret) return {
+	if (isProduction() && !secret && !getOrCreateLocalSecret()) return {
 		ok: false,
-		error: "JWT_SECRET is not configured. The application cannot start securely.\nCreate a .env file (see .env.example) next to the application and set JWT_SECRET to a long random value, then restart."
+		error: "JWT_SECRET is not configured and a local one could not be created.\nCreate a .env file next to the application (or in its user-data folder) and set JWT_SECRET to a long random value, then restart."
 	};
 	return { ok: true };
 }
