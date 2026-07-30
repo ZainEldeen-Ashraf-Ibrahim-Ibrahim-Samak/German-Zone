@@ -4,7 +4,9 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 // simulate development vs. packaged (production) builds.
 vi.mock('electron', () => ({
   app: {
-    getPath: () => 'mock-user-data',
+    // Point userData at the OS temp dir so the generated-secret test does not
+    // write into the repository.
+    getPath: () => process.env.TEMP || process.env.TMPDIR || '.',
     get isPackaged() {
       return (globalThis as any).__isPackaged ?? false
     }
@@ -38,16 +40,20 @@ describe('env config — secret resolution', () => {
     expect(checkRequiredConfig().ok).toBe(true)
   })
 
-  it('checkRequiredConfig fails in production without a secret', () => {
+  // A packaged build ships without a .env, so an unset JWT_SECRET must not be
+  // fatal: the app provisions a per-install secret in userData instead.
+  it('checkRequiredConfig passes in production without a secret', () => {
     ;(globalThis as any).__isPackaged = true
-    const res = checkRequiredConfig()
-    expect(res.ok).toBe(false)
-    expect(res.error).toMatch(/JWT_SECRET/)
+    expect(checkRequiredConfig().ok).toBe(true)
   })
 
-  it('getJwtSecret throws in production without a secret', () => {
+  it('getJwtSecret returns a persisted generated secret in production', () => {
     ;(globalThis as any).__isPackaged = true
-    expect(() => getJwtSecret()).toThrow()
+    const s = getJwtSecret()
+    expect(s).not.toBe('')
+    expect(s.length).toBeGreaterThanOrEqual(32)
+    // Stable across calls, so tokens stay valid between requests.
+    expect(getJwtSecret()).toBe(s)
   })
 })
 

@@ -2,8 +2,50 @@
 import { defineConfig } from 'vite'
 import { configDefaults } from 'vitest/config'
 import path from 'node:path'
+import fs from 'node:fs'
+import dotenv from 'dotenv'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
+
+/**
+ * Configuration baked into the packaged main-process bundle.
+ *
+ * A packaged app has no `.env` next to it (the file is gitignored and never
+ * shipped) and its working directory is not the project root, so `dotenv` finds
+ * nothing at runtime and startup used to abort with "JWT_SECRET is not
+ * configured". We therefore snapshot a fixed whitelist of keys at build time —
+ * from the build machine's `.env` and/or the build environment (CI secrets) —
+ * and inline them. At runtime a real `.env` still wins; these are the fallback.
+ *
+ * The whitelist is deliberate: build-only credentials such as GH_TOKEN must
+ * never end up inside the shipped bundle.
+ */
+const BAKED_ENV_KEYS = [
+  'JWT_SECRET',
+  'MONGO_URI',
+  'SEED_ADMIN_USERNAME',
+  'SEED_ADMIN_PASSWORD',
+  'IMPORT_DEFAULT_YEAR',
+  'CLOUDINARY_URL',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+] as const
+
+function collectBuildEnv(): Record<string, string> {
+  const envPath = path.resolve(__dirname, '.env')
+  const fromFile = fs.existsSync(envPath)
+    ? dotenv.parse(fs.readFileSync(envPath))
+    : {}
+
+  const out: Record<string, string> = {}
+  for (const key of BAKED_ENV_KEYS) {
+    // The build environment (e.g. GitHub Actions secrets) wins over the local file.
+    const value = process.env[key]?.trim() || fromFile[key]?.trim()
+    if (value) out[key] = value
+  }
+  return out
+}
 
 export default defineConfig({
   // Playwright owns tests/e2e (run via `npm run test:e2e`); keep them out of Vitest.
@@ -25,6 +67,9 @@ export default defineConfig({
           options.startup()
         },
         vite: {
+          define: {
+            __BUILD_ENV__: JSON.stringify(collectBuildEnv()),
+          },
           build: {
             sourcemap: true,
             minify: false,
