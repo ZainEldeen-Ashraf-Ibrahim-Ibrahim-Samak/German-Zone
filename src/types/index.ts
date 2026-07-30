@@ -185,9 +185,15 @@ export interface EmployeeRole {
   created_at: string
   updated_at: string
   synced: number
+
+  // Join fields from roles:list — shown in the Job Types manager
+  salary_type_name?: string | null
+  salary_type_mode?: SalaryMode | null
+  employee_count?: number
+  active_employee_count?: number
 }
 
-export type SalaryMode = 'fixed_monthly' | 'per_session_fixed' | 'per_session_pct' | 'hybrid' | 'per_student_session'
+export type SalaryMode = 'fixed_monthly' | 'per_session_fixed' | 'per_session_pct' | 'hybrid' | 'per_student_session' | 'hourly'
 
 export interface SalaryType {
   id: number
@@ -196,9 +202,38 @@ export interface SalaryType {
   monthly_rate: number | null
   session_rate: number | null
   session_pct: number | null
+  /** Unit price of one hour — used by the `hourly` mode together with the session timer. */
+  hourly_rate: number | null
   created_at: string
   updated_at: string
   synced: number
+}
+
+/**
+ * One clocked work stint behind hourly pay. `running` while the timer is going; stopping it
+ * freezes `duration_minutes`, snapshots the `hourly_rate` then in force and stores the `amount`
+ * that stint earned. Only `completed` rows count towards salary.
+ */
+export interface SessionTimeLog {
+  id: number
+  session_id: number | null
+  employee_id: number
+  work_date: string
+  started_at: string
+  ended_at: string | null
+  duration_minutes: number | null
+  hourly_rate: number | null
+  amount: number | null
+  status: 'running' | 'completed' | 'void'
+  notes: string | null
+  created_at: string
+  updated_at: string
+  synced: number
+
+  // Join fields
+  employee_name?: string
+  session_date?: string | null
+  session_group?: string | null
 }
 
 export interface ServiceDefinition {
@@ -358,6 +393,9 @@ export interface Employee {
 
   // Feature 006 — attendance-based teacher payments
   teacher_session_rate?: number | null
+
+  /** Unit price of one hour for this employee — overrides the salary type's hourly rate. */
+  hourly_rate?: number | null
 }
 
 export interface ServiceTeacher {
@@ -421,6 +459,17 @@ export interface SalaryPayment {
   employee_name?: string
   employee_role?: string
   net_salary?: number
+
+  /** Breakdown of net_salary for this period: work earnings + housing/transport allowances. */
+  earnings?: number
+  allowances?: number
+  payable_sessions?: number
+  total_sessions?: number
+  /** Hours clocked on the session timer this period (hourly salary mode). */
+  hours_worked?: number
+  hourly_earnings?: number
+  salary_type_name?: string | null
+  salary_type_mode?: SalaryMode | null
 }
 
 export interface Expense {

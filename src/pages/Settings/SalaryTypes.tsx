@@ -16,6 +16,7 @@ const MODES: { value: SalaryMode; labelEn: string; labelAr: string }[] = [
   { value: 'per_session_pct', labelEn: 'Per Session (% of student\'s service price)', labelAr: 'نسبة مئوية من سعر خدمة الطالب' },
   { value: 'hybrid', labelEn: 'Hybrid (Monthly + Per Session)', labelAr: 'هجين (شهري + لكل جلسة)' },
   { value: 'per_student_session', labelEn: 'Per Student (Attendance-based)', labelAr: 'حسب الطالب (بناءً على الحضور)' },
+  { value: 'hourly', labelEn: 'Hourly (Timer-based)', labelAr: 'بالساعة (بالمؤقت)' },
 ]
 
 export default function SalaryTypes() {
@@ -31,6 +32,7 @@ export default function SalaryTypes() {
   const [monthlyRate, setMonthlyRate] = useState('')
   const [sessionRate, setSessionRate] = useState('')
   const [sessionPct, setSessionPct] = useState('')
+  const [hourlyRate, setHourlyRate] = useState('')
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
@@ -43,7 +45,7 @@ export default function SalaryTypes() {
   }, [])
 
   const openCreate = () => {
-    setEditing(null); setName(''); setMode('fixed_monthly'); setMonthlyRate(''); setSessionRate(''); setSessionPct(''); setFormError('')
+    setEditing(null); setName(''); setMode('fixed_monthly'); setMonthlyRate(''); setSessionRate(''); setSessionPct(''); setHourlyRate(''); setFormError('')
     setIsFormOpen(true)
   }
   const openEdit = (st: SalaryType) => {
@@ -51,6 +53,7 @@ export default function SalaryTypes() {
     setMonthlyRate(st.monthly_rate != null ? String(st.monthly_rate) : '')
     setSessionRate(st.session_rate != null ? String(st.session_rate) : '')
     setSessionPct(st.session_pct != null ? String(st.session_pct) : '')
+    setHourlyRate(st.hourly_rate != null ? String(st.hourly_rate) : '')
     setFormError(''); setIsFormOpen(true)
   }
 
@@ -60,8 +63,9 @@ export default function SalaryTypes() {
     if ((mode === 'fixed_monthly' || mode === 'hybrid') && !monthlyRate) { setFormError(isAr ? 'المبلغ الشهري مطلوب' : 'Monthly rate is required'); return }
     if ((mode === 'per_session_fixed' || mode === 'hybrid') && !sessionRate) { setFormError(isAr ? 'مبلغ الجلسة مطلوب' : 'Session rate is required'); return }
     if (mode === 'per_session_pct' && (!sessionPct || Number(sessionPct) <= 0 || Number(sessionPct) > 1)) { setFormError(isAr ? 'النسبة يجب أن تكون بين 0 و 1' : 'Percentage must be between 0 and 1'); return }
+    if (mode === 'hourly' && (!hourlyRate || Number(hourlyRate) <= 0)) { setFormError(isAr ? 'سعر الساعة مطلوب' : 'Hourly rate is required'); return }
     setIsSubmitting(true)
-    const payload = { name: name.trim(), mode, monthly_rate: monthlyRate ? Number(monthlyRate) : null, session_rate: sessionRate ? Number(sessionRate) : null, session_pct: sessionPct ? Number(sessionPct) : null }
+    const payload = { name: name.trim(), mode, monthly_rate: monthlyRate ? Number(monthlyRate) : null, session_rate: sessionRate ? Number(sessionRate) : null, session_pct: sessionPct ? Number(sessionPct) : null, hourly_rate: hourlyRate ? Number(hourlyRate) : null }
     const result = editing ? await updateSalaryType(editing.id, payload) : await addSalaryType(payload)
     setIsSubmitting(false)
     if (result) { setSuccessMsg(isAr ? 'تم الحفظ.' : 'Saved.'); setIsFormOpen(false) }
@@ -113,6 +117,7 @@ export default function SalaryTypes() {
                 {st.monthly_rate != null && <span className="text-xs text-slate-500 ms-2">{isAr ? 'شهري:' : 'Monthly:'} {st.monthly_rate} EGP</span>}
                 {st.session_rate != null && <span className="text-xs text-slate-500 ms-2">{isAr ? 'جلسة:' : 'Session:'} {st.session_rate} EGP</span>}
                 {st.session_pct != null && <span className="text-xs text-slate-500 ms-2">{isAr ? 'نسبة:' : 'Pct:'} {(st.session_pct * 100).toFixed(0)}%</span>}
+                {st.hourly_rate != null && <span className="text-xs text-slate-500 ms-2">{isAr ? 'الساعة:' : 'Hour:'} {st.hourly_rate} EGP</span>}
                 <div className="flex items-center gap-2 mt-1">
                   <Select
                     value={String(roleAssignId)}
@@ -154,6 +159,16 @@ export default function SalaryTypes() {
           )}
           {mode === 'per_session_pct' && (
             <Input label={isAr ? 'النسبة (0–1)' : 'Percentage (0–1)'} type="number" value={sessionPct} onChange={(e) => setSessionPct(e.target.value)} min={0} max={1} step={0.01} />
+          )}
+          {mode === 'hourly' && (
+            <>
+              <p className="text-xs text-slate-400">
+                {isAr
+                  ? '⏱ يُحتسب الأجر من المؤقت: يبدأ الموظف المؤقت عند بدء الحصة ويوقفه عند انتهائها، ثم يُضرب إجمالي الوقت في سعر الساعة أدناه ويُضاف إلى راتبه. يمكن تحديد سعر ساعة خاص لكل موظف في صفحة الموظفين ليتجاوز هذا السعر.'
+                  : '⏱ Pay is clocked by the timer: the employee starts it when the session begins and stops it at the end; the total time is multiplied by the hourly rate below and added to their salary. A per-employee hourly rate set on the Employees page overrides this one.'}
+              </p>
+              <Input label={isAr ? 'سعر الساعة (جنيه)' : 'Hourly Rate (EGP)'} type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} min={0} required />
+            </>
           )}
           {mode === 'per_student_session' && (
             <>

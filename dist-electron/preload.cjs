@@ -184,6 +184,16 @@ electron.contextBridge.exposeInMainWorld("api", {
 		proRateCalc: (args) => electron.ipcRenderer.invoke("sessions:proRateCalc", args),
 		studentsForDay: (day_of_week) => electron.ipcRenderer.invoke("sessions:studentsForDay", { day_of_week })
 	},
+	sessionTimers: {
+		start: (args) => electron.ipcRenderer.invoke("sessionTimers:start", args),
+		stop: (args) => electron.ipcRenderer.invoke("sessionTimers:stop", args),
+		list: (args) => electron.ipcRenderer.invoke("sessionTimers:list", args ?? {}),
+		active: (args) => electron.ipcRenderer.invoke("sessionTimers:active", args ?? {}),
+		logManual: (args) => electron.ipcRenderer.invoke("sessionTimers:logManual", args),
+		void: (args) => electron.ipcRenderer.invoke("sessionTimers:void", args),
+		delete: (args) => electron.ipcRenderer.invoke("sessionTimers:delete", args),
+		hourlyEmployees: () => electron.ipcRenderer.invoke("sessionTimers:hourlyEmployees")
+	},
 	attendance: {
 		getSheet: (sessionId) => electron.ipcRenderer.invoke("attendance:getSheet", { session_id: sessionId }),
 		record: (sessionId, records) => electron.ipcRenderer.invoke("attendance:record", {

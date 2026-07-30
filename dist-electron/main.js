@@ -16063,6 +16063,66 @@ var migrations = [
         VALUES ('attendance_edit_requires_approval', 'false', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 0);
       `);
 		}
+	},
+	{
+		name: "047_hourly_salary_mode",
+		noTransaction: true,
+		up: (db) => {
+			db.exec(`
+        CREATE TABLE IF NOT EXISTS salary_types_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          mode TEXT NOT NULL CHECK(mode IN ('fixed_monthly','per_session_fixed','per_session_pct','hybrid','per_student_session','hourly')),
+          monthly_rate REAL,
+          session_rate REAL,
+          session_pct REAL,
+          hourly_rate REAL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+
+        INSERT INTO salary_types_new
+          (id, name, mode, monthly_rate, session_rate, session_pct, hourly_rate, created_at, updated_at, synced)
+        SELECT id, name, mode, monthly_rate, session_rate, session_pct, NULL, created_at, updated_at, synced
+        FROM salary_types;
+
+        DROP TABLE salary_types;
+        ALTER TABLE salary_types_new RENAME TO salary_types;
+      `);
+			try {
+				db.exec("ALTER TABLE employees ADD COLUMN hourly_rate REAL;");
+			} catch {}
+		}
+	},
+	{
+		name: "048_session_time_logs",
+		up: (db) => {
+			db.exec(`
+        CREATE TABLE IF NOT EXISTS session_time_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER REFERENCES scheduled_sessions(id) ON DELETE SET NULL,
+          employee_id INTEGER NOT NULL REFERENCES employees(id),
+          work_date TEXT NOT NULL,
+          started_at TEXT NOT NULL,
+          ended_at TEXT,
+          duration_minutes REAL,
+          hourly_rate REAL,
+          amount REAL,
+          status TEXT NOT NULL CHECK(status IN ('running','completed','void')) DEFAULT 'running',
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_time_logs_employee ON session_time_logs(employee_id);
+        CREATE INDEX IF NOT EXISTS idx_session_time_logs_date ON session_time_logs(work_date);
+        CREATE INDEX IF NOT EXISTS idx_session_time_logs_session ON session_time_logs(session_id);
+        -- At most one timer may be running per employee at a time.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_session_time_logs_one_running
+          ON session_time_logs(employee_id) WHERE status = 'running';
+      `);
+		}
 	}
 ];
 function runMigrations(db) {
@@ -24068,6 +24128,222 @@ ipcMain.handle("attendance:getAuditLog", async (_event, { attendance_record_id }
 	}
 });
 //#endregion
+//#region electron/ipc/sessionTimersIPC.ts
+/**
+* The unit price of one hour for this employee:
+*   1. the employee's own `hourly_rate` override
+*   2. the effective salary type's `hourly_rate`
+* Returns null when neither is configured — a timer can still be run and stopped (the worked
+* time is never lost), it just produces no amount until a rate is set, which is then picked up
+* by `recalcPendingTimeLogs`. Nothing is ever paid at a hidden default.
+*/
+function resolveHourlyRate(db, employee_id) {
+	const row = db.prepare(`
+    SELECT e.hourly_rate as own_rate, st.hourly_rate as type_rate, st.mode as mode
+    FROM employees e
+    LEFT JOIN employee_roles er ON e.role_id = er.id
+    LEFT JOIN salary_types st ON st.id = COALESCE(e.salary_type_override_id, er.salary_type_id)
+    WHERE e.id = ?
+  `).get(employee_id);
+	if (row?.own_rate != null) return row.own_rate;
+	if (row?.type_rate != null) return row.type_rate;
+	return null;
+}
+/** Elapsed minutes between two ISO instants, rounded to 2dp and never negative. */
+function minutesBetween(startedAt, endedAt) {
+	const ms = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+	return Number(Math.max(0, ms / 6e4).toFixed(2));
+}
+function amountFor(durationMinutes, rate) {
+	if (rate == null) return null;
+	return Number((durationMinutes / 60 * rate).toFixed(2));
+}
+/**
+* Re-prices every completed-but-unpaid time log of one employee at the rate that CURRENTLY
+* resolves — mirrors resnapshotPendingTeacherPayments for per-session pay, so setting or
+* correcting an hourly rate is reflected in salaries immediately, including for stints that
+* were logged before the rate existed. Only rows whose salary month has not been paid out are
+* touched; the elapsed time itself is never rewritten.
+*/
+function recalcPendingTimeLogs(db, employee_id) {
+	const logs = db.prepare(`
+    SELECT id, duration_minutes FROM session_time_logs
+    WHERE employee_id = ? AND status = 'completed'
+  `).all(employee_id);
+	if (logs.length === 0) return;
+	const rate = resolveHourlyRate(db, employee_id);
+	if (rate == null) return;
+	const now = (/* @__PURE__ */ new Date()).toISOString();
+	for (const log of logs) {
+		const amount = amountFor(log.duration_minutes ?? 0, rate);
+		db.prepare(`
+      UPDATE session_time_logs SET hourly_rate = ?, amount = ?, updated_at = ?, synced = 0 WHERE id = ?
+    `).run(rate, amount, now, log.id);
+	}
+}
+/** Sum of an employee's completed hours + pay for a date range (YYYY-MM-DD bounds). */
+function getTimeLogTotals(db, employee_id, start, end) {
+	const row = db.prepare(`
+    SELECT COUNT(*) as cnt,
+           COALESCE(SUM(duration_minutes), 0) as minutes,
+           COALESCE(SUM(amount), 0) as total
+    FROM session_time_logs
+    WHERE employee_id = ? AND status = 'completed' AND work_date >= ? AND work_date <= ?
+  `).get(employee_id, start, end);
+	return {
+		count: row.cnt,
+		minutes: row.minutes,
+		hours: Number((row.minutes / 60).toFixed(2)),
+		total: Number(row.total.toFixed(2))
+	};
+}
+var withRowJoins = `
+  SELECT tl.*, e.name as employee_name, ss.session_date as session_date, ss.group_name as session_group
+  FROM session_time_logs tl
+  JOIN employees e ON tl.employee_id = e.id
+  LEFT JOIN scheduled_sessions ss ON tl.session_id = ss.id
+`;
+ipcMain.handle("sessionTimers:start", async (_event, { employee_id, session_id = null, notes = null }) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		if (!employee_id) throw new Error("الموظف مطلوب / Employee is required");
+		if (!db.prepare("SELECT id, is_active FROM employees WHERE id = ?").get(employee_id)) throw new Error("الموظف غير موجود / Employee not found");
+		if (db.prepare(`SELECT id FROM session_time_logs WHERE employee_id = ? AND status = 'running'`).get(employee_id)) throw new Error("يوجد مؤقت قيد التشغيل بالفعل لهذا الموظف / A timer is already running for this employee");
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const result = db.prepare(`
+      INSERT INTO session_time_logs (session_id, employee_id, work_date, started_at, status, notes, created_at, updated_at, synced)
+      VALUES (?, ?, ?, ?, 'running', ?, ?, ?, 0)
+    `).run(session_id, employee_id, now.slice(0, 10), now, notes, now, now);
+		return db.prepare(`${withRowJoins} WHERE tl.id = ?`).get(Number(result.lastInsertRowid));
+	} catch (error) {
+		throw new Error(error.message || "Failed to start timer");
+	}
+});
+ipcMain.handle("sessionTimers:stop", async (_event, { id = null, employee_id = null }) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		const log = id ? db.prepare(`SELECT * FROM session_time_logs WHERE id = ?`).get(id) : db.prepare(`SELECT * FROM session_time_logs WHERE employee_id = ? AND status = 'running'`).get(employee_id);
+		if (!log) throw new Error("المؤقت غير موجود / Timer not found");
+		if (log.status !== "running") throw new Error("المؤقت متوقف بالفعل / Timer is not running");
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const duration = minutesBetween(log.started_at, now);
+		const rate = resolveHourlyRate(db, log.employee_id);
+		const amount = amountFor(duration, rate);
+		db.prepare(`
+      UPDATE session_time_logs
+      SET ended_at = ?, duration_minutes = ?, hourly_rate = ?, amount = ?, status = 'completed', updated_at = ?, synced = 0
+      WHERE id = ?
+    `).run(now, duration, rate, amount, now, log.id);
+		return db.prepare(`${withRowJoins} WHERE tl.id = ?`).get(log.id);
+	} catch (error) {
+		throw new Error(error.message || "Failed to stop timer");
+	}
+});
+ipcMain.handle("sessionTimers:logManual", async (_event, { employee_id, session_id = null, work_date, started_at = null, ended_at = null, duration_minutes = null, notes = null }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!employee_id) throw new Error("الموظف مطلوب / Employee is required");
+		let minutes;
+		if (duration_minutes != null) minutes = Number(duration_minutes);
+		else if (started_at && ended_at) minutes = minutesBetween(started_at, ended_at);
+		else throw new Error("المدة أو وقتا البدء والانتهاء مطلوبان / Either a duration or both start and end times are required");
+		if (!(minutes > 0)) throw new Error("المدة يجب أن تكون أكبر من صفر / Duration must be greater than zero");
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const date = work_date || (started_at ? String(started_at).slice(0, 10) : now.slice(0, 10));
+		const rate = resolveHourlyRate(db, employee_id);
+		const amount = amountFor(minutes, rate);
+		const result = db.prepare(`
+      INSERT INTO session_time_logs (session_id, employee_id, work_date, started_at, ended_at, duration_minutes, hourly_rate, amount, status, notes, created_at, updated_at, synced)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, 0)
+    `).run(session_id, employee_id, date, started_at ?? now, ended_at ?? now, minutes, rate, amount, notes, now, now);
+		return db.prepare(`${withRowJoins} WHERE tl.id = ?`).get(Number(result.lastInsertRowid));
+	} catch (error) {
+		throw new Error(error.message || "Failed to log worked time");
+	}
+});
+ipcMain.handle("sessionTimers:void", async (_event, { id }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!db.prepare("SELECT id FROM session_time_logs WHERE id = ?").get(id)) throw new Error("السجل غير موجود / Time log not found");
+		db.prepare(`UPDATE session_time_logs SET status = 'void', updated_at = ?, synced = 0 WHERE id = ?`).run((/* @__PURE__ */ new Date()).toISOString(), id);
+		return { ok: true };
+	} catch (error) {
+		throw new Error(error.message || "Failed to void time log");
+	}
+});
+ipcMain.handle("sessionTimers:delete", async (_event, { id }) => {
+	try {
+		requireAdmin();
+		getDb().prepare("DELETE FROM session_time_logs WHERE id = ?").run(id);
+		return { ok: true };
+	} catch (error) {
+		throw new Error(error.message || "Failed to delete time log");
+	}
+});
+ipcMain.handle("sessionTimers:list", async (_event, args) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		const { employee_id, session_id, from, to, status } = args || {};
+		let query = `${withRowJoins} WHERE 1=1`;
+		const params = [];
+		if (employee_id) {
+			query += " AND tl.employee_id = ?";
+			params.push(employee_id);
+		}
+		if (session_id) {
+			query += " AND tl.session_id = ?";
+			params.push(session_id);
+		}
+		if (from) {
+			query += " AND tl.work_date >= ?";
+			params.push(from);
+		}
+		if (to) {
+			query += " AND tl.work_date <= ?";
+			params.push(to);
+		}
+		if (status) {
+			query += " AND tl.status = ?";
+			params.push(status);
+		}
+		query += " ORDER BY tl.started_at DESC";
+		return db.prepare(query).all(...params);
+	} catch (error) {
+		throw new Error(error.message || "Failed to list time logs");
+	}
+});
+ipcMain.handle("sessionTimers:active", async (_event, args) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		const employee_id = args?.employee_id;
+		const query = `${withRowJoins} WHERE tl.status = 'running'` + (employee_id ? " AND tl.employee_id = ?" : "") + " ORDER BY tl.started_at ASC";
+		return employee_id ? db.prepare(query).all(employee_id) : db.prepare(query).all();
+	} catch (error) {
+		throw new Error(error.message || "Failed to list running timers");
+	}
+});
+ipcMain.handle("sessionTimers:hourlyEmployees", async () => {
+	try {
+		checkAuth$10();
+		return getDb().prepare(`
+      SELECT e.id, e.name, e.role, COALESCE(e.hourly_rate, st.hourly_rate) as effective_hourly_rate
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.role_id = er.id
+      LEFT JOIN salary_types st ON st.id = COALESCE(e.salary_type_override_id, er.salary_type_id)
+      WHERE e.is_active = 1 AND st.mode = 'hourly'
+      ORDER BY e.name ASC
+    `).all();
+	} catch (error) {
+		throw new Error(error.message || "Failed to list hourly employees");
+	}
+});
+//#endregion
 //#region electron/ipc/salariesIPC.ts
 var ARABIC_MONTHS = {
 	"يناير": 1,
@@ -24112,42 +24388,64 @@ function getTeacherPaymentsForMonth(db, employeeId, start, end) {
 /**
 * Computes an employee's base monthly pay for a period from their effective salary type.
 * For per-session/hybrid types this reflects how many sessions were actually payable
-* (a session is payable when a student attended or was absent without excuse). Shared by
-* salary:get and salary:update so a saved payroll row never disagrees with the live view.
+* (a session is payable when a student attended or was absent without excuse); for the hourly
+* type it reflects the time actually clocked on the session timer. Shared by salary:get and
+* salary:update so a saved payroll row never disagrees with the live view.
 *
 * If the employee has their own `teacher_session_rate` configured (feature 006), their
 * per-session earnings come from the teacher_payments ledger instead of the salary-type
 * estimate — that ledger is what attendance actually generated, at their real rate.
+*
+* Housing and transport allowances are ALWAYS added on top of whatever the salary type earns,
+* for every mode. Attendance-based teachers used to lose them entirely, because their base was
+* replaced outright by the ledger total. `bonus` is added by the callers (it is per-period, and
+* lives on the salary_payments row rather than the employee).
 */
 function computeBaseSalary(db, employeeId, month, year) {
 	resnapshotPendingTeacherPayments(db, employeeId);
+	recalcPendingTimeLogs(db, employeeId);
 	const row = db.prepare(`
-    SELECT e.net_salary, e.teacher_session_rate, COALESCE(e.salary_type_override_id, er.salary_type_id) as eff
+    SELECT e.net_salary, e.teacher_session_rate,
+           COALESCE(e.housing, 0) as housing, COALESCE(e.transport, 0) as transport,
+           COALESCE(e.salary_type_override_id, er.salary_type_id) as eff
     FROM employees e LEFT JOIN employee_roles er ON e.role_id = er.id WHERE e.id = ?
   `).get(employeeId);
 	const netSalary = row?.net_salary ?? 0;
+	const allowances = Number(row?.housing ?? 0) + Number(row?.transport ?? 0);
 	let base = netSalary;
 	let payableSessions = 0;
 	let totalSessions = 0;
+	let hoursWorked = 0;
+	let hourlyEarnings = 0;
 	let salaryTypeName = null;
 	let salaryTypeMode = null;
 	const { start, end } = monthBounds$1(month, year);
 	const hasOwnTeacherRate = row?.teacher_session_rate != null;
 	const teacherPayments = hasOwnTeacherRate ? getTeacherPaymentsForMonth(db, employeeId, start, end) : null;
+	let allowancesIncluded = true;
+	const earn = (amount) => {
+		base = amount;
+		allowancesIncluded = false;
+	};
 	if (row?.eff) {
 		const st = db.prepare("SELECT * FROM salary_types WHERE id = ?").get(row.eff);
 		if (st) {
 			salaryTypeName = st.name;
 			salaryTypeMode = st.mode;
-			if (st.mode === "per_student_session" || st.mode === "per_session_pct") {
+			if (st.mode === "hourly") {
+				const totals = getTimeLogTotals(db, employeeId, start, end);
+				hoursWorked = totals.hours;
+				hourlyEarnings = totals.total;
+				earn(totals.total);
+			} else if (st.mode === "per_student_session" || st.mode === "per_session_pct") {
 				const tp = hasOwnTeacherRate ? teacherPayments : getTeacherPaymentsForMonth(db, employeeId, start, end);
 				payableSessions = tp.count;
 				totalSessions = tp.count;
-				base = tp.total;
+				earn(tp.total);
 			} else if (hasOwnTeacherRate && (st.mode === "per_session_fixed" || st.mode === "hybrid")) {
 				payableSessions = teacherPayments.count;
 				totalSessions = teacherPayments.count;
-				base = st.mode === "hybrid" ? (st.monthly_rate ?? 0) + teacherPayments.total : teacherPayments.total;
+				earn(st.mode === "hybrid" ? (st.monthly_rate ?? 0) + teacherPayments.total : teacherPayments.total);
 			} else {
 				const sessionIds = db.prepare(`
           SELECT ss.id FROM scheduled_sessions ss
@@ -24162,20 +24460,27 @@ function computeBaseSalary(db, employeeId, month, year) {
             WHERE session_id IN (${ph}) AND status IN ('attended','absent_unexcused')
           `).get(...sessionIds).cnt;
 				}
-				if (st.mode === "fixed_monthly") base = st.monthly_rate ?? netSalary;
-				else if (st.mode === "per_session_fixed") base = payableSessions * (st.session_rate ?? 0);
-				else if (st.mode === "hybrid") base = (st.monthly_rate ?? 0) + payableSessions * (st.session_rate ?? 0);
+				if (st.mode === "fixed_monthly") {
+					if (st.monthly_rate != null) earn(st.monthly_rate);
+				} else if (st.mode === "per_session_fixed") earn(payableSessions * (st.session_rate ?? 0));
+				else if (st.mode === "hybrid") earn((st.monthly_rate ?? 0) + payableSessions * (st.session_rate ?? 0));
 			}
 		}
 	} else if (hasOwnTeacherRate) {
 		payableSessions = teacherPayments.count;
 		totalSessions = teacherPayments.count;
-		base = teacherPayments.total;
+		earn(teacherPayments.total);
 	}
+	const earnings = base;
+	if (!allowancesIncluded) base = Number((earnings + allowances).toFixed(2));
 	return {
 		base,
+		earnings,
+		allowances: allowancesIncluded ? 0 : allowances,
 		payableSessions,
 		totalSessions,
+		hoursWorked,
+		hourlyEarnings,
 		salaryTypeName,
 		salaryTypeMode
 	};
@@ -24198,7 +24503,7 @@ ipcMain.handle("employees:add", async (_event, employeeInput) => {
 	try {
 		requireAdmin();
 		const db = getDb();
-		const { name, role_id, base_salary = 0, housing = 0, transport = 0, salary_type_override_id = null, teacher_session_rate = null } = employeeInput;
+		const { name, role_id, base_salary = 0, housing = 0, transport = 0, salary_type_override_id = null, teacher_session_rate = null, hourly_rate = null } = employeeInput;
 		if (!name) throw new Error("جميع الحقول الإلزامية مطلوبة / Missing required fields");
 		let roleText = employeeInput.role ?? "";
 		if (role_id) {
@@ -24209,9 +24514,9 @@ ipcMain.handle("employees:add", async (_event, employeeInput) => {
 		const netSalary = Number(base_salary) + Number(housing) + Number(transport);
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const result = db.prepare(`
-      INSERT INTO employees (name, role, role_id, salary_type_override_id, base_salary, housing, transport, net_salary, is_active, created_at, updated_at, synced, teacher_session_rate)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0, ?)
-    `).run(name, roleText, role_id ?? null, salary_type_override_id, Number(base_salary), Number(housing), Number(transport), netSalary, now, now, teacher_session_rate !== null ? Number(teacher_session_rate) : null);
+      INSERT INTO employees (name, role, role_id, salary_type_override_id, base_salary, housing, transport, net_salary, is_active, created_at, updated_at, synced, teacher_session_rate, hourly_rate)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0, ?, ?)
+    `).run(name, roleText, role_id ?? null, salary_type_override_id, Number(base_salary), Number(housing), Number(transport), netSalary, now, now, teacher_session_rate !== null ? Number(teacher_session_rate) : null, hourly_rate !== null && hourly_rate !== "" ? Number(hourly_rate) : null);
 		const createdId = Number(result.lastInsertRowid);
 		return db.prepare(`
       SELECT e.*, er.name as role_name FROM employees e LEFT JOIN employee_roles er ON e.role_id = er.id WHERE e.id = ?
@@ -24236,6 +24541,7 @@ ipcMain.handle("employees:update", async (_event, { id, patch }) => {
 		const housing = patch.housing !== void 0 ? Number(patch.housing) : emp.housing;
 		const transport = patch.transport !== void 0 ? Number(patch.transport) : emp.transport;
 		const teacher_session_rate = patch.teacher_session_rate !== void 0 ? patch.teacher_session_rate === null ? null : Number(patch.teacher_session_rate) : emp.teacher_session_rate;
+		const hourly_rate = patch.hourly_rate !== void 0 ? patch.hourly_rate === null || patch.hourly_rate === "" ? null : Number(patch.hourly_rate) : emp.hourly_rate;
 		if (patch.role_id !== void 0 && patch.role_id !== null) {
 			const roleRow = db.prepare("SELECT name FROM employee_roles WHERE id = ?").get(patch.role_id);
 			if (!roleRow) throw new Error("الدور غير موجود / Role not found");
@@ -24246,10 +24552,11 @@ ipcMain.handle("employees:update", async (_event, { id, patch }) => {
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		db.prepare(`
       UPDATE employees
-      SET name = ?, role = ?, role_id = ?, salary_type_override_id = ?, base_salary = ?, housing = ?, transport = ?, net_salary = ?, updated_at = ?, synced = 0, teacher_session_rate = ?
+      SET name = ?, role = ?, role_id = ?, salary_type_override_id = ?, base_salary = ?, housing = ?, transport = ?, net_salary = ?, updated_at = ?, synced = 0, teacher_session_rate = ?, hourly_rate = ?
       WHERE id = ?
-    `).run(name, role, role_id, salary_type_override_id, base_salary, housing, transport, netSalary, now, teacher_session_rate, id);
+    `).run(name, role, role_id, salary_type_override_id, base_salary, housing, transport, netSalary, now, teacher_session_rate, hourly_rate, id);
 		if (patch.teacher_session_rate !== void 0 && teacher_session_rate !== emp.teacher_session_rate || patch.salary_type_override_id !== void 0 && salary_type_override_id !== emp.salary_type_override_id || patch.role_id !== void 0 && role_id !== emp.role_id) resnapshotPendingTeacherPayments(db, id);
+		if (patch.hourly_rate !== void 0 && hourly_rate !== emp.hourly_rate || patch.salary_type_override_id !== void 0 && salary_type_override_id !== emp.salary_type_override_id || patch.role_id !== void 0 && role_id !== emp.role_id) recalcPendingTimeLogs(db, id);
 		return db.prepare(`
       SELECT e.*, er.name as role_name FROM employees e LEFT JOIN employee_roles er ON e.role_id = er.id WHERE e.id = ?
     `).get(id);
@@ -24300,9 +24607,13 @@ ipcMain.handle("salary:get", async (_event, { month, year }) => {
       WHERE e.is_active = 1 OR s.id IS NOT NULL
       ORDER BY e.name ASC
     `).all(month, year, month, year).map((row) => {
-			const { base: computedActualPaid, payableSessions, totalSessions, salaryTypeName, salaryTypeMode } = computeBaseSalary(db, row.employee_id, month, year);
+			const { base: computedActualPaid, earnings, allowances, payableSessions, totalSessions, hoursWorked, hourlyEarnings, salaryTypeName, salaryTypeMode } = computeBaseSalary(db, row.employee_id, month, year);
 			row.payable_sessions = payableSessions;
 			row.total_sessions = totalSessions;
+			row.hours_worked = hoursWorked;
+			row.hourly_earnings = hourlyEarnings;
+			row.earnings = earnings;
+			row.allowances = allowances;
 			const bonus = row.bonus ?? 0;
 			const deductionSum = db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM employee_deductions WHERE employee_id = ? AND month = ? AND year = ?").get(row.employee_id, month, Number(year))?.total ?? 0;
 			return {
@@ -24359,7 +24670,7 @@ ipcMain.handle("salary:getExpected", async (_event, { employee_id, month, year }
 		const db = getDb();
 		if (!employee_id || !month || !year) throw new Error("Employee ID, month, and year are required");
 		const { start } = monthBounds$1(month, year);
-		const { base: actualToDate, salaryTypeMode } = computeBaseSalary(db, employee_id, month, year);
+		const { base: actualToDate, allowances, hoursWorked, salaryTypeMode } = computeBaseSalary(db, employee_id, month, year);
 		const emp = db.prepare("SELECT teacher_session_rate FROM employees WHERE id = ?").get(employee_id);
 		const projectable = salaryTypeMode === null || [
 			"per_session_fixed",
@@ -24401,13 +24712,15 @@ ipcMain.handle("salary:getExpected", async (_event, { employee_id, month, year }
 				for (let d = startDay; d <= daysInMonth; d++) if (days.includes(new Date(y, m, d).getDay())) sessionCount++;
 				scheduleTotal += sessionCount * rate;
 			}
-			expectedTotal = scheduleTotal;
+			expectedTotal = scheduleTotal + allowances;
 			if (salaryTypeMode === "hybrid") expectedTotal += st?.monthly_rate ?? 0;
 		}
 		return {
 			actual_to_date: actualToDate,
 			projected_remaining: Number(Math.max(0, expectedTotal - actualToDate).toFixed(2)),
 			expected_total: Number(expectedTotal.toFixed(2)),
+			allowances,
+			hours_worked: hoursWorked,
 			salary_type_mode: salaryTypeMode
 		};
 	} catch (error) {
@@ -30039,7 +30352,8 @@ var employeeSchema = new Schema({
 	created_at: String,
 	updated_at: String,
 	synced: Number,
-	teacher_session_rate: Number
+	teacher_session_rate: Number,
+	hourly_rate: Number
 }, sharedOptions);
 var EmployeeModel = mongoose.models["sync_employees"] || mongoose.model("sync_employees", employeeSchema);
 var salaryPaymentSchema = new Schema({
@@ -30102,6 +30416,7 @@ var salaryTypeSchema = new Schema({
 	monthly_rate: Number,
 	session_rate: Number,
 	session_pct: Number,
+	hourly_rate: Number,
 	created_at: String,
 	updated_at: String,
 	synced: Number
@@ -30162,6 +30477,27 @@ var sessionTeacherSchema = new Schema({
 	synced: Number
 }, sharedOptions);
 var SessionTeacherModel = mongoose.models["sync_session_teachers"] || mongoose.model("sync_session_teachers", sessionTeacherSchema);
+var sessionTimeLogSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	session_id: Number,
+	employee_id: Number,
+	work_date: String,
+	started_at: String,
+	ended_at: String,
+	duration_minutes: Number,
+	hourly_rate: Number,
+	amount: Number,
+	status: String,
+	notes: String,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var SessionTimeLogModel = mongoose.models["sync_session_time_logs"] || mongoose.model("sync_session_time_logs", sessionTimeLogSchema);
 var attendanceRecordSchema = new Schema({
 	id: {
 		type: Number,
@@ -30442,6 +30778,11 @@ var SYNC_ENTITIES = [
 		name: "session_teachers",
 		model: SessionTeacherModel,
 		table: "session_teachers"
+	},
+	{
+		name: "session_time_logs",
+		model: SessionTimeLogModel,
+		table: "session_time_logs"
 	},
 	{
 		name: "attendance_records",
@@ -31102,19 +31443,29 @@ ipcMain.handle("dashboard:get", async (_event, { month, year }) => {
 //#region electron/ipc/rolesIPC.ts
 ipcMain.handle("roles:list", async () => {
 	try {
-		requireAdmin();
-		return getDb().prepare("SELECT * FROM employee_roles ORDER BY name ASC").all();
+		checkAuth$10();
+		return getDb().prepare(`
+      SELECT r.*,
+        st.name as salary_type_name,
+        st.mode as salary_type_mode,
+        (SELECT COUNT(*) FROM employees e WHERE e.role_id = r.id) as employee_count,
+        (SELECT COUNT(*) FROM employees e WHERE e.role_id = r.id AND e.is_active = 1) as active_employee_count
+      FROM employee_roles r
+      LEFT JOIN salary_types st ON st.id = r.salary_type_id
+      ORDER BY r.name ASC
+    `).all();
 	} catch (error) {
 		throw new Error(error.message || "Failed to list roles");
 	}
 });
-ipcMain.handle("roles:add", async (_event, { name }) => {
+ipcMain.handle("roles:add", async (_event, { name, salary_type_id = null }) => {
 	try {
 		requireAdmin();
 		const db = getDb();
-		if (!name?.trim()) throw new Error("اسم الدور مطلوب / Role name is required");
+		if (!name?.trim()) throw new Error("اسم الوظيفة مطلوب / Job type name is required");
+		if (db.prepare("SELECT id FROM employee_roles WHERE name = ?").get(name.trim())) throw new Error("يوجد مسمى وظيفي بنفس الاسم / A job type with this name already exists");
 		const now = (/* @__PURE__ */ new Date()).toISOString();
-		const result = db.prepare("INSERT INTO employee_roles (name, created_at, updated_at, synced) VALUES (?, ?, ?, 0)").run(name.trim(), now, now);
+		const result = db.prepare("INSERT INTO employee_roles (name, salary_type_id, created_at, updated_at, synced) VALUES (?, ?, ?, ?, 0)").run(name.trim(), salary_type_id, now, now);
 		return db.prepare("SELECT * FROM employee_roles WHERE id = ?").get(Number(result.lastInsertRowid));
 	} catch (error) {
 		throw new Error(error.message || "Failed to add role");
@@ -31125,8 +31476,12 @@ ipcMain.handle("roles:update", async (_event, { id, patch }) => {
 		requireAdmin();
 		const db = getDb();
 		const role = db.prepare("SELECT * FROM employee_roles WHERE id = ?").get(id);
-		if (!role) throw new Error("الدور غير موجود / Role not found");
-		const name = patch.name !== void 0 ? patch.name : role.name;
+		if (!role) throw new Error("الوظيفة غير موجودة / Job type not found");
+		const name = patch.name !== void 0 ? String(patch.name).trim() : role.name;
+		if (!name) throw new Error("اسم الوظيفة مطلوب / Job type name is required");
+		if (name !== role.name) {
+			if (db.prepare("SELECT id FROM employee_roles WHERE name = ? AND id != ?").get(name, id)) throw new Error("يوجد مسمى وظيفي بنفس الاسم / A job type with this name already exists");
+		}
 		const salary_type_id = patch.salary_type_id !== void 0 ? patch.salary_type_id : role.salary_type_id;
 		db.prepare("UPDATE employee_roles SET name = ?, salary_type_id = ?, updated_at = ?, synced = 0 WHERE id = ?").run(name, salary_type_id, (/* @__PURE__ */ new Date()).toISOString(), id);
 		if (patch.name !== void 0) db.prepare("UPDATE employees SET role = ?, updated_at = ?, synced = 0 WHERE role_id = ?").run(name, (/* @__PURE__ */ new Date()).toISOString(), id);
@@ -31140,7 +31495,7 @@ ipcMain.handle("roles:delete", async (_event, { id }) => {
 		requireAdmin();
 		const db = getDb();
 		const active = db.prepare("SELECT COUNT(*) as cnt FROM employees WHERE role_id = ? AND is_active = 1").get(id);
-		if (active.cnt > 0) throw new Error(`لا يمكن حذف الدور — يوجد ${active.cnt} موظف نشط / Cannot delete role — ${active.cnt} active employee(s) assigned`);
+		if (active.cnt > 0) throw new Error(`لا يمكن حذف الوظيفة — يوجد ${active.cnt} موظف نشط / Cannot delete job type — ${active.cnt} active employee(s) assigned`);
 		db.prepare("DELETE FROM employee_roles WHERE id = ?").run(id);
 		return { ok: true };
 	} catch (error) {
@@ -31161,21 +31516,23 @@ ipcMain.handle("salaryTypes:add", async (_event, input) => {
 	try {
 		requireAdmin();
 		const db = getDb();
-		const { name, mode, monthly_rate = null, session_rate = null, session_pct = null } = input;
+		const { name, mode, monthly_rate = null, session_rate = null, session_pct = null, hourly_rate = null } = input;
 		if (!name?.trim()) throw new Error("الاسم مطلوب / Name is required");
 		if (![
 			"fixed_monthly",
 			"per_session_fixed",
 			"per_session_pct",
 			"hybrid",
-			"per_student_session"
+			"per_student_session",
+			"hourly"
 		].includes(mode)) throw new Error("نوع الراتب غير صالح / Invalid salary mode");
 		if (mode === "per_session_pct" && (session_pct == null || session_pct <= 0 || session_pct > 1)) throw new Error("نسبة الجلسة يجب أن تكون بين 0 و 1 / Session percentage must be between 0 and 1");
+		if (mode === "hourly" && (hourly_rate == null || Number(hourly_rate) <= 0)) throw new Error("سعر الساعة مطلوب ويجب أن يكون أكبر من صفر / Hourly rate is required and must be greater than zero");
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const result = db.prepare(`
-      INSERT INTO salary_types (name, mode, monthly_rate, session_rate, session_pct, created_at, updated_at, synced)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-    `).run(name.trim(), mode, monthly_rate, session_rate, session_pct, now, now);
+      INSERT INTO salary_types (name, mode, monthly_rate, session_rate, session_pct, hourly_rate, created_at, updated_at, synced)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(name.trim(), mode, monthly_rate, session_rate, session_pct, hourly_rate, now, now);
 		return db.prepare("SELECT * FROM salary_types WHERE id = ?").get(Number(result.lastInsertRowid));
 	} catch (error) {
 		throw new Error(error.message || "Failed to add salary type");
@@ -31192,9 +31549,11 @@ ipcMain.handle("salaryTypes:update", async (_event, { id, patch }) => {
 		const monthly_rate = patch.monthly_rate !== void 0 ? patch.monthly_rate : st.monthly_rate;
 		const session_rate = patch.session_rate !== void 0 ? patch.session_rate : st.session_rate;
 		const session_pct = patch.session_pct !== void 0 ? patch.session_pct : st.session_pct;
+		const hourly_rate = patch.hourly_rate !== void 0 ? patch.hourly_rate : st.hourly_rate;
+		if (mode === "hourly" && (hourly_rate == null || Number(hourly_rate) <= 0)) throw new Error("سعر الساعة مطلوب ويجب أن يكون أكبر من صفر / Hourly rate is required and must be greater than zero");
 		db.prepare(`
-      UPDATE salary_types SET name = ?, mode = ?, monthly_rate = ?, session_rate = ?, session_pct = ?, updated_at = ?, synced = 0 WHERE id = ?
-    `).run(name, mode, monthly_rate, session_rate, session_pct, (/* @__PURE__ */ new Date()).toISOString(), id);
+      UPDATE salary_types SET name = ?, mode = ?, monthly_rate = ?, session_rate = ?, session_pct = ?, hourly_rate = ?, updated_at = ?, synced = 0 WHERE id = ?
+    `).run(name, mode, monthly_rate, session_rate, session_pct, hourly_rate, (/* @__PURE__ */ new Date()).toISOString(), id);
 		return db.prepare("SELECT * FROM salary_types WHERE id = ?").get(id);
 	} catch (error) {
 		throw new Error(error.message || "Failed to update salary type");

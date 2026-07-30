@@ -341,7 +341,8 @@ const employeeSchema = new Schema({
   created_at: String,
   updated_at: String,
   synced: Number,
-  teacher_session_rate: Number
+  teacher_session_rate: Number,
+  hourly_rate: Number
 }, sharedOptions)
 
 export const EmployeeModel: Model<any> = mongoose.models['sync_employees'] ||
@@ -408,6 +409,7 @@ const salaryTypeSchema = new Schema({
   monthly_rate: Number,
   session_rate: Number,
   session_pct: Number,
+  hourly_rate: Number,
   created_at: String,
   updated_at: String,
   synced: Number
@@ -474,6 +476,28 @@ const sessionTeacherSchema = new Schema({
 
 export const SessionTeacherModel: Model<any> = mongoose.models['sync_session_teachers'] ||
   mongoose.model('sync_session_teachers', sessionTeacherSchema)
+
+// ── Session Time Logs (hourly pay timer) ──────────────────────────────────────
+
+const sessionTimeLogSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  session_id: Number,
+  employee_id: Number,
+  work_date: String,
+  started_at: String,
+  ended_at: String,
+  duration_minutes: Number,
+  hourly_rate: Number,
+  amount: Number,
+  status: String,
+  notes: String,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const SessionTimeLogModel: Model<any> = mongoose.models['sync_session_time_logs'] ||
+  mongoose.model('sync_session_time_logs', sessionTimeLogSchema)
 
 // ── Attendance Records ────────────────────────────────────────────────────────
 
@@ -714,6 +738,7 @@ export const SYNC_ENTITIES: {
   { name: 'service_definitions', model: ServiceDefinitionModel, table: 'service_definitions' },
   { name: 'scheduled_sessions', model: ScheduledSessionModel, table: 'scheduled_sessions' },
   { name: 'session_teachers', model: SessionTeacherModel, table: 'session_teachers' },
+  { name: 'session_time_logs', model: SessionTimeLogModel, table: 'session_time_logs' },
   { name: 'attendance_records', model: AttendanceRecordModel, table: 'attendance_records' },
   { name: 'attendance_conflicts', model: AttendanceConflictModel, table: 'attendance_conflicts' },
   { name: 'payment_methods', model: PaymentMethodModel, table: 'payment_methods' },

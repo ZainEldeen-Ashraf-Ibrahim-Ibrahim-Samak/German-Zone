@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { requireAdmin } from './_guard.js'
 import { resnapshotPendingTeacherPayments } from './attendanceIPC.js'
+import { getTimeLogTotals, recalcPendingTimeLogs } from './sessionTimersIPC.js'
 import type { Employee, SalaryPayment } from '../../src/types/index.js'
 
 const ARABIC_MONTHS: Record<string, number> = {
@@ -34,27 +35,41 @@ function getTeacherPaymentsForMonth(db: any, employeeId: number, start: string, 
 /**
  * Computes an employee's base monthly pay for a period from their effective salary type.
  * For per-session/hybrid types this reflects how many sessions were actually payable
- * (a session is payable when a student attended or was absent without excuse). Shared by
- * salary:get and salary:update so a saved payroll row never disagrees with the live view.
+ * (a session is payable when a student attended or was absent without excuse); for the hourly
+ * type it reflects the time actually clocked on the session timer. Shared by salary:get and
+ * salary:update so a saved payroll row never disagrees with the live view.
  *
  * If the employee has their own `teacher_session_rate` configured (feature 006), their
  * per-session earnings come from the teacher_payments ledger instead of the salary-type
  * estimate — that ledger is what attendance actually generated, at their real rate.
+ *
+ * Housing and transport allowances are ALWAYS added on top of whatever the salary type earns,
+ * for every mode. Attendance-based teachers used to lose them entirely, because their base was
+ * replaced outright by the ledger total. `bonus` is added by the callers (it is per-period, and
+ * lives on the salary_payments row rather than the employee).
  */
 function computeBaseSalary(db: any, employeeId: number, month: string, year: number | string) {
   // Heal any stale Pending snapshots first — rate sources can change from several places
   // (salary type edited in Settings, per-student override in the student form) that don't know
-  // about this teacher's ledger. Pending is always "current rate"; Paid is frozen.
+  // about this teacher's ledger. Pending is always "current rate"; Paid is frozen. Time logs get
+  // the same treatment for the hourly rate.
   resnapshotPendingTeacherPayments(db, employeeId)
+  recalcPendingTimeLogs(db, employeeId)
 
   const row = db.prepare(`
-    SELECT e.net_salary, e.teacher_session_rate, COALESCE(e.salary_type_override_id, er.salary_type_id) as eff
+    SELECT e.net_salary, e.teacher_session_rate,
+           COALESCE(e.housing, 0) as housing, COALESCE(e.transport, 0) as transport,
+           COALESCE(e.salary_type_override_id, er.salary_type_id) as eff
     FROM employees e LEFT JOIN employee_roles er ON e.role_id = er.id WHERE e.id = ?
   `).get(employeeId) as any
   const netSalary = row?.net_salary ?? 0
+  // Housing + transport are paid regardless of how the work itself is priced.
+  const allowances = Number(row?.housing ?? 0) + Number(row?.transport ?? 0)
   let base = netSalary
   let payableSessions = 0
   let totalSessions = 0
+  let hoursWorked = 0
+  let hourlyEarnings = 0
   let salaryTypeName: string | null = null
   let salaryTypeMode: string | null = null
 
@@ -62,13 +77,26 @@ function computeBaseSalary(db: any, employeeId: number, month: string, year: num
   const hasOwnTeacherRate = row?.teacher_session_rate != null
   const teacherPayments = hasOwnTeacherRate ? getTeacherPaymentsForMonth(db, employeeId, start, end) : null
 
+  // `net_salary` (base + housing + transport) is the fallback base and already contains the
+  // allowances; every salary-type-driven figure below replaces it and must have them added back.
+  let allowancesIncluded = true
+  const earn = (amount: number) => { base = amount; allowancesIncluded = false }
+
   if (row?.eff) {
     const st = db.prepare('SELECT * FROM salary_types WHERE id = ?').get(row.eff) as any
     if (st) {
       salaryTypeName = st.name
       salaryTypeMode = st.mode
 
-      if (st.mode === 'per_student_session' || st.mode === 'per_session_pct') {
+      if (st.mode === 'hourly') {
+        // Pay is the time actually clocked on the session timer × the unit price of an hour
+        // (the employee's own rate, else this salary type's). Each stopped stint stores the rate
+        // it was priced at, so the total is just their sum.
+        const totals = getTimeLogTotals(db, employeeId, start, end)
+        hoursWorked = totals.hours
+        hourlyEarnings = totals.total
+        earn(totals.total)
+      } else if (st.mode === 'per_student_session' || st.mode === 'per_session_pct') {
         // Pay is driven entirely by the attendance-based teacher_payments ledger, which already
         // resolves each session to its effective rate at generation time (per-student override →
         // the salary type's own session rate, or session_pct × the student's service price for the
@@ -76,11 +104,11 @@ function computeBaseSalary(db: any, employeeId: number, month: string, year: num
         const tp = hasOwnTeacherRate ? teacherPayments! : getTeacherPaymentsForMonth(db, employeeId, start, end)
         payableSessions = tp.count
         totalSessions = tp.count
-        base = tp.total
+        earn(tp.total)
       } else if (hasOwnTeacherRate && (st.mode === 'per_session_fixed' || st.mode === 'hybrid')) {
         payableSessions = teacherPayments!.count
         totalSessions = teacherPayments!.count
-        base = st.mode === 'hybrid' ? (st.monthly_rate ?? 0) + teacherPayments!.total : teacherPayments!.total
+        earn(st.mode === 'hybrid' ? (st.monthly_rate ?? 0) + teacherPayments!.total : teacherPayments!.total)
       } else {
         const sessionIds = (db.prepare(`
           SELECT ss.id FROM scheduled_sessions ss
@@ -97,9 +125,11 @@ function computeBaseSalary(db: any, employeeId: number, month: string, year: num
         }
         // per_session_pct never reaches here — it is ledger-driven above (pct × student price),
         // replacing the old formula that assumed every session was worth a flat 100 EGP.
-        if (st.mode === 'fixed_monthly') base = st.monthly_rate ?? netSalary
-        else if (st.mode === 'per_session_fixed') base = payableSessions * (st.session_rate ?? 0)
-        else if (st.mode === 'hybrid') base = (st.monthly_rate ?? 0) + payableSessions * (st.session_rate ?? 0)
+        // fixed_monthly with no rate configured falls back to net_salary, which already carries
+        // the allowances — hence the `earn()` call only on the configured branch.
+        if (st.mode === 'fixed_monthly') { if (st.monthly_rate != null) earn(st.monthly_rate) }
+        else if (st.mode === 'per_session_fixed') earn(payableSessions * (st.session_rate ?? 0))
+        else if (st.mode === 'hybrid') earn((st.monthly_rate ?? 0) + payableSessions * (st.session_rate ?? 0))
       }
     }
   } else if (hasOwnTeacherRate) {
@@ -107,10 +137,23 @@ function computeBaseSalary(db: any, employeeId: number, month: string, year: num
     // attendance-based system — their earnings ARE the teacher_payments total, not netSalary.
     payableSessions = teacherPayments!.count
     totalSessions = teacherPayments!.count
-    base = teacherPayments!.total
+    earn(teacherPayments!.total)
   }
 
-  return { base, payableSessions, totalSessions, salaryTypeName, salaryTypeMode }
+  const earnings = base
+  if (!allowancesIncluded) base = Number((earnings + allowances).toFixed(2))
+
+  return {
+    base,
+    earnings,
+    allowances: allowancesIncluded ? 0 : allowances,
+    payableSessions,
+    totalSessions,
+    hoursWorked,
+    hourlyEarnings,
+    salaryTypeName,
+    salaryTypeMode,
+  }
 }
 
 // 1. employees:get (Admin only)
@@ -136,7 +179,7 @@ ipcMain.handle('employees:add', async (_event, employeeInput) => {
   try {
     requireAdmin()
     const db = getDb()
-    const { name, role_id, base_salary = 0, housing = 0, transport = 0, salary_type_override_id = null, teacher_session_rate = null } = employeeInput
+    const { name, role_id, base_salary = 0, housing = 0, transport = 0, salary_type_override_id = null, teacher_session_rate = null, hourly_rate = null } = employeeInput
 
     if (!name) {
       throw new Error('جميع الحقول الإلزامية مطلوبة / Missing required fields')
@@ -154,9 +197,9 @@ ipcMain.handle('employees:add', async (_event, employeeInput) => {
     const now = new Date().toISOString()
 
     const result = db.prepare(`
-      INSERT INTO employees (name, role, role_id, salary_type_override_id, base_salary, housing, transport, net_salary, is_active, created_at, updated_at, synced, teacher_session_rate)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0, ?)
-    `).run(name, roleText, role_id ?? null, salary_type_override_id, Number(base_salary), Number(housing), Number(transport), netSalary, now, now, teacher_session_rate !== null ? Number(teacher_session_rate) : null)
+      INSERT INTO employees (name, role, role_id, salary_type_override_id, base_salary, housing, transport, net_salary, is_active, created_at, updated_at, synced, teacher_session_rate, hourly_rate)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0, ?, ?)
+    `).run(name, roleText, role_id ?? null, salary_type_override_id, Number(base_salary), Number(housing), Number(transport), netSalary, now, now, teacher_session_rate !== null ? Number(teacher_session_rate) : null, hourly_rate !== null && hourly_rate !== '' ? Number(hourly_rate) : null)
 
     const createdId = Number(result.lastInsertRowid)
     const createdEmployee = db.prepare(`
@@ -194,6 +237,9 @@ ipcMain.handle('employees:update', async (_event, { id, patch }) => {
     const teacher_session_rate = patch.teacher_session_rate !== undefined
       ? (patch.teacher_session_rate === null ? null : Number(patch.teacher_session_rate))
       : emp.teacher_session_rate
+    const hourly_rate = patch.hourly_rate !== undefined
+      ? (patch.hourly_rate === null || patch.hourly_rate === '' ? null : Number(patch.hourly_rate))
+      : emp.hourly_rate
 
     // Sync role text from role_id
     if (patch.role_id !== undefined && patch.role_id !== null) {
@@ -208,9 +254,9 @@ ipcMain.handle('employees:update', async (_event, { id, patch }) => {
     const now = new Date().toISOString()
     db.prepare(`
       UPDATE employees
-      SET name = ?, role = ?, role_id = ?, salary_type_override_id = ?, base_salary = ?, housing = ?, transport = ?, net_salary = ?, updated_at = ?, synced = 0, teacher_session_rate = ?
+      SET name = ?, role = ?, role_id = ?, salary_type_override_id = ?, base_salary = ?, housing = ?, transport = ?, net_salary = ?, updated_at = ?, synced = 0, teacher_session_rate = ?, hourly_rate = ?
       WHERE id = ?
-    `).run(name, role, role_id, salary_type_override_id, base_salary, housing, transport, netSalary, now, teacher_session_rate, id)
+    `).run(name, role, role_id, salary_type_override_id, base_salary, housing, transport, netSalary, now, teacher_session_rate, hourly_rate, id)
 
     // If anything that feeds the rate resolution changed (own per-session rate, salary type
     // override, or role), re-snapshot this teacher's still-Pending payments using the full
@@ -222,6 +268,16 @@ ipcMain.handle('employees:update', async (_event, { id, patch }) => {
       (patch.role_id !== undefined && role_id !== emp.role_id)
     ) {
       resnapshotPendingTeacherPayments(db, id)
+    }
+
+    // Same idea for hourly pay: an hourly-rate change (or a salary-type/role switch that changes
+    // which hourly rate applies) re-prices the already-logged, unpaid time.
+    if (
+      (patch.hourly_rate !== undefined && hourly_rate !== emp.hourly_rate) ||
+      (patch.salary_type_override_id !== undefined && salary_type_override_id !== emp.salary_type_override_id) ||
+      (patch.role_id !== undefined && role_id !== emp.role_id)
+    ) {
+      recalcPendingTimeLogs(db, id)
     }
 
     const updatedEmployee = db.prepare(`
@@ -295,10 +351,16 @@ ipcMain.handle('salary:get', async (_event, { month, year }) => {
     // feature-006 teacher_payments override (own rate wins over the salary-type estimate)
     // only has to be implemented in one place.
     return rows.map((row) => {
-      const { base: computedActualPaid, payableSessions, totalSessions, salaryTypeName, salaryTypeMode } =
+      const { base: computedActualPaid, earnings, allowances, payableSessions, totalSessions, hoursWorked, hourlyEarnings, salaryTypeName, salaryTypeMode } =
         computeBaseSalary(db, row.employee_id, month, year)
       row.payable_sessions = payableSessions
       row.total_sessions = totalSessions
+      row.hours_worked = hoursWorked
+      row.hourly_earnings = hourlyEarnings
+      // Reported separately so the Salaries page can show how Net breaks down:
+      // earnings (sessions / hours / monthly rate) + allowances (housing + transport).
+      row.earnings = earnings
+      row.allowances = allowances
 
       const bonus = row.bonus ?? 0
       // Sum itemised deductions from employee_deductions table
@@ -311,7 +373,8 @@ ipcMain.handle('salary:get', async (_event, { month, year }) => {
         salary_type_name: salaryTypeName,
         salary_type_mode: salaryTypeMode,
         // Net Salary column reflects the salary-type-derived base for this period (per-session
-        // pay included), so the columns reconcile: Net + Bonus − Deductions = Actual Paid.
+        // and hourly pay plus housing/transport allowances included), so the columns reconcile:
+        // Net + Bonus − Deductions = Actual Paid.
         net_salary: computedActualPaid,
         deductions: deductionSum,
         actual_paid: row.stored_actual_paid ?? (computedActualPaid + bonus - deductionSum),
@@ -393,7 +456,7 @@ ipcMain.handle('salary:getExpected', async (_event, { employee_id, month, year }
     }
 
     const { start } = monthBounds(month, year)
-    const { base: actualToDate, salaryTypeMode } = computeBaseSalary(db, employee_id, month, year)
+    const { base: actualToDate, allowances, hoursWorked, salaryTypeMode } = computeBaseSalary(db, employee_id, month, year)
 
     const emp = db.prepare('SELECT teacher_session_rate FROM employees WHERE id = ?').get(employee_id) as any
 
@@ -458,7 +521,9 @@ ipcMain.handle('salary:getExpected', async (_event, { employee_id, month, year }
         scheduleTotal += sessionCount * rate
       }
 
-      expectedTotal = scheduleTotal
+      // Housing/transport are part of the month's pay in every mode, so the forecast carries
+      // them exactly like the earned-so-far figure does.
+      expectedTotal = scheduleTotal + allowances
       // Hybrid pay adds the fixed monthly component on top of per-session earnings.
       if (salaryTypeMode === 'hybrid') expectedTotal += st?.monthly_rate ?? 0
     }
@@ -467,6 +532,8 @@ ipcMain.handle('salary:getExpected', async (_event, { employee_id, month, year }
       actual_to_date: actualToDate,
       projected_remaining: Number(Math.max(0, expectedTotal - actualToDate).toFixed(2)),
       expected_total: Number(expectedTotal.toFixed(2)),
+      allowances,
+      hours_worked: hoursWorked,
       salary_type_mode: salaryTypeMode,
     }
   } catch (error: any) {

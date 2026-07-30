@@ -6,7 +6,7 @@ interface RolesState {
   isLoading: boolean
   error: string | null
   fetchRoles: () => Promise<void>
-  addRole: (name: string) => Promise<EmployeeRole | null>
+  addRole: (name: string, salary_type_id?: number | null) => Promise<EmployeeRole | null>
   updateRole: (id: number, patch: { name?: string; salary_type_id?: number | null }) => Promise<EmployeeRole | null>
   deleteRole: (id: number) => Promise<boolean>
   clearError: () => void
@@ -29,10 +29,10 @@ export const useRolesStore = create<RolesState>((set) => ({
     }
   },
 
-  addRole: async (name) => {
+  addRole: async (name, salary_type_id = null) => {
     set({ isLoading: true, error: null })
     try {
-      const result = await window.api.roles.add({ name })
+      const result = await window.api.roles.add({ name, salary_type_id })
       set((state) => ({ roles: [...state.roles, result].sort((a, b) => a.name.localeCompare(b.name)), isLoading: false }))
       return result
     } catch (err: any) {

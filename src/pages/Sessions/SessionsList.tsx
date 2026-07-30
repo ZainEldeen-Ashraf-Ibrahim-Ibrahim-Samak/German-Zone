@@ -10,6 +10,7 @@ import { Modal } from '../../components/ui/Modal.js'
 import { Input } from '../../components/ui/Input.js'
 import { Alert } from '../../components/ui/Alert.js'
 import { Select } from '../../components/ui/Select.js'
+import SessionTimerPanel from '../../components/sessions/SessionTimerPanel.js'
 import type { ScheduledSession, AttendanceRecord, AttendanceStatus } from '../../types/index.js'
 
 export default function SessionsList() {
@@ -50,6 +51,9 @@ export default function SessionsList() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
   const [toDelete, setToDelete] = useState<ScheduledSession | null>(null)
+
+  // Hourly-pay timer (start when the session begins, stop when it ends)
+  const [timerSession, setTimerSession] = useState<ScheduledSession | null>(null)
 
   // Search state
   const [sessionsSearch, setSessionsSearch] = useState('')
@@ -403,6 +407,7 @@ export default function SessionsList() {
                   >
                     {isClosed ? (isAr ? '👁 عرض الحضور' : '👁 View') : (isAr ? 'كشف الحضور' : 'Attendance')}
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setTimerSession(s)}>{isAr ? '⏱ المؤقت' : '⏱ Timer'}</Button>
                   <Button variant="outline" size="sm" onClick={() => openEdit(s)}>{isAr ? 'تعديل' : 'Edit'}</Button>
                   <Button variant="danger" size="sm" onClick={() => setToDelete(s)}>{isAr ? 'حذف' : 'Delete'}</Button>
                 </div>
@@ -428,6 +433,16 @@ export default function SessionsList() {
               : '👩‍🏫 Each attending student\'s teacher is linked automatically when attendance is recorded — no manual assignment needed.'}
           </p>
         </div>
+      </Modal>
+
+      {/* Hourly Timer Modal */}
+      <Modal
+        isOpen={!!timerSession}
+        onClose={() => setTimerSession(null)}
+        title={isAr ? `مؤقت الأجر بالساعة — ${timerSession?.session_date ?? ''}` : `Hourly Timer — ${timerSession?.session_date ?? ''}`}
+        footer={<Button variant="outline" onClick={() => setTimerSession(null)}>{isAr ? 'إغلاق' : 'Close'}</Button>}
+      >
+        {timerSession && <SessionTimerPanel sessionId={timerSession.id} sessionDate={timerSession.session_date} />}
       </Modal>
 
       {/* Delete Confirm Modal */}

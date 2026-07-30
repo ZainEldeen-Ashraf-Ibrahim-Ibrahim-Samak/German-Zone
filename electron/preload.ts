@@ -195,7 +195,7 @@ const api = {
   // Roles
   roles: {
     list: () => ipcRenderer.invoke('roles:list'),
-    add: (args: { name: string }) => ipcRenderer.invoke('roles:add', args),
+    add: (args: { name: string; salary_type_id?: number | null }) => ipcRenderer.invoke('roles:add', args),
     update: (args: { id: number; patch: { name?: string; salary_type_id?: number | null } }) => ipcRenderer.invoke('roles:update', args),
     delete: (args: { id: number }) => ipcRenderer.invoke('roles:delete', args),
   },
@@ -226,6 +226,23 @@ const api = {
     salaryCredit: (session_id: number) => ipcRenderer.invoke('sessions:salaryCredit', { session_id }) as Promise<{ payable: boolean; hasTeachers: boolean; credits: { employee_id: number; name: string; amount: number }[] }>,
     proRateCalc: (args: { reg_date: string; price_per_session: number }) => ipcRenderer.invoke('sessions:proRateCalc', args),
     studentsForDay: (day_of_week: number) => ipcRenderer.invoke('sessions:studentsForDay', { day_of_week }),
+  },
+
+  // Session timers — hourly pay is clocked by starting/stopping a timer on the session
+  sessionTimers: {
+    start: (args: { employee_id: number; session_id?: number | null; notes?: string | null }) =>
+      ipcRenderer.invoke('sessionTimers:start', args),
+    stop: (args: { id?: number; employee_id?: number }) => ipcRenderer.invoke('sessionTimers:stop', args),
+    list: (args?: { employee_id?: number; session_id?: number; from?: string; to?: string; status?: string }) =>
+      ipcRenderer.invoke('sessionTimers:list', args ?? {}),
+    active: (args?: { employee_id?: number }) => ipcRenderer.invoke('sessionTimers:active', args ?? {}),
+    logManual: (args: { employee_id: number; session_id?: number | null; work_date?: string; started_at?: string | null; ended_at?: string | null; duration_minutes?: number | null; notes?: string | null }) =>
+      ipcRenderer.invoke('sessionTimers:logManual', args),
+    void: (args: { id: number }) => ipcRenderer.invoke('sessionTimers:void', args),
+    delete: (args: { id: number }) => ipcRenderer.invoke('sessionTimers:delete', args),
+    hourlyEmployees: () => ipcRenderer.invoke('sessionTimers:hourlyEmployees') as Promise<
+      { id: number; name: string; role: string; effective_hourly_rate: number | null }[]
+    >,
   },
 
   // Attendance

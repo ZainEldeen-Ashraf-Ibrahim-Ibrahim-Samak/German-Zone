@@ -6,7 +6,7 @@ interface SalaryTypesState {
   isLoading: boolean
   error: string | null
   fetchSalaryTypes: () => Promise<void>
-  addSalaryType: (input: { name: string; mode: SalaryMode; monthly_rate?: number | null; session_rate?: number | null; session_pct?: number | null }) => Promise<SalaryType | null>
+  addSalaryType: (input: { name: string; mode: SalaryMode; monthly_rate?: number | null; session_rate?: number | null; session_pct?: number | null; hourly_rate?: number | null }) => Promise<SalaryType | null>
   updateSalaryType: (id: number, patch: Partial<Omit<SalaryType, 'id' | 'created_at' | 'updated_at' | 'synced'>>) => Promise<SalaryType | null>
   deleteSalaryType: (id: number) => Promise<boolean>
   clearError: () => void

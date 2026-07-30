@@ -1268,6 +1268,75 @@ const migrations: Migration[] = [
         VALUES ('attendance_edit_requires_approval', 'false', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 0);
       `)
     }
+  },
+  {
+    // Hourly pay: a salary type can now be paid by the hour at a unit price, and the hours
+    // themselves come from a start/stop timer run on the session. `mode` is pinned by a CHECK
+    // constraint that SQLite cannot ALTER in place, so the table is rebuilt (same pattern as
+    // 040/041/044) with 'hourly' added and a new `hourly_rate` column for the unit price.
+    name: '047_hourly_salary_mode',
+    noTransaction: true,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS salary_types_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          mode TEXT NOT NULL CHECK(mode IN ('fixed_monthly','per_session_fixed','per_session_pct','hybrid','per_student_session','hourly')),
+          monthly_rate REAL,
+          session_rate REAL,
+          session_pct REAL,
+          hourly_rate REAL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+
+        INSERT INTO salary_types_new
+          (id, name, mode, monthly_rate, session_rate, session_pct, hourly_rate, created_at, updated_at, synced)
+        SELECT id, name, mode, monthly_rate, session_rate, session_pct, NULL, created_at, updated_at, synced
+        FROM salary_types;
+
+        DROP TABLE salary_types;
+        ALTER TABLE salary_types_new RENAME TO salary_types;
+      `)
+
+      // Per-employee unit price for an hour — wins over the salary type's hourly_rate, the same
+      // way teacher_session_rate wins over the salary type's per-session rate.
+      try { db.exec('ALTER TABLE employees ADD COLUMN hourly_rate REAL;') } catch { /* already exists */ }
+    }
+  },
+  {
+    // The timer behind hourly pay. One row per (employee, work stint): `started_at` is written
+    // when the timer starts, and stopping fills in `ended_at`, the elapsed `duration_minutes`,
+    // the `hourly_rate` in force at that moment (snapshotted, so a later rate change never
+    // silently rewrites history) and the resulting `amount`. Only 'completed' rows are paid.
+    name: '048_session_time_logs',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS session_time_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER REFERENCES scheduled_sessions(id) ON DELETE SET NULL,
+          employee_id INTEGER NOT NULL REFERENCES employees(id),
+          work_date TEXT NOT NULL,
+          started_at TEXT NOT NULL,
+          ended_at TEXT,
+          duration_minutes REAL,
+          hourly_rate REAL,
+          amount REAL,
+          status TEXT NOT NULL CHECK(status IN ('running','completed','void')) DEFAULT 'running',
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_time_logs_employee ON session_time_logs(employee_id);
+        CREATE INDEX IF NOT EXISTS idx_session_time_logs_date ON session_time_logs(work_date);
+        CREATE INDEX IF NOT EXISTS idx_session_time_logs_session ON session_time_logs(session_id);
+        -- At most one timer may be running per employee at a time.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_session_time_logs_one_running
+          ON session_time_logs(employee_id) WHERE status = 'running';
+      `)
+    }
   }
 ]
 

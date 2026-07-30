@@ -65,6 +65,7 @@ export default function EmployeesList() {
   const [housing, setHousing] = useState('')
   const [transport, setTransport] = useState('')
   const [teacherSessionRate, setTeacherSessionRate] = useState('')
+  const [hourlyRate, setHourlyRate] = useState('')
   const [formError, setFormError] = useState('')
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
 
@@ -174,7 +175,7 @@ export default function EmployeesList() {
   const openCreate = () => {
     setEditing(null)
     setName(''); setRoleId(''); setSalaryTypeOverrideId('')
-    setBaseSalary(''); setHousing(''); setTransport(''); setTeacherSessionRate('')
+    setBaseSalary(''); setHousing(''); setTransport(''); setTeacherSessionRate(''); setHourlyRate('')
     setFormError(''); setShowAddRole(false); setNewRoleName('')
     setExpectedSalary(null)
     setIsFormOpen(true)
@@ -187,6 +188,7 @@ export default function EmployeesList() {
     setSalaryTypeOverrideId(emp.salary_type_override_id ?? '')
     setBaseSalary(String(emp.base_salary)); setHousing(String(emp.housing)); setTransport(String(emp.transport))
     setTeacherSessionRate(emp.teacher_session_rate != null ? String(emp.teacher_session_rate) : '')
+    setHourlyRate(emp.hourly_rate != null ? String(emp.hourly_rate) : '')
     setFormError(''); setShowAddRole(false); setNewRoleName('')
     setExpectedSalary(null)
     setIsLoadingExpected(true)
@@ -229,6 +231,7 @@ export default function EmployeesList() {
       housing: Number(housing) || 0,
       transport: Number(transport) || 0,
       teacher_session_rate: teacherSessionRate !== '' ? Number(teacherSessionRate) : null,
+      hourly_rate: hourlyRate !== '' ? Number(hourlyRate) : null,
     }
     const result = editing ? await updateEmployee(editing.id, payload) : await addEmployee(payload)
     setIsSubmitLoading(false)
@@ -477,7 +480,21 @@ export default function EmployeesList() {
               min={0}
               placeholder={isAr ? 'اختياري — للمعلمين فقط' : 'Optional — teachers only'}
             />
+            <Input
+              label={isAr ? 'سعر الساعة' : 'Hourly Rate'}
+              type="number"
+              value={hourlyRate}
+              onChange={(e) => setHourlyRate(e.target.value)}
+              disabled={isSubmitLoading}
+              min={0}
+              placeholder={isAr ? 'اختياري — يتجاوز سعر نوع الراتب' : 'Optional — overrides the salary type'}
+            />
           </div>
+          <p className="text-xs text-slate-400 -mt-2">
+            {isAr
+              ? '⏱ سعر الساعة يُستخدم مع نوع الراتب «بالساعة»: يُضرب في الوقت المسجَّل بمؤقت الجلسة. البدلات (السكن والمواصلات) تُضاف إلى الراتب في كل الأنواع.'
+              : '⏱ The hourly rate applies to the "Hourly" salary type — it is multiplied by the time clocked on the session timer. Housing and transport allowances are added to pay in every salary mode.'}
+          </p>
           <div className="flex justify-between items-center bg-slate-50 rounded-lg px-4 py-3 text-sm">
             <span className="text-slate-500 font-medium">{isAr ? 'صافي الراتب (محسوب)' : 'Net Salary (computed)'}</span>
             <span className="font-bold text-primary">{fmt(previewNet)}</span>

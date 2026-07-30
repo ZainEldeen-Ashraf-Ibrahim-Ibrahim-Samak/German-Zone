@@ -5,10 +5,11 @@ import BrandingSettings from './BrandingSettings.js'
 import SecuritySettings from './SecuritySettings.js'
 import UsersList from '../Users/UsersList.js'
 import SalaryTypes from './SalaryTypes.js'
+import JobTypes from './JobTypes.js'
 import ServiceDefinitions from './ServiceDefinitions.js'
 import PaymentMethods from './PaymentMethods.js'
 
-type TabType = 'pricing' | 'branding' | 'security' | 'users' | 'salary_types' | 'services' | 'payment_methods'
+type TabType = 'pricing' | 'branding' | 'security' | 'users' | 'salary_types' | 'job_types' | 'services' | 'payment_methods'
 
 interface TabDef {
   id: TabType
@@ -59,6 +60,14 @@ const TAB_DEFS: TabDef[] = [
     icon: '📊',
     descAr: 'تعريف أنواع الرواتب وتعيينها للوظائف',
     descEn: 'Define salary types and assign to roles',
+  },
+  {
+    id: 'job_types',
+    labelAr: 'المسميات الوظيفية',
+    labelEn: 'Job Types',
+    icon: '🧑‍💼',
+    descAr: 'إنشاء وتعديل المسميات الوظيفية وربطها بأنواع الرواتب',
+    descEn: 'Create and edit job types and link them to salary types',
   },
   {
     id: 'services',
@@ -143,6 +152,7 @@ export default function Settings() {
         {activeTab === 'security' && <SecuritySettings />}
         {activeTab === 'users' && <UsersList />}
         {activeTab === 'salary_types' && <SalaryTypes />}
+        {activeTab === 'job_types' && <JobTypes />}
         {activeTab === 'services' && <ServiceDefinitions />}
         {activeTab === 'payment_methods' && <PaymentMethods />}
       </div>

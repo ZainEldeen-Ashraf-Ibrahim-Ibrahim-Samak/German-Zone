@@ -314,13 +314,31 @@ export default function SalariesList() {
           {(row as any).payable_sessions != null && (
             <div className="text-xs text-slate-400">{i18n.language === 'ar' ? `جلسات: ${(row as any).payable_sessions}/${(row as any).total_sessions}` : `Sessions: ${(row as any).payable_sessions}/${(row as any).total_sessions}`}</div>
           )}
+          {!!(row as any).hours_worked && (
+            <div className="text-xs text-slate-400">
+              {i18n.language === 'ar' ? `ساعات: ${(row as any).hours_worked}` : `Hours: ${(row as any).hours_worked}`}
+            </div>
+          )}
         </div>
       )
     },
     {
       key: 'net_salary',
       header: i18n.language === 'ar' ? 'الراتب المستحق' : 'Net Salary',
-      render: (row: SalaryPayment) => <span>{formatCurrency(row.net_salary ?? 0)}</span>,
+      // Broken down underneath so it is visible that housing/transport allowances are included
+      // on top of what the sessions/hours earned.
+      render: (row: SalaryPayment) => (
+        <div>
+          <span>{formatCurrency(row.net_salary ?? 0)}</span>
+          {!!(row as any).allowances && (
+            <div className="text-xs text-slate-400">
+              {formatCurrency((row as any).earnings ?? 0)}
+              {' + '}
+              {i18n.language === 'ar' ? 'بدلات' : 'allow.'} {formatCurrency((row as any).allowances)}
+            </div>
+          )}
+        </div>
+      ),
       className: 'text-end'
     },
     {
