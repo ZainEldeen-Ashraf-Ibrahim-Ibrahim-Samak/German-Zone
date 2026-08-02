@@ -1,7 +1,7 @@
 {
   "name": "german-zone",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "German Zone — Language Course Management System",
   "author": "German Zone",
   "main": "dist-electron/main.js",
