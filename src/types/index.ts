@@ -7,6 +7,120 @@ export interface User {
   name?: string | null
   is_active: number // 0 or 1
   created_at?: string
+
+  /** How this account is attached to branches (migration 050). */
+  branch_mode?: BranchMode
+  primary_branch_id?: number | null
+}
+
+/**
+ * 'branch' — works out of one physical branch; 'online' — online students only;
+ * 'mixed' — covers a physical branch AND online (or several branches at once).
+ */
+export type BranchMode = 'branch' | 'online' | 'mixed'
+
+export interface Branch {
+  id: number
+  name: string
+  code?: string | null
+  city?: string | null
+  address?: string | null
+  phone?: string | null
+  kind: 'physical' | 'online'
+  manager_user_id?: number | null
+  is_active: number
+  created_at: string
+  updated_at: string
+  synced: number
+
+  // Join fields from branches:list
+  manager_name?: string | null
+  manager_username?: string | null
+  student_count?: number
+  employee_count?: number
+  hall_count?: number
+}
+
+export interface UserBranchAssignment {
+  user_id: number
+  mode: BranchMode
+  primary_branch_id: number | null
+  branches: { id: number; name: string; kind: 'physical' | 'online' }[]
+}
+
+/** One opening interval of a hall on one weekday. Times are 'HH:MM' (24h); '24:00' = midnight. */
+export interface HallTimeSlot {
+  id?: number
+  hall_id?: number
+  day_of_week: number // 0 = Sunday … 6 = Saturday
+  start_time: string
+  end_time: string
+  notes?: string | null
+  created_at?: string
+  updated_at?: string
+  synced?: number
+}
+
+export interface Hall {
+  id: number
+  name: string
+  branch_id?: number | null
+  capacity?: number | null
+  notes?: string | null
+  is_active: number
+  created_at: string
+  updated_at: string
+  synced: number
+
+  /** The hall's weekly timetable — a hall may open more than once on the same day. */
+  slots?: HallTimeSlot[]
+  total_hours?: number
+  branch_name?: string | null
+  branch_kind?: 'physical' | 'online' | null
+}
+
+/**
+ * One agreed payment milestone of a student's instalment plan. The plan splits the total fee
+ * across N dated instalments, so each month only carries the instalment falling due in it.
+ */
+export interface StudentInstallment {
+  id: number
+  student_id: number
+  service_id?: number | null
+  seq: number
+  due_date: string
+  month: string // Arabic month name
+  year: number
+  amount: number
+  paid: number
+  balance: number
+  status: 'unpaid' | 'partial' | 'paid'
+  paid_date?: string | null
+  payment_method_id?: number | null
+  payment_method_name?: string | null
+  notes?: string | null
+  created_at: string
+  updated_at: string
+  synced: number
+
+  // Derived / join fields
+  is_overdue?: boolean
+  student_name?: string
+  student_guardian?: string
+  student_guardian_phone?: string
+  student_is_active?: number
+  branch_id?: number | null
+}
+
+/** One month's bucket of the instalment calendar — what is due in that month, and nothing else. */
+export interface InstallmentMonth {
+  month: string
+  month_index: number
+  year: number
+  count: number
+  due: number
+  collected: number
+  outstanding: number
 }
 
 /** German Zone course levels. Admins can add further services in Settings → Services,
@@ -62,6 +176,12 @@ export interface Student {
   extra_lessons?: number // default 0
   session_price?: number | null
   monthly_fee?: number | null
+
+  /** Instalment plan agreed at enrollment (migration 049) + branch (migration 050). */
+  installments_count?: number | null
+  installment_total?: number | null
+  installment_start_date?: string | null
+  branch_id?: number | null
 }
 
 /** A teacher option, projected from the employees table (feature 004). */
@@ -396,6 +516,9 @@ export interface Employee {
 
   /** Unit price of one hour for this employee — overrides the salary type's hourly rate. */
   hourly_rate?: number | null
+
+  /** Branch this employee works out of (migration 050). */
+  branch_id?: number | null
 }
 
 export interface ServiceTeacher {

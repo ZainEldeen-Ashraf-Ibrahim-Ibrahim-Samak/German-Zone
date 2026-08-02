@@ -208,6 +208,7 @@ ipcMain.handle('storage:clear', async (_event, { confirm }) => {
         db.prepare('DELETE FROM expenses').run()
         db.prepare('DELETE FROM sync_log').run()
         db.prepare('DELETE FROM tombstones').run()
+        db.prepare('DELETE FROM student_installments').run()
         db.prepare('DELETE FROM student_services').run()
         db.prepare('DELETE FROM students').run()
         db.prepare('DELETE FROM session_teachers').run()

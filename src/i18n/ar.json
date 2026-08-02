@@ -223,6 +223,18 @@
     "prorate_adjust_hint": "يمكنك تعديل هذا المبلغ",
     "confirm_first_payment": "تأكيد الدفعة الأولى",
     "uploading_photo": "جارٍ رفع الصورة...",
-    "photo_upload_failed": "فشل رفع الصورة — تم حفظ الطالب بدون صورة"
+    "photo_upload_failed": "فشل رفع الصورة — تم حفظ الطالب بدون صورة",
+    "loading": "جارٍ التحميل...",
+    "branch_coverage": "نطاق الفروع",
+    "branch_mode_branch": "فرع واحد",
+    "branch_mode_online": "أونلاين",
+    "branch_mode_mixed": "مشترك (فرع + أونلاين)",
+    "select_branch": "اختر الفرع",
+    "select_branches": "اختر الفروع",
+    "primary_branch": "الفرع الأساسي",
+    "branch_required": "يجب اختيار فرع واحد على الأقل",
+    "branches": "الفروع",
+    "halls": "القاعات",
+    "installments": "الدفعات"
   }
 }

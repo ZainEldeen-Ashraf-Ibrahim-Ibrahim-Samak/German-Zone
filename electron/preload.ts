@@ -90,6 +90,47 @@ const api = {
     delete: (id: number) => ipcRenderer.invoke('studentActivities:delete', { id }),
   },
 
+  // Instalment plans — "pays over N instalments", spread month by month
+  installments: {
+    plan: (args: { student_id: number; count: number; total: number; start_date: string; service_id?: number | null }) =>
+      ipcRenderer.invoke('installments:plan', args),
+    list: (args?: { student_id?: number; month?: string; year?: number; from?: string; to?: string; status?: string; branch_id?: number }) =>
+      ipcRenderer.invoke('installments:list', args ?? {}),
+    calendar: (args: { year: number; student_id?: number | null }) => ipcRenderer.invoke('installments:calendar', args),
+    preview: (args: { count: number; total: number; start_date: string }) =>
+      ipcRenderer.invoke('installments:preview', args) as Promise<
+        { seq: number; due_date: string; month: string; year: number; amount: number }[]
+      >,
+    pay: (args: { id: number; amount: number; payment_method_id?: number | null; paid_date?: string | null; notes?: string | null }) =>
+      ipcRenderer.invoke('installments:pay', args),
+    update: (args: { id: number; patch: { amount?: number; due_date?: string; notes?: string | null } }) =>
+      ipcRenderer.invoke('installments:update', args),
+    clear: (args: { student_id: number }) => ipcRenderer.invoke('installments:clear', args),
+  },
+
+  // Branches — physical / online, and how each user is attached to them
+  branches: {
+    list: (args?: { activeOnly?: boolean; kind?: 'physical' | 'online' }) => ipcRenderer.invoke('branches:list', args ?? {}),
+    mine: () => ipcRenderer.invoke('branches:mine'),
+    add: (args: any) => ipcRenderer.invoke('branches:add', args),
+    update: (args: { id: number; patch: any }) => ipcRenderer.invoke('branches:update', args),
+    delete: (args: { id: number }) => ipcRenderer.invoke('branches:delete', args),
+    setManager: (args: { branch_id: number; user_id: number | null }) => ipcRenderer.invoke('branches:setManager', args),
+    assignUser: (args: { user_id: number; mode: 'branch' | 'online' | 'mixed'; branch_ids?: number[]; primary_branch_id?: number | null }) =>
+      ipcRenderer.invoke('branches:assignUser', args),
+    userAssignments: () => ipcRenderer.invoke('branches:userAssignments'),
+  },
+
+  // Halls & their weekly opening hours (several intervals per day allowed)
+  halls: {
+    list: (args?: { activeOnly?: boolean; branch_id?: number }) => ipcRenderer.invoke('halls:list', args ?? {}),
+    get: (args: { id: number }) => ipcRenderer.invoke('halls:get', args),
+    add: (args: any) => ipcRenderer.invoke('halls:add', args),
+    update: (args: { id: number; patch: any }) => ipcRenderer.invoke('halls:update', args),
+    delete: (args: { id: number }) => ipcRenderer.invoke('halls:delete', args),
+    timetable: (args?: { branch_id?: number; hall_id?: number }) => ipcRenderer.invoke('halls:timetable', args ?? {}),
+  },
+
   // Shared Calendar page (feature 009)
   calendar: {
     getMonth: (year: number, month: number) => ipcRenderer.invoke('calendar:getMonth', { year, month }),

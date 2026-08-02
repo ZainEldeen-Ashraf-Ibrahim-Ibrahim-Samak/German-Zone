@@ -10,7 +10,7 @@ import { Select } from '../../components/ui/Select.js'
 import { Badge } from '../../components/ui/Badge.js'
 import { Alert } from '../../components/ui/Alert.js'
 import { Card } from '../../components/ui/Card.js'
-import type { User } from '../../types/index.js'
+import type { Branch, BranchMode, User, UserBranchAssignment } from '../../types/index.js'
 
 export default function UsersList() {
   const { t } = useTranslation()
@@ -32,6 +32,14 @@ export default function UsersList() {
   const [name, setName] = useState('')
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
   const [formError, setFormError] = useState('')
+
+  // Branch coverage: 'branch' (one location), 'online' (online students only) or 'mixed'
+  // (a location AND online / several branches at once).
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [assignments, setAssignments] = useState<UserBranchAssignment[]>([])
+  const [branchMode, setBranchMode] = useState<BranchMode>('branch')
+  const [branchIds, setBranchIds] = useState<number[]>([])
+  const [primaryBranchId, setPrimaryBranchId] = useState<number | ''>('')
 
   // Deactivate states
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false)
@@ -55,9 +63,31 @@ export default function UsersList() {
     }
   }
 
+  const fetchBranchData = async () => {
+    try {
+      const [list, assigned] = await Promise.all([
+        window.api.branches.list(),
+        window.api.branches.userAssignments(),
+      ])
+      setBranches(list || [])
+      setAssignments(assigned || [])
+    } catch (err) {
+      console.error('Failed to load branch assignments:', err)
+    }
+  }
+
   useEffect(() => {
     fetchUsers()
+    fetchBranchData()
   }, [])
+
+  /** The branch defaults a fresh account starts from: single branch, first physical one. */
+  const resetBranchFields = () => {
+    const firstPhysical = branches.find((b) => b.kind === 'physical') ?? branches[0]
+    setBranchMode('branch')
+    setBranchIds(firstPhysical ? [firstPhysical.id] : [])
+    setPrimaryBranchId(firstPhysical ? firstPhysical.id : '')
+  }
 
   const handleOpenCreate = () => {
     setEditingUser(null)
@@ -65,6 +95,7 @@ export default function UsersList() {
     setPassword('')
     setRole('employee')
     setName('')
+    resetBranchFields()
     setFormError('')
     setIsFormOpen(true)
   }
@@ -75,8 +106,49 @@ export default function UsersList() {
     setPassword('')
     setRole(user.role)
     setName(user.name || '')
+
+    const assignment = assignments.find((a) => a.user_id === user.id)
+    if (assignment && assignment.branches.length > 0) {
+      setBranchMode(assignment.mode)
+      setBranchIds(assignment.branches.map((b) => b.id))
+      setPrimaryBranchId(assignment.primary_branch_id ?? assignment.branches[0].id)
+    } else {
+      resetBranchFields()
+    }
+
     setFormError('')
     setIsFormOpen(true)
+  }
+
+  /**
+   * Switching mode re-seeds the branch selection so the choice stays coherent:
+   * 'online' selects the online branches, 'branch' narrows back down to a single one.
+   */
+  const handleModeChange = (mode: BranchMode) => {
+    setBranchMode(mode)
+    if (mode === 'online') {
+      const online = branches.filter((b) => b.kind === 'online').map((b) => b.id)
+      setBranchIds(online)
+      setPrimaryBranchId(online[0] ?? '')
+    } else if (mode === 'branch') {
+      const first = branchIds[0] ?? branches.find((b) => b.kind === 'physical')?.id ?? branches[0]?.id
+      setBranchIds(first ? [first] : [])
+      setPrimaryBranchId(first ?? '')
+    }
+  }
+
+  const toggleBranch = (id: number) => {
+    if (branchMode === 'branch') {
+      setBranchIds([id])
+      setPrimaryBranchId(id)
+      return
+    }
+    setBranchIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]
+      // The primary branch must stay one the user actually covers.
+      if (!next.includes(Number(primaryBranchId))) setPrimaryBranchId(next[0] ?? '')
+      return next
+    })
   }
 
   const handleOpenDeactivate = (user: User) => {
@@ -94,16 +166,26 @@ export default function UsersList() {
         throw new Error(t('username_role_required'))
       }
 
+      if (branchIds.length === 0) {
+        throw new Error(t('branch_required'))
+      }
+
       if (!editingUser) {
         // Create Mode
         if (!password) {
           throw new Error(t('password_required_new'))
         }
-        await window.api.users.create({
+        const created = await window.api.users.create({
           username: username.trim(),
           password,
           role,
           name: name.trim() || undefined,
+        })
+        await window.api.branches.assignUser({
+          user_id: created.id,
+          mode: branchMode,
+          branch_ids: branchIds,
+          primary_branch_id: primaryBranchId === '' ? null : Number(primaryBranchId),
         })
         setSuccessMsg(t('user_created_success'))
       } else {
@@ -120,11 +202,18 @@ export default function UsersList() {
           id: editingUser.id,
           patch,
         })
+        await window.api.branches.assignUser({
+          user_id: editingUser.id,
+          mode: branchMode,
+          branch_ids: branchIds,
+          primary_branch_id: primaryBranchId === '' ? null : Number(primaryBranchId),
+        })
         setSuccessMsg(t('user_updated_success'))
       }
 
       setIsFormOpen(false)
       fetchUsers()
+      fetchBranchData()
     } catch (err: any) {
       console.error(err)
       setFormError(err.message || 'Operation failed')
@@ -200,6 +289,26 @@ export default function UsersList() {
           {u.role === 'admin' ? t('admin') : t('employee')}
         </Badge>
       ),
+    },
+    {
+      key: 'branches',
+      header: t('branch_coverage'),
+      render: (u: User) => {
+        const assignment = assignments.find((a) => a.user_id === u.id)
+        if (!assignment || assignment.branches.length === 0) {
+          return <span className="text-xs text-slate-400">—</span>
+        }
+        return (
+          <div className="flex flex-col gap-1 text-start">
+            <Badge variant={assignment.mode === 'mixed' ? 'warning' : assignment.mode === 'online' ? 'info' : 'neutral'}>
+              {t(`branch_mode_${assignment.mode}`)}
+            </Badge>
+            <span className="text-xs text-slate-500">
+              {assignment.branches.map((b) => b.name).join('، ')}
+            </span>
+          </div>
+        )
+      },
     },
     {
       key: 'status',
@@ -347,6 +456,59 @@ export default function UsersList() {
               { value: 'employee', label: t('employee') },
             ]}
           />
+
+          {/* Branch coverage — where this account works */}
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-3">
+            <Select
+              label={t('branch_coverage')}
+              value={branchMode}
+              onChange={(e) => handleModeChange(e.target.value as BranchMode)}
+              disabled={isSubmitLoading}
+              options={[
+                { value: 'branch', label: t('branch_mode_branch') },
+                { value: 'online', label: t('branch_mode_online') },
+                { value: 'mixed', label: t('branch_mode_mixed') },
+              ]}
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700 text-start">
+                {branchMode === 'branch' ? t('select_branch') : t('select_branches')}
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {branches.map((b) => {
+                  const active = branchIds.includes(b.id)
+                  return (
+                    <button
+                      type="button"
+                      key={b.id}
+                      onClick={() => toggleBranch(b.id)}
+                      disabled={isSubmitLoading}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
+                        active
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {b.kind === 'online' ? '🌐 ' : '🏢 '}{b.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {branchIds.length > 1 && (
+              <Select
+                label={t('primary_branch')}
+                value={primaryBranchId}
+                onChange={(e) => setPrimaryBranchId(e.target.value === '' ? '' : Number(e.target.value))}
+                disabled={isSubmitLoading}
+                options={branches
+                  .filter((b) => branchIds.includes(b.id))
+                  .map((b) => ({ value: b.id, label: b.name }))}
+              />
+            )}
+          </div>
         </form>
       </Modal>
 

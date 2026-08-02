@@ -74,6 +74,33 @@ electron.contextBridge.exposeInMainWorld("api", {
 		create: (args) => electron.ipcRenderer.invoke("studentActivities:create", args),
 		delete: (id) => electron.ipcRenderer.invoke("studentActivities:delete", { id })
 	},
+	installments: {
+		plan: (args) => electron.ipcRenderer.invoke("installments:plan", args),
+		list: (args) => electron.ipcRenderer.invoke("installments:list", args ?? {}),
+		calendar: (args) => electron.ipcRenderer.invoke("installments:calendar", args),
+		preview: (args) => electron.ipcRenderer.invoke("installments:preview", args),
+		pay: (args) => electron.ipcRenderer.invoke("installments:pay", args),
+		update: (args) => electron.ipcRenderer.invoke("installments:update", args),
+		clear: (args) => electron.ipcRenderer.invoke("installments:clear", args)
+	},
+	branches: {
+		list: (args) => electron.ipcRenderer.invoke("branches:list", args ?? {}),
+		mine: () => electron.ipcRenderer.invoke("branches:mine"),
+		add: (args) => electron.ipcRenderer.invoke("branches:add", args),
+		update: (args) => electron.ipcRenderer.invoke("branches:update", args),
+		delete: (args) => electron.ipcRenderer.invoke("branches:delete", args),
+		setManager: (args) => electron.ipcRenderer.invoke("branches:setManager", args),
+		assignUser: (args) => electron.ipcRenderer.invoke("branches:assignUser", args),
+		userAssignments: () => electron.ipcRenderer.invoke("branches:userAssignments")
+	},
+	halls: {
+		list: (args) => electron.ipcRenderer.invoke("halls:list", args ?? {}),
+		get: (args) => electron.ipcRenderer.invoke("halls:get", args),
+		add: (args) => electron.ipcRenderer.invoke("halls:add", args),
+		update: (args) => electron.ipcRenderer.invoke("halls:update", args),
+		delete: (args) => electron.ipcRenderer.invoke("halls:delete", args),
+		timetable: (args) => electron.ipcRenderer.invoke("halls:timetable", args ?? {})
+	},
 	calendar: {
 		getMonth: (year, month) => electron.ipcRenderer.invoke("calendar:getMonth", {
 			year,

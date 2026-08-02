@@ -32,6 +32,9 @@ import Settings from './pages/Settings/Settings.js'
 import UsersList from './pages/Users/UsersList.js'
 import SessionsList from './pages/Sessions/SessionsList.js'
 import EditRequestsInbox from './pages/Attendance/EditRequestsInbox.js'
+import InstallmentsList from './pages/Installments/InstallmentsList.js'
+import BranchesList from './pages/Branches/BranchesList.js'
+import HallsList from './pages/Halls/HallsList.js'
 
 // Layout component wrapping protected routes
 const AppLayout: React.FC = () => {
@@ -98,6 +101,22 @@ export default function App() {
           <Route path="payments" element={<MonthlyPayments />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="calendar" element={<CalendarPage />} />
+
+          {/* Instalment schedule — read & collect for both roles; planning is admin-only in IPC */}
+          <Route path="installments" element={<InstallmentsList />} />
+
+          {/* Halls & their weekly timetable — visible to all, editable by admins (IPC-guarded) */}
+          <Route path="halls" element={<HallsList />} />
+
+          {/* Branches - Admin only */}
+          <Route
+            path="branches"
+            element={
+              <RoleGuard allowedRoles={['admin']}>
+                <BranchesList />
+              </RoleGuard>
+            }
+          />
 
           {/* Employees - Admin only */}
           <Route

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { friendlyError } from '../utils/errors.js'
+import { useBranchStore } from './useBranchStore.js'
 import type { Student } from '../types/index.js'
 
 interface StudentsFilters {
@@ -51,10 +52,13 @@ export const useStudentsStore = create<StudentsState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { search, service, activeOnly } = get().filters
+      // Scope to the branch selected in the header; `null` there means "all branches".
+      const { selectedBranchId } = useBranchStore.getState()
       const results = await window.api.students.get({
         search,
         service: service || undefined,
         activeOnly,
+        branch_id: selectedBranchId ?? undefined,
       })
       set({ students: results, isLoading: false })
     } catch (err: any) {

@@ -226,6 +226,11 @@ const studentSchema = new Schema({
   extra_lessons: Number,
   session_price: Number,
   monthly_fee: Number,
+  // Instalment plan (migration 049) + branch scoping (migration 050)
+  installments_count: Number,
+  installment_total: Number,
+  installment_start_date: String,
+  branch_id: Number,
   created_at: String,
   updated_at: String,
   synced: Number
@@ -288,6 +293,9 @@ const userSchema = new Schema({
   role: String,
   name: String,
   is_active: Number,
+  // Branch coverage (migration 050): 'branch' | 'online' | 'mixed'
+  branch_mode: String,
+  primary_branch_id: Number,
   created_at: String,
   updated_at: String,
   synced: Number
@@ -342,7 +350,8 @@ const employeeSchema = new Schema({
   updated_at: String,
   synced: Number,
   teacher_session_rate: Number,
-  hourly_rate: Number
+  hourly_rate: Number,
+  branch_id: Number
 }, sharedOptions)
 
 export const EmployeeModel: Model<any> = mongoose.models['sync_employees'] ||
@@ -716,6 +725,96 @@ const studentActivitySchema = new Schema({
 export const StudentActivityModel: Model<any> = mongoose.models['sync_student_activities'] ||
   mongoose.model('sync_student_activities', studentActivitySchema)
 
+// ── Student Instalments ───────────────────────────────────────────────────────
+
+const studentInstallmentSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  student_id: Number,
+  service_id: Number,
+  seq: Number,
+  due_date: String,
+  month: String,
+  year: Number,
+  amount: Number,
+  paid: Number,
+  balance: Number,
+  status: String,
+  paid_date: String,
+  payment_method_id: Number,
+  payment_method_name: String,
+  notes: String,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const StudentInstallmentModel: Model<any> = mongoose.models['sync_student_installments'] ||
+  mongoose.model('sync_student_installments', studentInstallmentSchema)
+
+// ── Branches ──────────────────────────────────────────────────────────────────
+
+const branchSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  name: String,
+  code: String,
+  city: String,
+  address: String,
+  phone: String,
+  kind: String,
+  manager_user_id: Number,
+  is_active: Number,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const BranchModel: Model<any> = mongoose.models['sync_branches'] ||
+  mongoose.model('sync_branches', branchSchema)
+
+const userBranchSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  user_id: Number,
+  branch_id: Number,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const UserBranchModel: Model<any> = mongoose.models['sync_user_branches'] ||
+  mongoose.model('sync_user_branches', userBranchSchema)
+
+// ── Halls & their weekly timetable ────────────────────────────────────────────
+
+const hallSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  name: String,
+  branch_id: Number,
+  capacity: Number,
+  notes: String,
+  is_active: Number,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const HallModel: Model<any> = mongoose.models['sync_halls'] ||
+  mongoose.model('sync_halls', hallSchema)
+
+const hallTimeSlotSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  hall_id: Number,
+  day_of_week: Number,
+  start_time: String,
+  end_time: String,
+  notes: String,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const HallTimeSlotModel: Model<any> = mongoose.models['sync_hall_time_slots'] ||
+  mongoose.model('sync_hall_time_slots', hallTimeSlotSchema)
+
 // ── Entity registry ───────────────────────────────────────────────────────────
 
 export const SYNC_ENTITIES: {
@@ -723,13 +822,18 @@ export const SYNC_ENTITIES: {
   model: Model<any>
   table: string
 }[] = [
+  // ORDER MATTERS: the pull inserts rows with foreign_keys ON, and a row whose parent has not
+  // been pulled yet fails its FK check and is discarded as an "orphan". So a table must always
+  // come after every table it references. `users` and `branches` lead because `students` and
+  // `employees` carry a branch_id, and `branches.manager_user_id` points back at `users`.
+  { name: 'users', model: UserModel, table: 'users' },
+  { name: 'branches', model: BranchModel, table: 'branches' },
   { name: 'students', model: StudentModel, table: 'students' },
   { name: 'student_services', model: StudentServiceModel, table: 'student_services' },
   { name: 'payments', model: PaymentModel, table: 'payments' },
   { name: 'employees', model: EmployeeModel, table: 'employees' },
   { name: 'salary_payments', model: SalaryPaymentModel, table: 'salary_payments' },
   { name: 'expenses', model: ExpenseModel, table: 'expenses' },
-  { name: 'users', model: UserModel, table: 'users' },
   { name: 'settings', model: SettingModel, table: 'settings' },
   { name: 'imported_snapshots', model: ImportedSnapshotModel, table: 'imported_snapshots' },
   { name: 'tombstones', model: TombstoneModel, table: 'tombstones' },
@@ -751,4 +855,8 @@ export const SYNC_ENTITIES: {
   { name: 'notifications', model: NotificationModel, table: 'notifications' },
   { name: 'student_illness_cases', model: StudentIllnessCaseModel, table: 'student_illness_cases' },
   { name: 'student_activities', model: StudentActivityModel, table: 'student_activities' },
+  { name: 'student_installments', model: StudentInstallmentModel, table: 'student_installments' },
+  { name: 'user_branches', model: UserBranchModel, table: 'user_branches' },
+  { name: 'halls', model: HallModel, table: 'halls' },
+  { name: 'hall_time_slots', model: HallTimeSlotModel, table: 'hall_time_slots' },
 ]

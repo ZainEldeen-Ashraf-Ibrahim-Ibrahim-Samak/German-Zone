@@ -10,7 +10,7 @@ import { Select } from '../../components/ui/Select.js'
 import { Card } from '../../components/ui/Card.js'
 import { Alert } from '../../components/ui/Alert.js'
 import PhotoCapture from '../../components/PhotoCapture.js'
-import type { ServiceType, UnitType, Teacher } from '../../types/index.js'
+import type { ServiceType, UnitType, Teacher, Branch } from '../../types/index.js'
 import { isSessionService } from '../../utils/services.js'
 
 
@@ -124,8 +124,21 @@ export default function StudentForm() {
     national_id: '',
     reg_date: new Date().toISOString().split('T')[0],
     notes: '',
+    branch_id: '' as number | '',
     services: [{ service: 'A1' as ServiceType, unit: 'شهر' as UnitType, price: 0, teacher_id: '', lesson_days: [] as number[], extra_lessons: 0, session_price: 0, teacher_session_rate: '' as number | '' }] as ServiceRow[],
   })
+
+  // Instalment plan — "how many payments will this family pay the fee over?". Left off entirely
+  // when `installments_count` is blank, in which case billing stays purely month-by-month.
+  const [plan, setPlan] = useState<{ count: number | ''; total: number | ''; start_date: string }>({
+    count: '',
+    total: '',
+    start_date: '',
+  })
+  const [planSchedule, setPlanSchedule] = useState<
+    { seq: number; due_date: string; month: string; year: number; amount: number }[]
+  >([])
+  const [branches, setBranches] = useState<Branch[]>([])
 
   // Photo (data URL for new/changed photo; existing URL otherwise)
   const [photo, setPhoto] = useState<string | null>(null)
@@ -185,6 +198,27 @@ export default function StudentForm() {
 
   // Pro-rate session baseline (kept for pro-rate notice display; per-row session_price drives actual fees)
   const sessionsBaseline = proRate?.total_sessions && proRate.total_sessions > 0 ? proRate.total_sessions : 8
+
+  // Live preview of the instalment split. Computed in the main process by the same function
+  // that writes the real plan, so what the admin sees here is exactly what gets saved.
+  const planIsComplete = plan.count !== '' && Number(plan.count) > 0
+    && plan.total !== '' && Number(plan.total) > 0
+    && !!plan.start_date
+  useEffect(() => {
+    if (!planIsComplete) return
+    let cancelled = false
+    window.api.installments
+      .preview({ count: Number(plan.count), total: Number(plan.total), start_date: plan.start_date })
+      .then((rows) => { if (!cancelled) setPlanSchedule(rows) })
+      .catch(() => { if (!cancelled) setPlanSchedule([]) })
+    return () => { cancelled = true }
+  }, [planIsComplete, plan.count, plan.total, plan.start_date])
+  const schedule = planIsComplete ? planSchedule : []
+
+  // Branch options for the "which branch is this student enrolled at" selector.
+  useEffect(() => {
+    window.api.branches.list().then((list: Branch[]) => setBranches(list || [])).catch(() => setBranches([]))
+  }, [])
 
   // Load the teacher options (from the Employees list, feature 004)
   useEffect(() => {
@@ -259,7 +293,13 @@ export default function StudentForm() {
             national_id: student.national_id || '',
             reg_date: student.reg_date,
             notes: student.notes || '',
+            branch_id: student.branch_id ?? '',
             services: loadedServices,
+          })
+          setPlan({
+            count: student.installments_count ?? '',
+            total: student.installment_total ?? '',
+            start_date: student.installment_start_date || student.reg_date || '',
           })
           setPhoto(student.photo_url || null)
           setPhotoChanged(false)
@@ -400,6 +440,24 @@ export default function StudentForm() {
       if (invalidPrice) errors.services = i18n.language === 'ar' ? 'السعر لا يمكن أن يكون سالباً' : 'Price cannot be negative'
     }
 
+    // The plan is optional, but a count without a total (or vice versa) is half-entered — catch
+    // it here rather than letting the IPC layer reject the whole save.
+    const hasCount = plan.count !== '' && Number(plan.count) > 0
+    const hasTotal = plan.total !== '' && Number(plan.total) > 0
+    if (hasCount && !hasTotal) {
+      errors.installments = i18n.language === 'ar'
+        ? 'أدخل إجمالي المبلغ المطلوب تقسيمه على الدفعات'
+        : 'Enter the total amount to split across the instalments'
+    }
+    if (hasTotal && !hasCount) {
+      errors.installments = i18n.language === 'ar' ? 'أدخل عدد الدفعات' : 'Enter the number of instalments'
+    }
+    if (hasCount && (Number(plan.count) > 60 || !Number.isInteger(Number(plan.count)))) {
+      errors.installments = i18n.language === 'ar'
+        ? 'عدد الدفعات يجب أن يكون رقماً صحيحاً بين 1 و 60'
+        : 'Number of instalments must be a whole number between 1 and 60'
+    }
+
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -464,6 +522,11 @@ export default function StudentForm() {
         national_id: formData.national_id.trim() || null,
         reg_date: formData.reg_date,
         notes: formData.notes.trim() || null,
+        branch_id: formData.branch_id === '' ? null : Number(formData.branch_id),
+        // A blank count means "no plan" — on edit that also clears any existing schedule.
+        installments_count: plan.count === '' ? null : Number(plan.count),
+        installment_total: plan.total === '' ? null : Number(plan.total),
+        installment_start_date: plan.start_date || formData.reg_date,
         services: formData.services.map(s => ({
           id: s.id,
           service: s.service,
@@ -634,6 +697,23 @@ export default function StudentForm() {
                 value={formData.reg_date}
                 onChange={(e) => setFormData((prev) => ({ ...prev, reg_date: e.target.value }))}
                 error={formErrors.reg_date}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700">
+                {i18n.language === 'ar' ? 'الفرع' : 'Branch'}
+              </label>
+              <Select
+                value={formData.branch_id}
+                onChange={(e) => setFormData((prev) => ({ ...prev, branch_id: e.target.value === '' ? '' : Number(e.target.value) }))}
+                options={[
+                  { value: '', label: i18n.language === 'ar' ? 'بدون فرع' : 'No branch' },
+                  ...branches.map((b) => ({
+                    value: b.id,
+                    label: `${b.kind === 'online' ? '🌐' : '🏢'} ${b.name}`,
+                  })),
+                ]}
               />
             </div>
           </div>
@@ -824,6 +904,112 @@ export default function StudentForm() {
             </div>
           </div>
 
+
+          {/* Instalment plan — how many payments the fee is split into, and when each falls due.
+              Each instalment carries its own due date, so a month only ever shows the amount
+              actually due in it instead of the whole outstanding fee as one lump of arrears. */}
+          <div className="space-y-4 border-t border-slate-100 pt-6">
+            <div className="flex items-center justify-between">
+              <label className="text-lg font-bold text-slate-800">
+                {i18n.language === 'ar' ? 'خطة الدفعات' : 'Instalment Plan'}
+              </label>
+              <span className="text-xs text-slate-400 font-semibold">
+                {i18n.language === 'ar' ? 'اختياري' : 'Optional'}
+              </span>
+            </div>
+
+            {formErrors.installments && (
+              <p className="text-sm text-red-500 font-medium">{formErrors.installments}</p>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500">
+                  {i18n.language === 'ar' ? 'عدد الدفعات' : 'Number of instalments'}
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={plan.count}
+                  placeholder={i18n.language === 'ar' ? 'مثال: 4' : 'e.g. 4'}
+                  onChange={(e) => setPlan((prev) => ({
+                    ...prev,
+                    count: e.target.value === '' ? '' : Math.max(1, Number(e.target.value)),
+                    // Default the first due date to the registration date the moment a plan starts.
+                    start_date: prev.start_date || formData.reg_date,
+                  }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500">
+                  {i18n.language === 'ar' ? 'إجمالي المبلغ (EGP)' : 'Total amount (EGP)'}
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={plan.total}
+                  placeholder={i18n.language === 'ar' ? 'إجمالي الرسوم' : 'Total fee'}
+                  onChange={(e) => setPlan((prev) => ({ ...prev, total: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500">
+                  {i18n.language === 'ar' ? 'تاريخ أول دفعة' : 'First instalment due'}
+                </label>
+                <Input
+                  type="date"
+                  value={plan.start_date || formData.reg_date}
+                  onChange={(e) => setPlan((prev) => ({ ...prev, start_date: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {plan.count !== '' && plan.total === '' && (
+              <button
+                type="button"
+                onClick={() => setPlan((prev) => ({
+                  ...prev,
+                  total: formData.services.reduce((sum, s) => sum + (Number(s.price) || 0), 0) * Number(prev.count || 1),
+                }))}
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                {i18n.language === 'ar'
+                  ? 'احسب الإجمالي من أسعار الخدمات'
+                  : 'Calculate the total from the service prices'}
+              </button>
+            )}
+
+            {schedule.length > 0 && (
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  {i18n.language === 'ar'
+                    ? `جدول السداد — ${schedule.length} دفعات`
+                    : `Payment schedule — ${schedule.length} instalments`}
+                </div>
+                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                  {schedule.map((row) => (
+                    <div key={row.seq} className="flex items-center justify-between px-4 py-2 text-sm">
+                      <span className="text-slate-500 font-semibold w-10">#{row.seq}</span>
+                      <span className="flex-1 text-slate-700">
+                        {i18n.language === 'ar' ? `${row.month} ${row.year}` : `${row.month} ${row.year}`}
+                      </span>
+                      <span className="text-slate-400 text-xs w-28 text-center">{row.due_date}</span>
+                      <span className="font-bold text-slate-800 w-28 text-end">{formatCurrency(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-sm">
+                  <span className="font-semibold text-slate-600">
+                    {i18n.language === 'ar' ? 'الإجمالي' : 'Total'}
+                  </span>
+                  <span className="font-bold text-slate-900">
+                    {formatCurrency(schedule.reduce((sum, r) => sum + r.amount, 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-slate-700">

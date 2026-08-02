@@ -1337,6 +1337,159 @@ const migrations: Migration[] = [
           ON session_time_logs(employee_id) WHERE status = 'running';
       `)
     }
+  },
+  {
+    // Instalment plans. A student's course fee can be agreed up front as "pay it over N
+    // instalments"; each instalment gets its own due date so the schedule is spread across the
+    // months it belongs to, instead of the whole remaining fee landing on one month as arrears.
+    // The plan lives beside `payments` (which stays the month-by-month service billing) rather
+    // than inside it — an instalment is an agreed cash-flow milestone, not a service charge.
+    name: '049_student_installments',
+    up: (db) => {
+      const addCol = (ddl: string) => { try { db.exec(ddl) } catch { /* already exists */ } }
+      addCol('ALTER TABLE students ADD COLUMN installments_count INTEGER;')
+      addCol('ALTER TABLE students ADD COLUMN installment_total REAL;')
+      addCol('ALTER TABLE students ADD COLUMN installment_start_date TEXT;')
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS student_installments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          service_id INTEGER REFERENCES student_services(id) ON DELETE SET NULL,
+          seq INTEGER NOT NULL,
+          due_date TEXT NOT NULL,
+          month TEXT NOT NULL,
+          year INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          paid REAL NOT NULL DEFAULT 0,
+          balance REAL NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('unpaid','partial','paid')) DEFAULT 'unpaid',
+          paid_date TEXT,
+          payment_method_id INTEGER REFERENCES payment_methods(id),
+          payment_method_name TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          UNIQUE(student_id, seq)
+        );
+        CREATE INDEX IF NOT EXISTS idx_student_installments_student ON student_installments(student_id);
+        CREATE INDEX IF NOT EXISTS idx_student_installments_due ON student_installments(due_date);
+        CREATE INDEX IF NOT EXISTS idx_student_installments_period ON student_installments(year, month);
+      `)
+    }
+  },
+  {
+    // Branches. A user works out of one physical branch, works fully online, or is "mixed"
+    // (covers a branch AND online students). `user_branches` carries the actual coverage list so
+    // a mixed user can span several branches; `branch_mode` records the intent so the UI can
+    // show it without inspecting the list. Online students/halls belong to a branch row whose
+    // kind is 'online', which keeps every scoping query uniform (always a branch_id).
+    name: '050_branches',
+    up: (db) => {
+      const addCol = (ddl: string) => { try { db.exec(ddl) } catch { /* already exists */ } }
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS branches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          code TEXT,
+          city TEXT,
+          address TEXT,
+          phone TEXT,
+          kind TEXT NOT NULL CHECK(kind IN ('physical','online')) DEFAULT 'physical',
+          manager_user_id INTEGER REFERENCES users(id),
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS user_branches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          UNIQUE(user_id, branch_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_branches_user ON user_branches(user_id);
+      `)
+
+      // 'branch' = one physical branch, 'online' = online only, 'mixed' = both.
+      addCol("ALTER TABLE users ADD COLUMN branch_mode TEXT DEFAULT 'branch';")
+      addCol('ALTER TABLE users ADD COLUMN primary_branch_id INTEGER REFERENCES branches(id);')
+      addCol('ALTER TABLE students ADD COLUMN branch_id INTEGER REFERENCES branches(id);')
+      addCol('ALTER TABLE employees ADD COLUMN branch_id INTEGER REFERENCES branches(id);')
+
+      // Two starting branches so existing data has somewhere to live and online-only users have
+      // a branch to be attached to. Admins add their own (Port Said, …) in Settings → Branches.
+      const now = new Date().toISOString()
+      db.prepare(`
+        INSERT OR IGNORE INTO branches (name, code, kind, is_active, created_at, updated_at, synced)
+        VALUES (?, ?, 'physical', 1, ?, ?, 0)
+      `).run('الفرع الرئيسي / Main Branch', 'MAIN', now, now)
+      db.prepare(`
+        INSERT OR IGNORE INTO branches (name, code, kind, is_active, created_at, updated_at, synced)
+        VALUES (?, ?, 'online', 1, ?, ?, 0)
+      `).run('أونلاين / Online', 'ONLINE', now, now)
+
+      // Existing students/employees predate branches — park them in the main branch so the
+      // branch filter doesn't hide them the moment it ships.
+      const main = db.prepare("SELECT id FROM branches WHERE code = 'MAIN'").get() as { id: number } | undefined
+      if (main) {
+        db.prepare('UPDATE students SET branch_id = ? WHERE branch_id IS NULL').run(main.id)
+        db.prepare('UPDATE employees SET branch_id = ? WHERE branch_id IS NULL').run(main.id)
+      }
+    }
+  },
+  {
+    // Halls and their weekly opening hours. A hall can open more than once on the same weekday
+    // (e.g. Hall 11 runs 13:00-18:00 and again 20:00-24:00), so the timetable is a row per
+    // interval rather than a single start/end pair on the hall itself. Times are 'HH:MM' in
+    // 24-hour form; '24:00' is accepted as end-of-day so a slot can run up to midnight.
+    name: '051_halls_timetable',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS halls (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          branch_id INTEGER REFERENCES branches(id),
+          capacity INTEGER,
+          notes TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          UNIQUE(name, branch_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS hall_time_slots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          hall_id INTEGER NOT NULL REFERENCES halls(id) ON DELETE CASCADE,
+          day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),
+          start_time TEXT NOT NULL,
+          end_time TEXT NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_hall_time_slots_hall ON hall_time_slots(hall_id, day_of_week);
+      `)
+    }
+  },
+  {
+    // `user_branches` was created with only `created_at`, but every synced table needs
+    // `updated_at`: the push writes one into MongoDB regardless, and the pull then builds its
+    // INSERT column list from the cloud document — so a cloud row would fail with "no such
+    // column: updated_at" on any machine that hadn't got the column. It is also what
+    // resolveConflict compares, so without it every row falls through to the tie-break path.
+    name: '052_user_branches_updated_at',
+    up: (db) => {
+      try { db.exec('ALTER TABLE user_branches ADD COLUMN updated_at TEXT;') } catch { /* already exists */ }
+      db.exec('UPDATE user_branches SET updated_at = created_at WHERE updated_at IS NULL;')
+    }
   }
 ]
 

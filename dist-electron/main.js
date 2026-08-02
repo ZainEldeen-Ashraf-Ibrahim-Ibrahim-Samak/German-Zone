@@ -16179,6 +16179,140 @@ var migrations = [
           ON session_time_logs(employee_id) WHERE status = 'running';
       `);
 		}
+	},
+	{
+		name: "049_student_installments",
+		up: (db) => {
+			const addCol = (ddl) => {
+				try {
+					db.exec(ddl);
+				} catch {}
+			};
+			addCol("ALTER TABLE students ADD COLUMN installments_count INTEGER;");
+			addCol("ALTER TABLE students ADD COLUMN installment_total REAL;");
+			addCol("ALTER TABLE students ADD COLUMN installment_start_date TEXT;");
+			db.exec(`
+        CREATE TABLE IF NOT EXISTS student_installments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          service_id INTEGER REFERENCES student_services(id) ON DELETE SET NULL,
+          seq INTEGER NOT NULL,
+          due_date TEXT NOT NULL,
+          month TEXT NOT NULL,
+          year INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          paid REAL NOT NULL DEFAULT 0,
+          balance REAL NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('unpaid','partial','paid')) DEFAULT 'unpaid',
+          paid_date TEXT,
+          payment_method_id INTEGER REFERENCES payment_methods(id),
+          payment_method_name TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          UNIQUE(student_id, seq)
+        );
+        CREATE INDEX IF NOT EXISTS idx_student_installments_student ON student_installments(student_id);
+        CREATE INDEX IF NOT EXISTS idx_student_installments_due ON student_installments(due_date);
+        CREATE INDEX IF NOT EXISTS idx_student_installments_period ON student_installments(year, month);
+      `);
+		}
+	},
+	{
+		name: "050_branches",
+		up: (db) => {
+			const addCol = (ddl) => {
+				try {
+					db.exec(ddl);
+				} catch {}
+			};
+			db.exec(`
+        CREATE TABLE IF NOT EXISTS branches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          code TEXT,
+          city TEXT,
+          address TEXT,
+          phone TEXT,
+          kind TEXT NOT NULL CHECK(kind IN ('physical','online')) DEFAULT 'physical',
+          manager_user_id INTEGER REFERENCES users(id),
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS user_branches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          UNIQUE(user_id, branch_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_branches_user ON user_branches(user_id);
+      `);
+			addCol("ALTER TABLE users ADD COLUMN branch_mode TEXT DEFAULT 'branch';");
+			addCol("ALTER TABLE users ADD COLUMN primary_branch_id INTEGER REFERENCES branches(id);");
+			addCol("ALTER TABLE students ADD COLUMN branch_id INTEGER REFERENCES branches(id);");
+			addCol("ALTER TABLE employees ADD COLUMN branch_id INTEGER REFERENCES branches(id);");
+			const now = (/* @__PURE__ */ new Date()).toISOString();
+			db.prepare(`
+        INSERT OR IGNORE INTO branches (name, code, kind, is_active, created_at, updated_at, synced)
+        VALUES (?, ?, 'physical', 1, ?, ?, 0)
+      `).run("الفرع الرئيسي / Main Branch", "MAIN", now, now);
+			db.prepare(`
+        INSERT OR IGNORE INTO branches (name, code, kind, is_active, created_at, updated_at, synced)
+        VALUES (?, ?, 'online', 1, ?, ?, 0)
+      `).run("أونلاين / Online", "ONLINE", now, now);
+			const main = db.prepare("SELECT id FROM branches WHERE code = 'MAIN'").get();
+			if (main) {
+				db.prepare("UPDATE students SET branch_id = ? WHERE branch_id IS NULL").run(main.id);
+				db.prepare("UPDATE employees SET branch_id = ? WHERE branch_id IS NULL").run(main.id);
+			}
+		}
+	},
+	{
+		name: "051_halls_timetable",
+		up: (db) => {
+			db.exec(`
+        CREATE TABLE IF NOT EXISTS halls (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          branch_id INTEGER REFERENCES branches(id),
+          capacity INTEGER,
+          notes TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          UNIQUE(name, branch_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS hall_time_slots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          hall_id INTEGER NOT NULL REFERENCES halls(id) ON DELETE CASCADE,
+          day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),
+          start_time TEXT NOT NULL,
+          end_time TEXT NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_hall_time_slots_hall ON hall_time_slots(hall_id, day_of_week);
+      `);
+		}
+	},
+	{
+		name: "052_user_branches_updated_at",
+		up: (db) => {
+			try {
+				db.exec("ALTER TABLE user_branches ADD COLUMN updated_at TEXT;");
+			} catch {}
+			db.exec("UPDATE user_branches SET updated_at = created_at WHERE updated_at IS NULL;");
+		}
 	}
 ];
 function runMigrations(db) {
@@ -22547,6 +22681,414 @@ function getStudentStatement(student, existingPayments, currentDate) {
 	};
 }
 //#endregion
+//#region electron/services/tombstones.ts
+/**
+* Deletes recorded by a build that predates the German Zone rename still arrive
+* from the cloud addressed to the old table names, so map them on the way in.
+*/
+var LEGACY_ENTITY_NAMES = {
+	children: "students",
+	child_services: "student_services",
+	child_illness_cases: "student_illness_cases",
+	child_activities: "student_activities"
+};
+function normalizeEntity(entity) {
+	return LEGACY_ENTITY_NAMES[entity] ?? entity;
+}
+/**
+* Tables a cloud tombstone is allowed to delete from. Doubles as the SQL-injection guard, since
+* SQLite cannot parameterise a table name.
+*
+* A table belongs here as soon as deleting from it is a normal operation — otherwise the next
+* pull re-inserts the row that was just deleted on another machine. That matters most for rows
+* that get torn down and rebuilt: re-planning instalments, rewriting a hall's timetable and
+* reassigning a user's branches all delete rows and insert fresh ones with new ids.
+*/
+var DELETABLE_ENTITIES = [
+	"students",
+	"student_services",
+	"payments",
+	"expenses",
+	"employees",
+	"salary_payments",
+	"student_installments",
+	"branches",
+	"user_branches",
+	"halls",
+	"hall_time_slots"
+];
+function recordLocalTombstone(db, entity, recordId) {
+	db.prepare(`
+    INSERT OR IGNORE INTO tombstones (entity, record_id, created_at, synced)
+    VALUES (?, ?, ?, 0)
+  `).run(normalizeEntity(entity), recordId, (/* @__PURE__ */ new Date()).toISOString());
+}
+function applyCloudTombstones(db, cloudTombstones) {
+	const insertTombstone = db.prepare(`
+    INSERT OR IGNORE INTO tombstones (entity, record_id, created_at, synced)
+    VALUES (?, ?, ?, 1)
+  `);
+	for (const tombstone of cloudTombstones) {
+		const entity = normalizeEntity(tombstone.entity);
+		if (DELETABLE_ENTITIES.includes(entity)) db.prepare(`DELETE FROM ${entity} WHERE id = ?`).run(tombstone.record_id);
+		insertTombstone.run(entity, tombstone.record_id, (/* @__PURE__ */ new Date()).toISOString());
+	}
+}
+//#endregion
+//#region electron/ipc/installmentsIPC.ts
+/** Arabic month names in calendar order — the same labels `payments.month` stores. */
+var ARABIC_MONTHS$1 = [
+	"يناير",
+	"فبراير",
+	"مارس",
+	"أبريل",
+	"مايو",
+	"يونيو",
+	"يوليو",
+	"أغسطس",
+	"سبتمبر",
+	"أكتوبر",
+	"نوفمبر",
+	"ديسمبر"
+];
+var round2 = (n) => Number(n.toFixed(2));
+/**
+* Due date of instalment `index` (0-based) counted in whole months from `start`.
+* The day-of-month is clamped to the target month's length, so a plan starting on the 31st
+* falls on the 30th/28th in shorter months instead of rolling over into the next one.
+*/
+function addMonthsClamped(start, index) {
+	const d = /* @__PURE__ */ new Date(`${start}T00:00:00`);
+	const targetMonth = d.getMonth() + index;
+	const year = d.getFullYear() + Math.floor(targetMonth / 12);
+	const month = (targetMonth % 12 + 12) % 12;
+	const lastDay = new Date(year, month + 1, 0).getDate();
+	const day = Math.min(d.getDate(), lastDay);
+	return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+/**
+* Splits `total` into `count` instalments, one per month starting at `startDate`.
+*
+* The split is even to the piastre, with any rounding remainder folded into the LAST
+* instalment — so the parts always add back up to exactly `total`, and the whole amount is
+* never dumped onto a single month as one lump of arrears.
+* Pure and exported so the schedule maths is unit-testable without a database.
+*/
+function buildInstallmentSchedule(total, count, startDate) {
+	const per = Math.floor(total / count * 100) / 100;
+	const rows = [];
+	let allocated = 0;
+	for (let i = 0; i < count; i++) {
+		const amount = i === count - 1 ? round2(total - allocated) : per;
+		allocated = round2(allocated + amount);
+		const due_date = addMonthsClamped(startDate, i);
+		const d = /* @__PURE__ */ new Date(`${due_date}T00:00:00`);
+		rows.push({
+			seq: i + 1,
+			due_date,
+			month: ARABIC_MONTHS$1[d.getMonth()],
+			year: d.getFullYear(),
+			amount
+		});
+	}
+	return rows;
+}
+/** Derives status from an instalment's amount vs. what has been paid against it. */
+function statusFor(amount, paid) {
+	if (paid <= 0) return "unpaid";
+	if (paid >= amount) return "paid";
+	return "partial";
+}
+/**
+* Rebuilds a student's instalment plan. Any amounts already collected are preserved by
+* re-applying the previous plan's total paid, oldest instalment first — so re-planning after a
+* price change never silently wipes a family's payment history.
+*/
+function regenerateInstallments(db, args) {
+	const { student_id, count, total, start_date } = args;
+	const service_id = args.service_id ?? null;
+	const now = (/* @__PURE__ */ new Date()).toISOString();
+	const previouslyPaid = Number(db.prepare("SELECT COALESCE(SUM(paid), 0) AS s FROM student_installments WHERE student_id = ?").get(student_id).s ?? 0);
+	for (const row of db.prepare("SELECT id FROM student_installments WHERE student_id = ?").all(student_id)) recordLocalTombstone(db, "student_installments", row.id);
+	db.prepare("DELETE FROM student_installments WHERE student_id = ?").run(student_id);
+	const insert = db.prepare(`
+    INSERT INTO student_installments (
+      student_id, service_id, seq, due_date, month, year,
+      amount, paid, balance, status, created_at, updated_at, synced
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `);
+	let remainingPaid = previouslyPaid;
+	const schedule = buildInstallmentSchedule(total, count, start_date);
+	for (const row of schedule) {
+		const paid = round2(Math.min(remainingPaid, row.amount));
+		remainingPaid = round2(remainingPaid - paid);
+		insert.run(student_id, service_id, row.seq, row.due_date, row.month, row.year, row.amount, paid, round2(row.amount - paid), statusFor(row.amount, paid), now, now);
+	}
+	db.prepare(`
+    UPDATE students
+    SET installments_count = ?, installment_total = ?, installment_start_date = ?,
+        updated_at = ?, synced = 0
+    WHERE id = ?
+  `).run(count, total, start_date, now, student_id);
+	return { created: schedule.length };
+}
+/** Validates and normalises the plan inputs shared by students:add/update and installments:plan. */
+function normalizePlanInput(src) {
+	const count = Math.trunc(Number(src.count ?? src.installments_count));
+	const total = Number(src.total ?? src.installment_total);
+	const start_date = String(src.start_date ?? src.installment_start_date ?? "").slice(0, 10);
+	if (!Number.isFinite(count) || count < 1 || count > 60) throw new Error("عدد الدفعات يجب أن يكون بين 1 و 60 / Number of instalments must be between 1 and 60");
+	if (!Number.isFinite(total) || total <= 0) throw new Error("إجمالي المبلغ يجب أن يكون أكبر من صفر / Total amount must be greater than zero");
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(start_date)) throw new Error("تاريخ أول دفعة غير صالح / First instalment date is invalid");
+	return {
+		count,
+		total: round2(total),
+		start_date
+	};
+}
+/**
+* Computes a schedule WITHOUT persisting it — the student form's live preview, so the admin sees
+* exactly which months get charged what before saving. Shares `buildInstallmentSchedule` with the
+* real plan, so the preview can never drift from what actually gets written.
+*/
+ipcMain.handle("installments:preview", async (_event, args) => {
+	try {
+		checkAuth$10();
+		const plan = normalizePlanInput(args);
+		return buildInstallmentSchedule(plan.total, plan.count, plan.start_date);
+	} catch (error) {
+		throw new Error(error.message || "Failed to preview instalment schedule");
+	}
+});
+ipcMain.handle("installments:plan", async (_event, args) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		const student_id = Number(args?.student_id);
+		if (!student_id) throw new Error("Student ID is required");
+		if (!db.prepare("SELECT id FROM students WHERE id = ?").get(student_id)) throw new Error("الطالب غير موجود / Student not found");
+		const plan = normalizePlanInput(args);
+		let result = { created: 0 };
+		db.transaction(() => {
+			result = regenerateInstallments(db, {
+				student_id,
+				service_id: args?.service_id ?? null,
+				...plan
+			});
+		})();
+		return {
+			ok: true,
+			...result,
+			installments: db.prepare("SELECT * FROM student_installments WHERE student_id = ? ORDER BY seq ASC").all(student_id)
+		};
+	} catch (error) {
+		console.error("Failed to build instalment plan:", error);
+		throw new Error(error.message || "Failed to build instalment plan");
+	}
+});
+/**
+* Lists instalments, optionally scoped to a student and/or a period. `month`/`year` filter by the
+* month an instalment is DUE in — which is the whole point of the plan: each month shows only the
+* instalment that falls due then, never the entire outstanding fee.
+*/
+ipcMain.handle("installments:list", async (_event, args = {}) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		let query = `
+      SELECT i.*, s.name AS student_name, s.guardian AS student_guardian,
+             s.guardian_phone AS student_guardian_phone, s.is_active AS student_is_active,
+             s.branch_id AS branch_id
+      FROM student_installments i
+      JOIN students s ON s.id = i.student_id
+      WHERE 1=1
+    `;
+		const params = [];
+		if (args?.student_id) {
+			query += " AND i.student_id = ?";
+			params.push(Number(args.student_id));
+		}
+		if (args?.month) {
+			query += " AND i.month = ?";
+			params.push(args.month);
+		}
+		if (args?.year) {
+			query += " AND i.year = ?";
+			params.push(Number(args.year));
+		}
+		if (args?.from) {
+			query += " AND i.due_date >= ?";
+			params.push(args.from);
+		}
+		if (args?.to) {
+			query += " AND i.due_date <= ?";
+			params.push(args.to);
+		}
+		if (args?.status) {
+			query += " AND i.status = ?";
+			params.push(args.status);
+		}
+		if (args?.branch_id) {
+			query += " AND s.branch_id = ?";
+			params.push(Number(args.branch_id));
+		}
+		query += " ORDER BY i.due_date ASC, i.seq ASC";
+		const rows = db.prepare(query).all(...params);
+		const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+		for (const r of rows) r.is_overdue = r.status !== "paid" && r.due_date < today;
+		return {
+			installments: rows,
+			summary: rows.reduce((acc, r) => {
+				acc.total = round2(acc.total + r.amount);
+				acc.collected = round2(acc.collected + r.paid);
+				acc.outstanding = round2(acc.outstanding + r.balance);
+				if (r.is_overdue) acc.overdue = round2(acc.overdue + r.balance);
+				return acc;
+			}, {
+				total: 0,
+				collected: 0,
+				outstanding: 0,
+				overdue: 0
+			})
+		};
+	} catch (error) {
+		console.error("Failed to list instalments:", error);
+		throw new Error(error.message || "Failed to list instalments");
+	}
+});
+/**
+* Month-by-month view of everything due across a year: one bucket per month, so the UI can show
+* "this is what is owed in March" rather than one aggregate arrears figure.
+*/
+ipcMain.handle("installments:calendar", async (_event, { year, student_id = null } = {}) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		const y = Number(year) || (/* @__PURE__ */ new Date()).getFullYear();
+		let query = `
+      SELECT i.month, i.year,
+             COUNT(*) AS count,
+             COALESCE(SUM(i.amount), 0) AS due,
+             COALESCE(SUM(i.paid), 0) AS collected,
+             COALESCE(SUM(i.balance), 0) AS outstanding
+      FROM student_installments i
+      WHERE i.year = ?
+    `;
+		const params = [y];
+		if (student_id) {
+			query += " AND i.student_id = ?";
+			params.push(Number(student_id));
+		}
+		query += " GROUP BY i.year, i.month";
+		const rows = db.prepare(query).all(...params);
+		const byMonth = new Map(rows.map((r) => [r.month, r]));
+		return ARABIC_MONTHS$1.map((month, idx) => {
+			const r = byMonth.get(month);
+			return {
+				month,
+				month_index: idx + 1,
+				year: y,
+				count: r?.count ?? 0,
+				due: round2(r?.due ?? 0),
+				collected: round2(r?.collected ?? 0),
+				outstanding: round2(r?.outstanding ?? 0)
+			};
+		});
+	} catch (error) {
+		console.error("Failed to build instalment calendar:", error);
+		throw new Error(error.message || "Failed to build instalment calendar");
+	}
+});
+ipcMain.handle("installments:pay", async (_event, { id, amount, payment_method_id = null, paid_date = null, notes = null }) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		if (!id) throw new Error("Instalment ID is required");
+		const inst = db.prepare("SELECT * FROM student_installments WHERE id = ?").get(id);
+		if (!inst) throw new Error("الدفعة غير موجودة / Instalment not found");
+		const amt = round2(Number(amount));
+		if (!Number.isFinite(amt) || amt <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر / Amount must be greater than zero");
+		const paid = round2(Number(inst.paid) + amt);
+		if (paid > Number(inst.amount) + .001) throw new Error("المبلغ أكبر من قيمة الدفعة المتبقية / Amount exceeds the instalment balance");
+		let methodName = inst.payment_method_name ?? null;
+		if (payment_method_id != null) methodName = db.prepare("SELECT name FROM payment_methods WHERE id = ?").get(payment_method_id)?.name ?? null;
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		db.prepare(`
+      UPDATE student_installments
+      SET paid = ?, balance = ?, status = ?, paid_date = ?,
+          payment_method_id = ?, payment_method_name = ?, notes = COALESCE(?, notes),
+          updated_at = ?, synced = 0
+      WHERE id = ?
+    `).run(paid, round2(Number(inst.amount) - paid), statusFor(Number(inst.amount), paid), paid_date || now.slice(0, 10), payment_method_id ?? inst.payment_method_id ?? null, methodName, notes, now, id);
+		return db.prepare("SELECT * FROM student_installments WHERE id = ?").get(id);
+	} catch (error) {
+		console.error("Failed to record instalment payment:", error);
+		throw new Error(error.message || "Failed to record instalment payment");
+	}
+});
+/** Adjusts a single instalment (date / amount / note) without rebuilding the whole plan. */
+ipcMain.handle("installments:update", async (_event, { id, patch }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!id || !patch) throw new Error("Instalment ID and patch data are required");
+		const inst = db.prepare("SELECT * FROM student_installments WHERE id = ?").get(id);
+		if (!inst) throw new Error("الدفعة غير موجودة / Instalment not found");
+		const amount = patch.amount !== void 0 ? round2(Number(patch.amount)) : Number(inst.amount);
+		if (!Number.isFinite(amount) || amount <= 0) throw new Error("قيمة الدفعة يجب أن تكون أكبر من صفر / Instalment amount must be greater than zero");
+		if (amount < Number(inst.paid)) throw new Error("قيمة الدفعة أقل من المبلغ المحصّل بالفعل / Amount is less than what has already been paid");
+		let due_date = inst.due_date;
+		let month = inst.month;
+		let year = inst.year;
+		if (patch.due_date !== void 0) {
+			due_date = String(patch.due_date).slice(0, 10);
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(due_date)) throw new Error("تاريخ الاستحقاق غير صالح / Due date is invalid");
+			const d = /* @__PURE__ */ new Date(`${due_date}T00:00:00`);
+			month = ARABIC_MONTHS$1[d.getMonth()];
+			year = d.getFullYear();
+		}
+		const notes = patch.notes !== void 0 ? patch.notes : inst.notes;
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		db.prepare(`
+      UPDATE student_installments
+      SET amount = ?, balance = ?, status = ?, due_date = ?, month = ?, year = ?,
+          notes = ?, updated_at = ?, synced = 0
+      WHERE id = ?
+    `).run(amount, round2(amount - Number(inst.paid)), statusFor(amount, Number(inst.paid)), due_date, month, year, notes, now, id);
+		return db.prepare("SELECT * FROM student_installments WHERE id = ?").get(id);
+	} catch (error) {
+		console.error("Failed to update instalment:", error);
+		throw new Error(error.message || "Failed to update instalment");
+	}
+});
+/** Drops a student's whole plan (and clears the plan fields on the student row). */
+ipcMain.handle("installments:clear", async (_event, { student_id }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!student_id) throw new Error("Student ID is required");
+		let deleted = 0;
+		db.transaction(() => {
+			for (const row of db.prepare("SELECT id FROM student_installments WHERE student_id = ?").all(student_id)) recordLocalTombstone(db, "student_installments", row.id);
+			const res = db.prepare("DELETE FROM student_installments WHERE student_id = ?").run(student_id);
+			deleted = Number(res.changes);
+			db.prepare(`
+        UPDATE students
+        SET installments_count = NULL, installment_total = NULL, installment_start_date = NULL,
+            updated_at = ?, synced = 0
+        WHERE id = ?
+      `).run((/* @__PURE__ */ new Date()).toISOString(), student_id);
+		})();
+		return {
+			ok: true,
+			deleted
+		};
+	} catch (error) {
+		console.error("Failed to clear instalment plan:", error);
+		throw new Error(error.message || "Failed to clear instalment plan");
+	}
+});
+//#endregion
 //#region electron/ipc/studentsIPC.ts
 function checkAuth$9() {
 	if (!getCurrentUser()) throw new Error("UNAUTHORIZED: يجب تسجيل الدخول أولاً / Unauthorized");
@@ -22576,7 +23118,7 @@ function buildLessonFields(src) {
 		monthly_fee
 	};
 }
-ipcMain.handle("students:get", async (_event, { search, service, activeOnly }) => {
+ipcMain.handle("students:get", async (_event, { search, service, activeOnly, branch_id }) => {
 	try {
 		checkAuth$9();
 		const db = getDb();
@@ -22590,6 +23132,10 @@ ipcMain.handle("students:get", async (_event, { search, service, activeOnly }) =
 		if (service) {
 			query += " AND id IN (SELECT student_id FROM student_services WHERE service = ?)";
 			params.push(service);
+		}
+		if (branch_id) {
+			query += " AND branch_id = ?";
+			params.push(Number(branch_id));
 		}
 		if (activeOnly !== false) query += " AND is_active = 1";
 		query += " ORDER BY name ASC";
@@ -22605,7 +23151,7 @@ ipcMain.handle("students:add", async (_event, studentInput) => {
 	try {
 		checkAuth$9();
 		const db = getDb();
-		const { name, guardian, guardian_phone, student_phone, national_id, reg_date, notes, services } = studentInput;
+		const { name, guardian, guardian_phone, student_phone, national_id, reg_date, notes, services, branch_id } = studentInput;
 		const enrollments = services || (studentInput.service ? [{
 			service: studentInput.service,
 			unit: studentInput.unit,
@@ -22621,12 +23167,12 @@ ipcMain.handle("students:add", async (_event, studentInput) => {
 			const result = db.prepare(`
         INSERT INTO students (
           name, guardian, guardian_phone, student_phone, national_id,
-          service, unit, price, reg_date, notes,
+          service, unit, price, reg_date, notes, branch_id,
           photo_url, photo_public_id, teacher_id, lesson_days,
           sessions_baseline, extra_lessons, session_price, monthly_fee,
           is_active, created_at, updated_at, synced
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
-      `).run(name, guardian, guardian_phone, student_phone || null, national_id || null, first.service, first.unit, first.price, reg_date, notes || null, studentInput.photo_url || null, studentInput.photo_public_id || null, lesson.teacher_id, lesson.lesson_days, lesson.sessions_baseline, lesson.extra_lessons, lesson.session_price, lesson.monthly_fee, now, now);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
+      `).run(name, guardian, guardian_phone, student_phone || null, national_id || null, first.service, first.unit, first.price, reg_date, notes || null, branch_id ? Number(branch_id) : null, studentInput.photo_url || null, studentInput.photo_public_id || null, lesson.teacher_id, lesson.lesson_days, lesson.sessions_baseline, lesson.extra_lessons, lesson.session_price, lesson.monthly_fee, now, now);
 			const studentId = Number(result.lastInsertRowid);
 			const insertSvc = db.prepare(`INSERT INTO student_services (student_id, service, unit, price, teacher_id, lesson_days, extra_lessons, session_price, teacher_session_rate, created_at, updated_at, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`);
 			for (const s of enrollments) {
@@ -22637,6 +23183,14 @@ ipcMain.handle("students:add", async (_event, studentInput) => {
 				const sTeacherSessionRate = s.teacher_session_rate != null && s.teacher_session_rate !== "" ? Number(s.teacher_session_rate) : null;
 				insertSvc.run(studentId, s.service, s.unit, s.price, sTeacherId, sLessonDays, sExtraLessons, sSessionPrice, sTeacherSessionRate, now, now);
 			}
+			if (studentInput.installments_count) regenerateInstallments(db, {
+				student_id: studentId,
+				...normalizePlanInput({
+					count: studentInput.installments_count,
+					total: studentInput.installment_total,
+					start_date: studentInput.installment_start_date || reg_date
+				})
+			});
 			return studentId;
 		})();
 		const createdStudent = db.prepare("SELECT * FROM students WHERE id = ?").get(createdId);
@@ -22679,7 +23233,8 @@ ipcMain.handle("students:update", async (_event, { id, patch }) => {
 				"notes",
 				"is_active",
 				"photo_url",
-				"photo_public_id"
+				"photo_public_id",
+				"branch_id"
 			]) if (patch[key] !== void 0) {
 				query += `${key} = ?, `;
 				params.push(patch[key]);
@@ -22746,6 +23301,26 @@ ipcMain.handle("students:update", async (_event, { id, patch }) => {
           WHERE student_id = ? AND service_id IS NULL
         `).run(id);
 			}
+			if (patch.installments_count !== void 0) if (patch.installments_count === null || patch.installments_count === "") {
+				for (const row of db.prepare("SELECT id FROM student_installments WHERE student_id = ?").all(id)) recordLocalTombstone(db, "student_installments", row.id);
+				db.prepare("DELETE FROM student_installments WHERE student_id = ?").run(id);
+				db.prepare(`
+            UPDATE students
+            SET installments_count = NULL, installment_total = NULL, installment_start_date = NULL,
+                updated_at = ?, synced = 0
+            WHERE id = ?
+          `).run(now, id);
+			} else {
+				const plan = normalizePlanInput({
+					count: patch.installments_count,
+					total: patch.installment_total ?? student.installment_total,
+					start_date: patch.installment_start_date ?? student.installment_start_date ?? student.reg_date
+				});
+				regenerateInstallments(db, {
+					student_id: Number(id),
+					...plan
+				});
+			}
 		})();
 		const updatedStudent = db.prepare("SELECT * FROM students WHERE id = ?").get(id);
 		updatedStudent.services = db.prepare("SELECT * FROM student_services WHERE student_id = ?").all(id);
@@ -22795,45 +23370,6 @@ ipcMain.handle("students:statement", async (_event, { studentId }) => {
 		throw new Error(error.message || "Failed to get student statement");
 	}
 });
-//#endregion
-//#region electron/services/tombstones.ts
-/**
-* Deletes recorded by a build that predates the German Zone rename still arrive
-* from the cloud addressed to the old table names, so map them on the way in.
-*/
-var LEGACY_ENTITY_NAMES = {
-	children: "students",
-	child_services: "student_services",
-	child_illness_cases: "student_illness_cases",
-	child_activities: "student_activities"
-};
-function normalizeEntity(entity) {
-	return LEGACY_ENTITY_NAMES[entity] ?? entity;
-}
-function recordLocalTombstone(db, entity, recordId) {
-	db.prepare(`
-    INSERT OR IGNORE INTO tombstones (entity, record_id, created_at, synced)
-    VALUES (?, ?, ?, 0)
-  `).run(normalizeEntity(entity), recordId, (/* @__PURE__ */ new Date()).toISOString());
-}
-function applyCloudTombstones(db, cloudTombstones) {
-	const insertTombstone = db.prepare(`
-    INSERT OR IGNORE INTO tombstones (entity, record_id, created_at, synced)
-    VALUES (?, ?, ?, 1)
-  `);
-	for (const tombstone of cloudTombstones) {
-		const entity = normalizeEntity(tombstone.entity);
-		if ([
-			"students",
-			"student_services",
-			"payments",
-			"expenses",
-			"employees",
-			"salary_payments"
-		].includes(entity)) db.prepare(`DELETE FROM ${entity} WHERE id = ?`).run(tombstone.record_id);
-		insertTombstone.run(entity, tombstone.record_id, (/* @__PURE__ */ new Date()).toISOString());
-	}
-}
 //#endregion
 //#region electron/ipc/studentServicesIPC.ts
 function checkAuth$8() {
@@ -30092,6 +30628,7 @@ ipcMain.handle("storage:clear", async (_event, { confirm }) => {
 				db.prepare("DELETE FROM expenses").run();
 				db.prepare("DELETE FROM sync_log").run();
 				db.prepare("DELETE FROM tombstones").run();
+				db.prepare("DELETE FROM student_installments").run();
 				db.prepare("DELETE FROM student_services").run();
 				db.prepare("DELETE FROM students").run();
 				db.prepare("DELETE FROM session_teachers").run();
@@ -30302,6 +30839,10 @@ var studentSchema = new Schema({
 	extra_lessons: Number,
 	session_price: Number,
 	monthly_fee: Number,
+	installments_count: Number,
+	installment_total: Number,
+	installment_start_date: String,
+	branch_id: Number,
 	created_at: String,
 	updated_at: String,
 	synced: Number
@@ -30361,6 +30902,8 @@ var userSchema = new Schema({
 	role: String,
 	name: String,
 	is_active: Number,
+	branch_mode: String,
+	primary_branch_id: Number,
 	created_at: String,
 	updated_at: String,
 	synced: Number
@@ -30409,7 +30952,8 @@ var employeeSchema = new Schema({
 	updated_at: String,
 	synced: Number,
 	teacher_session_rate: Number,
-	hourly_rate: Number
+	hourly_rate: Number,
+	branch_id: Number
 }, sharedOptions);
 var EmployeeModel = mongoose.models["sync_employees"] || mongoose.model("sync_employees", employeeSchema);
 var salaryPaymentSchema = new Schema({
@@ -30759,7 +31303,106 @@ var studentActivitySchema = new Schema({
 	synced: Number
 }, sharedOptions);
 var StudentActivityModel = mongoose.models["sync_student_activities"] || mongoose.model("sync_student_activities", studentActivitySchema);
+var studentInstallmentSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	student_id: Number,
+	service_id: Number,
+	seq: Number,
+	due_date: String,
+	month: String,
+	year: Number,
+	amount: Number,
+	paid: Number,
+	balance: Number,
+	status: String,
+	paid_date: String,
+	payment_method_id: Number,
+	payment_method_name: String,
+	notes: String,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var StudentInstallmentModel = mongoose.models["sync_student_installments"] || mongoose.model("sync_student_installments", studentInstallmentSchema);
+var branchSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	name: String,
+	code: String,
+	city: String,
+	address: String,
+	phone: String,
+	kind: String,
+	manager_user_id: Number,
+	is_active: Number,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var BranchModel = mongoose.models["sync_branches"] || mongoose.model("sync_branches", branchSchema);
+var userBranchSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	user_id: Number,
+	branch_id: Number,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var UserBranchModel = mongoose.models["sync_user_branches"] || mongoose.model("sync_user_branches", userBranchSchema);
+var hallSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	name: String,
+	branch_id: Number,
+	capacity: Number,
+	notes: String,
+	is_active: Number,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var HallModel = mongoose.models["sync_halls"] || mongoose.model("sync_halls", hallSchema);
+var hallTimeSlotSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	hall_id: Number,
+	day_of_week: Number,
+	start_time: String,
+	end_time: String,
+	notes: String,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var HallTimeSlotModel = mongoose.models["sync_hall_time_slots"] || mongoose.model("sync_hall_time_slots", hallTimeSlotSchema);
 var SYNC_ENTITIES = [
+	{
+		name: "users",
+		model: UserModel,
+		table: "users"
+	},
+	{
+		name: "branches",
+		model: BranchModel,
+		table: "branches"
+	},
 	{
 		name: "students",
 		model: StudentModel,
@@ -30789,11 +31432,6 @@ var SYNC_ENTITIES = [
 		name: "expenses",
 		model: ExpenseModel,
 		table: "expenses"
-	},
-	{
-		name: "users",
-		model: UserModel,
-		table: "users"
 	},
 	{
 		name: "settings",
@@ -30899,6 +31537,26 @@ var SYNC_ENTITIES = [
 		name: "student_activities",
 		model: StudentActivityModel,
 		table: "student_activities"
+	},
+	{
+		name: "student_installments",
+		model: StudentInstallmentModel,
+		table: "student_installments"
+	},
+	{
+		name: "user_branches",
+		model: UserBranchModel,
+		table: "user_branches"
+	},
+	{
+		name: "halls",
+		model: HallModel,
+		table: "halls"
+	},
+	{
+		name: "hall_time_slots",
+		model: HallTimeSlotModel,
+		table: "hall_time_slots"
 	}
 ];
 //#endregion
@@ -32367,6 +33025,445 @@ ipcMain.handle("calendar:getDay", async (_event, { date }) => {
 	} catch (error) {
 		console.error("Failed to get calendar day:", error);
 		throw new Error(error.message || "Failed to get calendar day");
+	}
+});
+//#endregion
+//#region electron/ipc/branchesIPC.ts
+var BRANCH_MODES = [
+	"branch",
+	"online",
+	"mixed"
+];
+ipcMain.handle("branches:list", async (_event, args = {}) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		let query = `
+      SELECT b.*, u.name AS manager_name, u.username AS manager_username,
+             (SELECT COUNT(*) FROM students s WHERE s.branch_id = b.id AND s.is_active = 1) AS student_count,
+             (SELECT COUNT(*) FROM employees e WHERE e.branch_id = b.id AND e.is_active = 1) AS employee_count,
+             (SELECT COUNT(*) FROM halls h WHERE h.branch_id = b.id AND h.is_active = 1) AS hall_count
+      FROM branches b
+      LEFT JOIN users u ON u.id = b.manager_user_id
+      WHERE 1=1
+    `;
+		const params = [];
+		if (args?.activeOnly !== false) query += " AND b.is_active = 1";
+		if (args?.kind) {
+			query += " AND b.kind = ?";
+			params.push(args.kind);
+		}
+		query += " ORDER BY b.kind ASC, b.name ASC";
+		return db.prepare(query).all(...params);
+	} catch (error) {
+		console.error("Failed to list branches:", error);
+		throw new Error(error.message || "Failed to list branches");
+	}
+});
+/** The branches the signed-in user may switch between, for the header's branch selector. */
+ipcMain.handle("branches:mine", async () => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		const user = getCurrentUser();
+		const row = db.prepare("SELECT branch_mode, primary_branch_id FROM users WHERE id = ?").get(user.id);
+		const mode = row?.branch_mode || "branch";
+		if (user.role === "admin") return {
+			mode: "mixed",
+			primary_branch_id: row?.primary_branch_id ?? null,
+			branches: db.prepare("SELECT * FROM branches WHERE is_active = 1 ORDER BY kind ASC, name ASC").all()
+		};
+		const branches = db.prepare(`
+      SELECT b.* FROM branches b
+      JOIN user_branches ub ON ub.branch_id = b.id
+      WHERE ub.user_id = ? AND b.is_active = 1
+      ORDER BY b.kind ASC, b.name ASC
+    `).all(user.id);
+		return {
+			mode,
+			primary_branch_id: row?.primary_branch_id ?? null,
+			branches
+		};
+	} catch (error) {
+		console.error("Failed to resolve user branches:", error);
+		throw new Error(error.message || "Failed to resolve user branches");
+	}
+});
+ipcMain.handle("branches:add", async (_event, args) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		const name = String(args?.name ?? "").trim();
+		if (!name) throw new Error("اسم الفرع مطلوب / Branch name is required");
+		const kind = args?.kind === "online" ? "online" : "physical";
+		if (db.prepare("SELECT id FROM branches WHERE name = ?").get(name)) throw new Error("اسم الفرع موجود بالفعل / Branch name already exists");
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const result = db.prepare(`
+      INSERT INTO branches (name, code, city, address, phone, kind, manager_user_id, is_active, created_at, updated_at, synced)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
+    `).run(name, args?.code?.trim() || null, args?.city?.trim() || null, args?.address?.trim() || null, args?.phone?.trim() || null, kind, args?.manager_user_id ? Number(args.manager_user_id) : null, now, now);
+		return db.prepare("SELECT * FROM branches WHERE id = ?").get(Number(result.lastInsertRowid));
+	} catch (error) {
+		console.error("Failed to add branch:", error);
+		throw new Error(error.message || "Failed to add branch");
+	}
+});
+ipcMain.handle("branches:update", async (_event, { id, patch }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!id || !patch) throw new Error("Branch ID and patch data are required");
+		const branch = db.prepare("SELECT * FROM branches WHERE id = ?").get(id);
+		if (!branch) throw new Error("الفرع غير موجود / Branch not found");
+		if (patch.name !== void 0) {
+			const name = String(patch.name).trim();
+			if (!name) throw new Error("اسم الفرع مطلوب / Branch name is required");
+			if (db.prepare("SELECT id FROM branches WHERE name = ? AND id != ?").get(name, id)) throw new Error("اسم الفرع موجود بالفعل / Branch name already exists");
+		}
+		const allowed = [
+			"name",
+			"code",
+			"city",
+			"address",
+			"phone",
+			"kind",
+			"manager_user_id",
+			"is_active"
+		];
+		const sets = [];
+		const params = [];
+		for (const key of allowed) if (patch[key] !== void 0) {
+			sets.push(`${key} = ?`);
+			params.push(patch[key]);
+		}
+		if (sets.length === 0) return branch;
+		params.push((/* @__PURE__ */ new Date()).toISOString(), id);
+		db.prepare(`UPDATE branches SET ${sets.join(", ")}, updated_at = ?, synced = 0 WHERE id = ?`).run(...params);
+		return db.prepare("SELECT * FROM branches WHERE id = ?").get(id);
+	} catch (error) {
+		console.error("Failed to update branch:", error);
+		throw new Error(error.message || "Failed to update branch");
+	}
+});
+/**
+* Deletes a branch. Refused while students, employees or halls still point at it — reassigning
+* them is a decision for the admin, not something to silently orphan.
+*/
+ipcMain.handle("branches:delete", async (_event, { id }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!id) throw new Error("Branch ID is required");
+		const counts = db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM students  WHERE branch_id = ?) AS students,
+        (SELECT COUNT(*) FROM employees WHERE branch_id = ?) AS employees,
+        (SELECT COUNT(*) FROM halls     WHERE branch_id = ?) AS halls
+    `).get(id, id, id);
+		if (counts.students > 0 || counts.employees > 0 || counts.halls > 0) throw new Error("لا يمكن حذف فرع مرتبط بطلاب أو موظفين أو قاعات — انقلهم أولاً / Cannot delete a branch that still has students, employees or halls — reassign them first");
+		db.transaction(() => {
+			for (const row of db.prepare("SELECT id FROM user_branches WHERE branch_id = ?").all(id)) recordLocalTombstone(db, "user_branches", row.id);
+			db.prepare("DELETE FROM user_branches WHERE branch_id = ?").run(id);
+			db.prepare("UPDATE users SET primary_branch_id = NULL, synced = 0 WHERE primary_branch_id = ?").run(id);
+			db.prepare("DELETE FROM branches WHERE id = ?").run(id);
+			recordLocalTombstone(db, "branches", Number(id));
+		})();
+		return { ok: true };
+	} catch (error) {
+		console.error("Failed to delete branch:", error);
+		throw new Error(error.message || "Failed to delete branch");
+	}
+});
+/** Makes a user the manager of a branch (and ensures they cover it). */
+ipcMain.handle("branches:setManager", async (_event, { branch_id, user_id }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!branch_id) throw new Error("Branch ID is required");
+		if (!db.prepare("SELECT id FROM branches WHERE id = ?").get(branch_id)) throw new Error("الفرع غير موجود / Branch not found");
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		db.transaction(() => {
+			db.prepare("UPDATE branches SET manager_user_id = ?, updated_at = ?, synced = 0 WHERE id = ?").run(user_id ? Number(user_id) : null, now, branch_id);
+			if (user_id) db.prepare("INSERT OR IGNORE INTO user_branches (user_id, branch_id, created_at, updated_at, synced) VALUES (?, ?, ?, ?, 0)").run(Number(user_id), branch_id, now, now);
+		})();
+		return db.prepare("SELECT * FROM branches WHERE id = ?").get(branch_id);
+	} catch (error) {
+		console.error("Failed to set branch manager:", error);
+		throw new Error(error.message || "Failed to set branch manager");
+	}
+});
+/**
+* Sets a user's branch coverage in one call: the mode plus the exact list of branches.
+* 'online' resolves to the online branches when no explicit list is given, so an "online user"
+* can be configured with a single choice.
+*/
+ipcMain.handle("branches:assignUser", async (_event, { user_id, mode, branch_ids, primary_branch_id = null }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!user_id) throw new Error("User ID is required");
+		if (!db.prepare("SELECT id FROM users WHERE id = ?").get(user_id)) throw new Error("المستخدم غير موجود / User not found");
+		const resolvedMode = BRANCH_MODES.includes(mode) ? mode : "branch";
+		let ids = Array.isArray(branch_ids) ? branch_ids.map(Number).filter(Number.isFinite) : [];
+		if (ids.length === 0 && resolvedMode === "online") ids = db.prepare("SELECT id FROM branches WHERE kind = 'online' AND is_active = 1").all().map((r) => r.id);
+		if (ids.length === 0) throw new Error("يجب اختيار فرع واحد على الأقل / At least one branch must be selected");
+		if (resolvedMode === "branch" && ids.length > 1) throw new Error("وضع \"فرع واحد\" يسمح بفرع واحد فقط — استخدم \"مشترك\" / Single-branch mode allows one branch only — use \"mixed\"");
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		db.transaction(() => {
+			for (const row of db.prepare("SELECT id FROM user_branches WHERE user_id = ?").all(user_id)) recordLocalTombstone(db, "user_branches", row.id);
+			db.prepare("DELETE FROM user_branches WHERE user_id = ?").run(user_id);
+			const insert = db.prepare("INSERT OR IGNORE INTO user_branches (user_id, branch_id, created_at, updated_at, synced) VALUES (?, ?, ?, ?, 0)");
+			for (const bid of ids) insert.run(user_id, bid, now, now);
+			const primary = primary_branch_id && ids.includes(Number(primary_branch_id)) ? Number(primary_branch_id) : ids[0];
+			db.prepare(`
+        UPDATE users SET branch_mode = ?, primary_branch_id = ?,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), synced = 0
+        WHERE id = ?
+      `).run(resolvedMode, primary, user_id);
+		})();
+		return {
+			ok: true,
+			mode: resolvedMode,
+			branches: db.prepare(`
+        SELECT b.* FROM branches b JOIN user_branches ub ON ub.branch_id = b.id
+        WHERE ub.user_id = ? ORDER BY b.kind ASC, b.name ASC
+      `).all(user_id)
+		};
+	} catch (error) {
+		console.error("Failed to assign user branches:", error);
+		throw new Error(error.message || "Failed to assign user branches");
+	}
+});
+/** Branch coverage for every user — powers the branch column in the Users list. */
+ipcMain.handle("branches:userAssignments", async () => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		const users = db.prepare("SELECT id, branch_mode, primary_branch_id FROM users").all();
+		const links = db.prepare(`
+      SELECT ub.user_id, b.id, b.name, b.kind
+      FROM user_branches ub JOIN branches b ON b.id = ub.branch_id
+    `).all();
+		return users.map((u) => ({
+			user_id: u.id,
+			mode: u.branch_mode || "branch",
+			primary_branch_id: u.primary_branch_id ?? null,
+			branches: links.filter((l) => l.user_id === u.id).map(({ id, name, kind }) => ({
+				id,
+				name,
+				kind
+			}))
+		}));
+	} catch (error) {
+		console.error("Failed to list user branch assignments:", error);
+		throw new Error(error.message || "Failed to list user branch assignments");
+	}
+});
+//#endregion
+//#region electron/ipc/hallsIPC.ts
+var TIME_RE = /^([01]\d|2[0-4]):([0-5]\d)$/;
+/** Minutes since midnight, so intervals can be compared and overlap-checked numerically. */
+function timeToMinutes(time) {
+	const m = TIME_RE.exec(time);
+	if (!m) throw new Error(`صيغة الوقت غير صالحة (${time}) — استخدم HH:MM / Invalid time format (${time}) — use HH:MM`);
+	const minutes = Number(m[1]) * 60 + Number(m[2]);
+	if (minutes > 1440) throw new Error(`الوقت خارج النطاق (${time}) / Time out of range (${time})`);
+	return minutes;
+}
+/**
+* Validates one day's worth of intervals: each must be non-empty and they must not overlap
+* each other. Pure/exported so the rule is unit-testable without a database.
+*/
+function validateDaySlots(slots) {
+	const sorted = [...slots].sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+	let previousEnd = -1;
+	for (const slot of sorted) {
+		const start = timeToMinutes(slot.start_time);
+		const end = timeToMinutes(slot.end_time);
+		if (end <= start) throw new Error(`وقت النهاية يجب أن يكون بعد وقت البداية (${slot.start_time} - ${slot.end_time}) / End time must be after start time (${slot.start_time} - ${slot.end_time})`);
+		if (start < previousEnd) throw new Error(`فترات متداخلة في نفس اليوم (${slot.start_time} - ${slot.end_time}) / Overlapping intervals on the same day (${slot.start_time} - ${slot.end_time})`);
+		previousEnd = end;
+	}
+}
+/** Validates a whole week's timetable, day by day. */
+function validateTimetable(slots) {
+	for (let day = 0; day <= 6; day++) {
+		const forDay = slots.filter((s) => Number(s.day_of_week) === day);
+		if (forDay.length > 0) validateDaySlots(forDay);
+	}
+	for (const s of slots) {
+		const day = Number(s.day_of_week);
+		if (!Number.isInteger(day) || day < 0 || day > 6) throw new Error("يوم الأسبوع غير صالح / Invalid day of week");
+	}
+}
+/** Replaces a hall's whole timetable in one shot — simpler and race-free vs. per-slot edits. */
+function writeTimetable(db, hallId, slots) {
+	const now = (/* @__PURE__ */ new Date()).toISOString();
+	for (const row of db.prepare("SELECT id FROM hall_time_slots WHERE hall_id = ?").all(hallId)) recordLocalTombstone(db, "hall_time_slots", row.id);
+	db.prepare("DELETE FROM hall_time_slots WHERE hall_id = ?").run(hallId);
+	const insert = db.prepare(`
+    INSERT INTO hall_time_slots (hall_id, day_of_week, start_time, end_time, notes, created_at, updated_at, synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+  `);
+	for (const slot of slots) insert.run(hallId, Number(slot.day_of_week), slot.start_time, slot.end_time, slot.notes || null, now, now);
+}
+ipcMain.handle("halls:list", async (_event, args = {}) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		let query = `
+      SELECT h.*, b.name AS branch_name, b.kind AS branch_kind
+      FROM halls h
+      LEFT JOIN branches b ON b.id = h.branch_id
+      WHERE 1=1
+    `;
+		const params = [];
+		if (args?.activeOnly !== false) query += " AND h.is_active = 1";
+		if (args?.branch_id) {
+			query += " AND h.branch_id = ?";
+			params.push(Number(args.branch_id));
+		}
+		query += " ORDER BY h.name ASC";
+		const halls = db.prepare(query).all(...params);
+		const slots = db.prepare(`
+      SELECT * FROM hall_time_slots ORDER BY day_of_week ASC, start_time ASC
+    `).all();
+		for (const hall of halls) {
+			hall.slots = slots.filter((s) => s.hall_id === hall.id);
+			hall.total_hours = Number((hall.slots.reduce((sum, s) => sum + (timeToMinutes(s.end_time) - timeToMinutes(s.start_time)), 0) / 60).toFixed(2));
+		}
+		return halls;
+	} catch (error) {
+		console.error("Failed to list halls:", error);
+		throw new Error(error.message || "Failed to list halls");
+	}
+});
+ipcMain.handle("halls:get", async (_event, { id }) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		if (!id) throw new Error("Hall ID is required");
+		const hall = db.prepare(`
+      SELECT h.*, b.name AS branch_name, b.kind AS branch_kind
+      FROM halls h LEFT JOIN branches b ON b.id = h.branch_id
+      WHERE h.id = ?
+    `).get(id);
+		if (!hall) throw new Error("القاعة غير موجودة / Hall not found");
+		hall.slots = db.prepare("SELECT * FROM hall_time_slots WHERE hall_id = ? ORDER BY day_of_week ASC, start_time ASC").all(id);
+		return hall;
+	} catch (error) {
+		console.error("Failed to get hall:", error);
+		throw new Error(error.message || "Failed to get hall");
+	}
+});
+ipcMain.handle("halls:add", async (_event, args) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		const name = String(args?.name ?? "").trim();
+		if (!name) throw new Error("اسم القاعة مطلوب / Hall name is required");
+		const branchId = args?.branch_id ? Number(args.branch_id) : null;
+		if (branchId ? db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id = ?").get(name, branchId) : db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id IS NULL").get(name)) throw new Error("اسم القاعة موجود بالفعل في هذا الفرع / A hall with this name already exists in this branch");
+		const slots = Array.isArray(args?.slots) ? args.slots : [];
+		validateTimetable(slots);
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		let hallId = 0;
+		db.transaction(() => {
+			const result = db.prepare(`
+        INSERT INTO halls (name, branch_id, capacity, notes, is_active, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, 1, ?, ?, 0)
+      `).run(name, branchId, args?.capacity != null && args.capacity !== "" ? Number(args.capacity) : null, args?.notes?.trim() || null, now, now);
+			hallId = Number(result.lastInsertRowid);
+			writeTimetable(db, hallId, slots);
+		})();
+		const hall = db.prepare("SELECT * FROM halls WHERE id = ?").get(hallId);
+		hall.slots = db.prepare("SELECT * FROM hall_time_slots WHERE hall_id = ? ORDER BY day_of_week ASC, start_time ASC").all(hallId);
+		return hall;
+	} catch (error) {
+		console.error("Failed to add hall:", error);
+		throw new Error(error.message || "Failed to add hall");
+	}
+});
+/** Updates a hall. Passing `slots` replaces the whole timetable; omitting it leaves it alone. */
+ipcMain.handle("halls:update", async (_event, { id, patch }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!id || !patch) throw new Error("Hall ID and patch data are required");
+		const hall = db.prepare("SELECT * FROM halls WHERE id = ?").get(id);
+		if (!hall) throw new Error("القاعة غير موجودة / Hall not found");
+		const name = patch.name !== void 0 ? String(patch.name).trim() : hall.name;
+		if (!name) throw new Error("اسم القاعة مطلوب / Hall name is required");
+		const branchId = patch.branch_id !== void 0 ? patch.branch_id ? Number(patch.branch_id) : null : hall.branch_id;
+		if (branchId ? db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id = ? AND id != ?").get(name, branchId, id) : db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id IS NULL AND id != ?").get(name, id)) throw new Error("اسم القاعة موجود بالفعل في هذا الفرع / A hall with this name already exists in this branch");
+		if (patch.slots !== void 0) validateTimetable(patch.slots ?? []);
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		db.transaction(() => {
+			db.prepare(`
+        UPDATE halls SET name = ?, branch_id = ?, capacity = ?, notes = ?, is_active = ?,
+          updated_at = ?, synced = 0
+        WHERE id = ?
+      `).run(name, branchId, patch.capacity !== void 0 ? patch.capacity === "" || patch.capacity === null ? null : Number(patch.capacity) : hall.capacity, patch.notes !== void 0 ? patch.notes?.trim() || null : hall.notes, patch.is_active !== void 0 ? Number(patch.is_active) : hall.is_active, now, id);
+			if (patch.slots !== void 0) writeTimetable(db, Number(id), patch.slots ?? []);
+		})();
+		const updated = db.prepare("SELECT * FROM halls WHERE id = ?").get(id);
+		updated.slots = db.prepare("SELECT * FROM hall_time_slots WHERE hall_id = ? ORDER BY day_of_week ASC, start_time ASC").all(id);
+		return updated;
+	} catch (error) {
+		console.error("Failed to update hall:", error);
+		throw new Error(error.message || "Failed to update hall");
+	}
+});
+ipcMain.handle("halls:delete", async (_event, { id }) => {
+	try {
+		requireAdmin();
+		const db = getDb();
+		if (!id) throw new Error("Hall ID is required");
+		if (!db.prepare("SELECT id FROM halls WHERE id = ?").get(id)) throw new Error("القاعة غير موجودة / Hall not found");
+		db.transaction(() => {
+			for (const row of db.prepare("SELECT id FROM hall_time_slots WHERE hall_id = ?").all(id)) recordLocalTombstone(db, "hall_time_slots", row.id);
+			db.prepare("DELETE FROM halls WHERE id = ?").run(id);
+			recordLocalTombstone(db, "halls", Number(id));
+		})();
+		return { ok: true };
+	} catch (error) {
+		console.error("Failed to delete hall:", error);
+		throw new Error(error.message || "Failed to delete hall");
+	}
+});
+/**
+* The weekly grid: every hall's intervals bucketed by weekday (0 = Sunday … 6 = Saturday),
+* ready to render as a timetable without further reshaping in the renderer.
+*/
+ipcMain.handle("halls:timetable", async (_event, args = {}) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		let query = `
+      SELECT s.*, h.name AS hall_name, h.capacity, h.branch_id, b.name AS branch_name
+      FROM hall_time_slots s
+      JOIN halls h ON h.id = s.hall_id
+      LEFT JOIN branches b ON b.id = h.branch_id
+      WHERE h.is_active = 1
+    `;
+		const params = [];
+		if (args?.branch_id) {
+			query += " AND h.branch_id = ?";
+			params.push(Number(args.branch_id));
+		}
+		if (args?.hall_id) {
+			query += " AND h.id = ?";
+			params.push(Number(args.hall_id));
+		}
+		query += " ORDER BY s.day_of_week ASC, s.start_time ASC, h.name ASC";
+		const slots = db.prepare(query).all(...params);
+		return Array.from({ length: 7 }, (_, day) => ({
+			day_of_week: day,
+			slots: slots.filter((s) => s.day_of_week === day)
+		}));
+	} catch (error) {
+		console.error("Failed to build hall timetable:", error);
+		throw new Error(error.message || "Failed to build hall timetable");
 	}
 });
 //#endregion

@@ -3,6 +3,8 @@ import { getDb } from '../db/connection.js'
 import { requireAdmin } from './_guard.js'
 import { getCurrentUser } from './authIPC.js'
 import { getStudentStatement } from '../services/statementService.js'
+import { regenerateInstallments, normalizePlanInput } from './installmentsIPC.js'
+import { recordLocalTombstone } from '../services/tombstones.js'
 import type { Student } from '../../src/types/index.js'
 
 function checkAuth() {
@@ -83,7 +85,7 @@ function buildLessonFields(src: any): {
   }
 }
 
-ipcMain.handle('students:get', async (_event, { search, service, activeOnly }) => {
+ipcMain.handle('students:get', async (_event, { search, service, activeOnly, branch_id }) => {
   try {
     checkAuth()
     const db = getDb()
@@ -100,6 +102,12 @@ ipcMain.handle('students:get', async (_event, { search, service, activeOnly }) =
     if (service) {
       query += ' AND id IN (SELECT student_id FROM student_services WHERE service = ?)'
       params.push(service)
+    }
+
+    // Branch scoping — the header's branch selector passes the branch it is focused on.
+    if (branch_id) {
+      query += ' AND branch_id = ?'
+      params.push(Number(branch_id))
     }
     
     // Default to activeOnly = true if not explicitly set to false
@@ -126,7 +134,7 @@ ipcMain.handle('students:add', async (_event, studentInput) => {
     checkAuth()
     const db = getDb()
 
-    const { name, guardian, guardian_phone, student_phone, national_id, reg_date, notes, services } = studentInput
+    const { name, guardian, guardian_phone, student_phone, national_id, reg_date, notes, services, branch_id } = studentInput
     const enrollments = services || (studentInput.service ? [{ service: studentInput.service, unit: studentInput.unit, price: studentInput.price }] : [])
 
     if (!name || !guardian || !guardian_phone || enrollments.length === 0 || !reg_date) {
@@ -148,14 +156,15 @@ ipcMain.handle('students:add', async (_event, studentInput) => {
       const result = db.prepare(`
         INSERT INTO students (
           name, guardian, guardian_phone, student_phone, national_id,
-          service, unit, price, reg_date, notes,
+          service, unit, price, reg_date, notes, branch_id,
           photo_url, photo_public_id, teacher_id, lesson_days,
           sessions_baseline, extra_lessons, session_price, monthly_fee,
           is_active, created_at, updated_at, synced
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0)
       `).run(
         name, guardian, guardian_phone, student_phone || null, national_id || null,
         first.service, first.unit, first.price, reg_date, notes || null,
+        branch_id ? Number(branch_id) : null,
         studentInput.photo_url || null, studentInput.photo_public_id || null,
         lesson.teacher_id, lesson.lesson_days,
         lesson.sessions_baseline, lesson.extra_lessons, lesson.session_price, lesson.monthly_fee,
@@ -173,6 +182,18 @@ ipcMain.handle('students:add', async (_event, studentInput) => {
         const sTeacherSessionRate = s.teacher_session_rate != null && s.teacher_session_rate !== '' ? Number(s.teacher_session_rate) : null
         insertSvc.run(studentId, s.service, s.unit, s.price, sTeacherId, sLessonDays, sExtraLessons, sSessionPrice, sTeacherSessionRate, now, now)
       }
+
+      // Instalment plan: "this family pays over N instalments". Spreading it here (at
+      // enrollment) is what keeps the schedule month-by-month rather than one lump of arrears.
+      if (studentInput.installments_count) {
+        const plan = normalizePlanInput({
+          count: studentInput.installments_count,
+          total: studentInput.installment_total,
+          start_date: studentInput.installment_start_date || reg_date,
+        })
+        regenerateInstallments(db, { student_id: studentId, ...plan })
+      }
+
       return studentId
     })
     
@@ -225,7 +246,9 @@ ipcMain.handle('students:update', async (_event, { id, patch }) => {
         'name', 'guardian', 'guardian_phone', 'student_phone', 'national_id',
         'service', 'unit', 'price', 'reg_date', 'notes', 'is_active',
         // Feature 004 — directly settable enrollment fields
-        'photo_url', 'photo_public_id'
+        'photo_url', 'photo_public_id',
+        // Branch the student belongs to (migration 050)
+        'branch_id'
       ]
 
       for (const key of allowedKeys) {
@@ -314,8 +337,34 @@ ipcMain.handle('students:update', async (_event, { id, patch }) => {
           WHERE student_id = ? AND service_id IS NULL
         `).run(id)
       }
+
+      // Instalment plan changes rebuild the schedule; amounts already collected are carried
+      // over by regenerateInstallments, so re-planning never erases payment history.
+      if (patch.installments_count !== undefined) {
+        if (patch.installments_count === null || patch.installments_count === '') {
+          // Tombstoned so the deletion reaches other machines instead of the next pull
+          // resurrecting the cancelled plan.
+          for (const row of db.prepare('SELECT id FROM student_installments WHERE student_id = ?').all(id) as { id: number }[]) {
+            recordLocalTombstone(db, 'student_installments', row.id)
+          }
+          db.prepare('DELETE FROM student_installments WHERE student_id = ?').run(id)
+          db.prepare(`
+            UPDATE students
+            SET installments_count = NULL, installment_total = NULL, installment_start_date = NULL,
+                updated_at = ?, synced = 0
+            WHERE id = ?
+          `).run(now, id)
+        } else {
+          const plan = normalizePlanInput({
+            count: patch.installments_count,
+            total: patch.installment_total ?? student.installment_total,
+            start_date: patch.installment_start_date ?? student.installment_start_date ?? student.reg_date,
+          })
+          regenerateInstallments(db, { student_id: Number(id), ...plan })
+        }
+      }
     })
-    
+
     tx()
     
     const updatedStudent = db.prepare('SELECT * FROM students WHERE id = ?').get(id) as Student

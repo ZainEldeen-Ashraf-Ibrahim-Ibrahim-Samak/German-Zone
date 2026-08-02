@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../store/useAuthStore.js'
 import { LanguageSwitcher } from './LanguageSwitcher.js'
 import { NotificationsBell } from './NotificationsBell.js'
+import { BranchSelector } from './BranchSelector.js'
 import { Button } from '../ui/Button.js'
 
 export const Header: React.FC = () => {
@@ -23,6 +24,12 @@ export const Header: React.FC = () => {
 
       {/* Actions */}
       <div className="flex items-center gap-4">
+        {/* Branch the user is currently working in */}
+        <BranchSelector />
+
+        {/* Separator */}
+        <div className="h-6 w-px bg-slate-200" />
+
         {/* Notifications */}
         <NotificationsBell />
 

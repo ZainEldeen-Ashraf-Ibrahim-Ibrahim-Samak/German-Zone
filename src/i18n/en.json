@@ -171,7 +171,6 @@
       "fri": "Fri",
       "sat": "Sat"
     },
-
     "role_dropdown_label": "Role",
     "add_new_role": "+ New role",
     "new_role_name_placeholder": "New role name",
@@ -180,7 +179,6 @@
     "roles_without_salary_type_warning": "Warning: The following roles have no salary type: {{roles}}. Please configure them in Settings → Salary Types.",
     "salary_type_override_label": "Salary type override (optional)",
     "salary_type_role_default": "— Use role default —",
-
     "salary_type_mode_fixed_monthly": "Fixed Monthly",
     "salary_type_mode_per_session_fixed": "Per Session (Fixed)",
     "salary_type_mode_per_session_pct": "Per Session (Percentage)",
@@ -193,7 +191,6 @@
     "edit_salary_type": "Edit Salary Type",
     "delete_salary_type_confirm": "Delete this salary type? Roles or employees using it must be updated first.",
     "payable_sessions_badge": "{{payable}}/{{total}} sessions",
-
     "service_definitions_page_title": "Services",
     "add_service": "Add Service",
     "edit_service": "Edit Service",
@@ -203,7 +200,6 @@
     "service_builtin_badge": "Built-in",
     "service_custom_badge": "Custom",
     "delete_service_confirm": "Delete this service? Students enrolled in it must be re-enrolled first.",
-
     "sessions_page_title": "Sessions",
     "add_session": "Add Session",
     "edit_session": "Edit Session",
@@ -218,18 +214,27 @@
     "save_attendance": "Save Attendance",
     "attendance_conflicts_title": "Attendance Conflicts",
     "resolve_conflict": "Resolve",
-
     "base_service_label": "Base Service",
     "additional_classes_label": "Additional Classes",
     "total_monthly_fee_label": "Total Monthly Fee",
     "sessions_baseline_label": "Sessions per Month",
-
     "sessions_remaining_label": "Sessions remaining",
     "calculated_first_payment_label": "Calculated first payment",
     "prorate_adjust_hint": "You may adjust this amount",
     "confirm_first_payment": "Confirm First Payment",
-
     "uploading_photo": "Uploading photo...",
-    "photo_upload_failed": "Photo upload failed — student saved without photo"
+    "photo_upload_failed": "Photo upload failed — student saved without photo",
+    "loading": "Loading...",
+    "branch_coverage": "Branch coverage",
+    "branch_mode_branch": "Single branch",
+    "branch_mode_online": "Online",
+    "branch_mode_mixed": "Mixed (branch + online)",
+    "select_branch": "Select branch",
+    "select_branches": "Select branches",
+    "primary_branch": "Primary branch",
+    "branch_required": "At least one branch must be selected",
+    "branches": "Branches",
+    "halls": "Halls",
+    "installments": "Instalments"
   }
 }
