@@ -96,7 +96,10 @@ const api = {
       ipcRenderer.invoke('installments:plan', args),
     list: (args?: { student_id?: number; month?: string; year?: number; from?: string; to?: string; status?: string; branch_id?: number }) =>
       ipcRenderer.invoke('installments:list', args ?? {}),
-    calendar: (args: { year: number; student_id?: number | null }) => ipcRenderer.invoke('installments:calendar', args),
+    calendar: (args: { year: number; student_id?: number | null; branch_id?: number }) =>
+      ipcRenderer.invoke('installments:calendar', args),
+    listTransactions: (args: { installment_id: number }) => ipcRenderer.invoke('installments:listTransactions', args),
+    deleteTransaction: (args: { id: number }) => ipcRenderer.invoke('installments:deleteTransaction', args),
     preview: (args: { count: number; total?: number; start_date: string; student_id?: number }) =>
       ipcRenderer.invoke('installments:preview', args) as Promise<
         { seq: number; due_date: string; month: string; year: number; amount: number }[]

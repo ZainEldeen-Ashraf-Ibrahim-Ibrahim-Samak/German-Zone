@@ -33,6 +33,8 @@ export default function InstallmentsList() {
   const isAr = i18n.language === 'ar'
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
+  // Editing a schedule or cancelling a plan is management, not day-to-day collection.
+  const isManager = isAdmin || user?.role === 'branch_manager'
   const selectedBranchId = useBranchStore((s) => s.selectedBranchId)
 
   const [year, setYear] = useState(new Date().getFullYear())
@@ -53,6 +55,20 @@ export default function InstallmentsList() {
   const [isSaving, setIsSaving] = useState(false)
   const [payError, setPayError] = useState('')
 
+  // Adjust one instalment (managers only) — move its due date or change its amount without
+  // rebuilding the whole plan.
+  const [editTarget, setEditTarget] = useState<StudentInstallment | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editDueDate, setEditDueDate] = useState('')
+  const [editError, setEditError] = useState('')
+
+  // Collection history for one instalment — who took what, and the ability to reverse it.
+  const [historyTarget, setHistoryTarget] = useState<StudentInstallment | null>(null)
+  const [history, setHistory] = useState<any[]>([])
+
+  // Cancel a whole plan
+  const [clearTarget, setClearTarget] = useState<StudentInstallment | null>(null)
+
   const formatCurrency = useCallback(
     (val: number) =>
       new Intl.NumberFormat(isAr ? 'ar-EG' : 'en-US', {
@@ -71,7 +87,9 @@ export default function InstallmentsList() {
     setError('')
     try {
       const [cal, list] = await Promise.all([
-        window.api.installments.calendar({ year }),
+        // Same branch scope as the table below, or the year strip would summarise a different
+        // population than the rows it sits above.
+        window.api.installments.calendar({ year, branch_id: selectedBranchId ?? undefined }),
         window.api.installments.list({
           year,
           month: month ?? undefined,
@@ -137,6 +155,67 @@ export default function InstallmentsList() {
     }
   }
 
+  const openEdit = (inst: StudentInstallment) => {
+    setEditTarget(inst)
+    setEditAmount(String(inst.amount))
+    setEditDueDate(inst.due_date)
+    setEditError('')
+  }
+
+  const submitEdit = async () => {
+    if (!editTarget) return
+    setIsSaving(true)
+    setEditError('')
+    try {
+      await window.api.installments.update({
+        id: editTarget.id,
+        patch: { amount: Number(editAmount), due_date: editDueDate },
+      })
+      setSuccessMsg(isAr ? 'تم تحديث الدفعة' : 'Instalment updated')
+      setEditTarget(null)
+      await load()
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update instalment')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const openHistory = async (inst: StudentInstallment) => {
+    setHistoryTarget(inst)
+    setHistory([])
+    try {
+      setHistory(await window.api.installments.listTransactions({ installment_id: inst.id }))
+    } catch (err: any) {
+      setError(err.message || 'Failed to load collection history')
+    }
+  }
+
+  const reverseCollection = async (txId: number) => {
+    if (!historyTarget) return
+    try {
+      await window.api.installments.deleteTransaction({ id: txId })
+      setSuccessMsg(isAr ? 'تم التراجع عن التحصيل' : 'Collection reversed')
+      setHistory(await window.api.installments.listTransactions({ installment_id: historyTarget.id }))
+      await load()
+    } catch (err: any) {
+      setError(err.message || 'Failed to reverse collection')
+    }
+  }
+
+  const confirmClearPlan = async () => {
+    if (!clearTarget) return
+    try {
+      await window.api.installments.clear({ student_id: clearTarget.student_id })
+      setSuccessMsg(isAr ? 'تم إلغاء خطة الدفعات' : 'Instalment plan cancelled')
+      setClearTarget(null)
+      await load()
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel plan')
+      setClearTarget(null)
+    }
+  }
+
   const statusBadge = (inst: StudentInstallment) => {
     if (inst.status === 'paid') return <Badge variant="success">{isAr ? 'مدفوعة' : 'Paid'}</Badge>
     if (inst.is_overdue) return <Badge variant="danger">{isAr ? 'متأخرة' : 'Overdue'}</Badge>
@@ -194,14 +273,35 @@ export default function InstallmentsList() {
     {
       key: 'actions',
       header: t('actions'),
-      render: (i: StudentInstallment) =>
-        i.balance > 0 ? (
-          <Button variant="outline" size="sm" onClick={() => openPay(i)}>
-            {isAr ? 'تحصيل' : 'Collect'}
-          </Button>
-        ) : (
-          <span className="text-xs text-slate-400">{i.paid_date ?? '—'}</span>
-        ),
+      render: (i: StudentInstallment) => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {i.balance > 0 && (
+            <Button variant="outline" size="sm" onClick={() => openPay(i)}>
+              {isAr ? 'تحصيل' : 'Collect'}
+            </Button>
+          )}
+          {i.paid > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => openHistory(i)}>
+              {isAr ? 'السجل' : 'History'}
+            </Button>
+          )}
+          {isManager && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => openEdit(i)}>
+                {t('edit')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                onClick={() => setClearTarget(i)}
+              >
+                {isAr ? 'إلغاء الخطة' : 'Cancel plan'}
+              </Button>
+            </>
+          )}
+        </div>
+      ),
     },
   ]
 
@@ -309,11 +409,11 @@ export default function InstallmentsList() {
         />
       </Card>
 
-      {!isAdmin && (
+      {!isManager && (
         <p className="text-xs text-slate-400">
           {isAr
-            ? 'تعديل الخطط وحذفها متاح للمسؤولين فقط — يمكنك تسجيل التحصيل.'
-            : 'Editing and deleting plans is admin-only — you can still record collections.'}
+            ? 'تعديل الخطط وإلغاؤها متاح للمسؤولين ومديري الفروع — يمكنك تسجيل التحصيل ومراجعة السجل.'
+            : 'Editing and cancelling plans is for admins and branch managers — you can still record collections and review history.'}
         </p>
       )}
 
@@ -374,6 +474,101 @@ export default function InstallmentsList() {
             onChange={(e) => setPayDate(e.target.value)}
           />
         </div>
+      </Modal>
+
+      {/* Adjust a single instalment without rebuilding the plan */}
+      <Modal
+        isOpen={editTarget !== null}
+        onClose={() => setEditTarget(null)}
+        title={isAr ? 'تعديل الدفعة' : 'Edit instalment'}
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={isSaving}>{t('cancel')}</Button>
+            <Button variant="primary" onClick={submitEdit} isLoading={isSaving}>{t('save')}</Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          {editError && <Alert variant="danger" onClose={() => setEditError('')}>{editError}</Alert>}
+          <p className="text-xs text-slate-500 text-start">
+            {isAr
+              ? 'يغيّر هذه الدفعة وحدها — باقي الخطة كما هي. لا يمكن أن تقل القيمة عمّا تم تحصيله.'
+              : 'Changes this instalment only — the rest of the plan is untouched. The amount cannot drop below what has been collected.'}
+          </p>
+          <Input
+            label={isAr ? 'المبلغ (EGP)' : 'Amount (EGP)'}
+            type="number"
+            min={0}
+            value={editAmount}
+            onChange={(e) => setEditAmount(e.target.value)}
+          />
+          <Input
+            label={isAr ? 'تاريخ الاستحقاق' : 'Due date'}
+            type="date"
+            value={editDueDate}
+            onChange={(e) => setEditDueDate(e.target.value)}
+          />
+        </div>
+      </Modal>
+
+      {/* Collection history — the audit trail behind an instalment's paid amount */}
+      <Modal
+        isOpen={historyTarget !== null}
+        onClose={() => setHistoryTarget(null)}
+        title={isAr ? 'سجل التحصيل' : 'Collection history'}
+        footer={
+          <Button variant="outline" onClick={() => setHistoryTarget(null)}>{t('close', 'Close')}</Button>
+        }
+      >
+        <div className="flex flex-col gap-2">
+          {history.length === 0 ? (
+            <p className="text-sm text-slate-400">{isAr ? 'لا توجد عمليات تحصيل' : 'No collections recorded'}</p>
+          ) : (
+            history.map((h) => (
+              <div key={h.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2">
+                <div className="flex flex-col text-start">
+                  <span className="font-semibold text-slate-800">{formatCurrency(h.amount)}</span>
+                  <span className="text-xs text-slate-400">
+                    {h.paid_date}
+                    {h.payment_method_name ? ` · ${h.payment_method_name}` : ''}
+                    {h.recorded_by_name || h.recorded_by_username
+                      ? ` · ${h.recorded_by_name || h.recorded_by_username}`
+                      : ''}
+                  </span>
+                </div>
+                {isManager && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => reverseCollection(h.id)}
+                  >
+                    {isAr ? 'تراجع' : 'Reverse'}
+                  </Button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
+
+      {/* Cancel the whole plan for this student */}
+      <Modal
+        isOpen={clearTarget !== null}
+        onClose={() => setClearTarget(null)}
+        title={isAr ? 'إلغاء خطة الدفعات' : 'Cancel instalment plan'}
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="outline" onClick={() => setClearTarget(null)}>{t('cancel')}</Button>
+            <Button variant="danger" onClick={confirmClearPlan}>{isAr ? 'إلغاء الخطة' : 'Cancel plan'}</Button>
+          </div>
+        }
+      >
+        <p className="text-slate-600 leading-relaxed text-start">
+          {isAr
+            ? `سيتم حذف كل دفعات "${clearTarget?.student_name}" وسجل تحصيلها، ويعود الطالب إلى الفوترة الشهرية العادية.`
+            : `Every instalment for "${clearTarget?.student_name}" and its collection history will be deleted, and the student returns to normal service billing.`}
+        </p>
       </Modal>
     </div>
   )

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
-import { requireAdmin, checkAuth } from './_guard.js'
+import { requireManager, checkAuth, getCurrentUser, branchScopeClause } from './_guard.js'
 import { recordLocalTombstone } from '../services/tombstones.js'
 import { TOTAL_UNIT } from '../../src/types/index.js'
 
@@ -183,15 +183,29 @@ export function regenerateInstallments(
   // already generated for them is retired here — the fee is owed once, through the plan.
   const duplicatesRemoved = clearDuplicateServiceCharges(db, student_id, service_id)
 
-  const previouslyPaid = Number(
-    (db.prepare('SELECT COALESCE(SUM(paid), 0) AS s FROM student_installments WHERE student_id = ?')
-      .get(student_id) as any).s ?? 0
-  )
+  // Collections are carried across the rebuild, not just their sum: the old instalment rows are
+  // about to be deleted and `student_installment_transactions` cascades with them, so each
+  // collection is captured first and re-attached to the new schedule below. Losing them would
+  // erase who paid what and when, and leave `paid` unbacked by any ledger row.
+  const carried = db.prepare(`
+    SELECT t.amount, t.payment_method_id, t.payment_method_name, t.paid_date, t.notes, t.recorded_by
+    FROM student_installment_transactions t
+    JOIN student_installments i ON i.id = t.installment_id
+    WHERE i.student_id = ?
+    ORDER BY t.paid_date ASC, t.id ASC
+  `).all(student_id) as any[]
 
   // Tombstone every row being torn down: the rebuilt plan gets fresh ids, so without this the
   // next pull would resurrect the old instalments from the cloud alongside the new ones.
   for (const row of db.prepare('SELECT id FROM student_installments WHERE student_id = ?').all(student_id) as { id: number }[]) {
     recordLocalTombstone(db, 'student_installments', row.id)
+  }
+  for (const row of db.prepare(`
+    SELECT t.id FROM student_installment_transactions t
+    JOIN student_installments i ON i.id = t.installment_id
+    WHERE i.student_id = ?
+  `).all(student_id) as { id: number }[]) {
+    recordLocalTombstone(db, 'student_installment_transactions', row.id)
   }
   db.prepare('DELETE FROM student_installments WHERE student_id = ?').run(student_id)
 
@@ -201,16 +215,41 @@ export function regenerateInstallments(
       amount, paid, balance, status, created_at, updated_at, synced
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `)
+  const insertTx = db.prepare(`
+    INSERT INTO student_installment_transactions
+      (installment_id, amount, payment_method_id, payment_method_name, paid_date, notes, recorded_by, created_at, updated_at, synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `)
 
-  let remainingPaid = previouslyPaid
   const schedule = buildInstallmentSchedule(total, count, start_date)
+  // Re-apply the carried collections oldest-first, filling each instalment before moving on. A
+  // collection that straddles two instalments is split across them so the money still adds up.
+  let pending = carried.map((t) => ({ ...t, remaining: round2(Number(t.amount)) }))
   for (const row of schedule) {
-    const paid = round2(Math.min(remainingPaid, row.amount))
-    remainingPaid = round2(remainingPaid - paid)
-    insert.run(
+    let capacity = row.amount
+    const applied: { tx: any; amount: number }[] = []
+    for (const tx of pending) {
+      if (capacity <= 0) break
+      if (tx.remaining <= 0) continue
+      const take = round2(Math.min(tx.remaining, capacity))
+      tx.remaining = round2(tx.remaining - take)
+      capacity = round2(capacity - take)
+      applied.push({ tx, amount: take })
+    }
+
+    const paid = round2(applied.reduce((sum, a) => sum + a.amount, 0))
+    const result = insert.run(
       student_id, service_id, row.seq, row.due_date, row.month, row.year,
       row.amount, paid, round2(row.amount - paid), statusFor(row.amount, paid), now, now
     )
+    const installmentId = Number(result.lastInsertRowid)
+    for (const a of applied) {
+      insertTx.run(
+        installmentId, a.amount, a.tx.payment_method_id ?? null, a.tx.payment_method_name ?? null,
+        a.tx.paid_date ?? null, a.tx.notes ?? null, a.tx.recorded_by ?? null, now, now
+      )
+    }
+    pending = pending.filter((t) => t.remaining > 0)
   }
 
   db.prepare(`
@@ -317,7 +356,7 @@ ipcMain.handle('installments:enrolledFee', async (_event, { student_id }) => {
 
 ipcMain.handle('installments:plan', async (_event, args) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     const student_id = Number(args?.student_id)
     if (!student_id) throw new Error('Student ID is required')
@@ -393,6 +432,12 @@ ipcMain.handle('installments:list', async (_event, args = {}) => {
       params.push(Number(args.branch_id))
     }
 
+    // Hard limit regardless of what the caller asked for: a scoped user can never read another
+    // branch's instalments by omitting the filter.
+    const scope = branchScopeClause('s.branch_id')
+    query += scope.clause
+    params.push(...scope.params)
+
     query += ' ORDER BY i.due_date ASC, i.seq ASC'
 
     const rows = db.prepare(query).all(...params) as any[]
@@ -424,12 +469,14 @@ ipcMain.handle('installments:list', async (_event, args = {}) => {
  * Month-by-month view of everything due across a year: one bucket per month, so the UI can show
  * "this is what is owed in March" rather than one aggregate arrears figure.
  */
-ipcMain.handle('installments:calendar', async (_event, { year, student_id = null } = {} as any) => {
+ipcMain.handle('installments:calendar', async (_event, { year, student_id = null, branch_id = null } = {} as any) => {
   try {
     checkAuth()
     const db = getDb()
     const y = Number(year) || new Date().getFullYear()
 
+    // Joined to students so the year strip can be filtered by branch exactly like the table
+    // beneath it — without this the two halves of the page reported different populations.
     let query = `
       SELECT i.month, i.year,
              COUNT(*) AS count,
@@ -437,6 +484,7 @@ ipcMain.handle('installments:calendar', async (_event, { year, student_id = null
              COALESCE(SUM(i.paid), 0) AS collected,
              COALESCE(SUM(i.balance), 0) AS outstanding
       FROM student_installments i
+      JOIN students s ON s.id = i.student_id
       WHERE i.year = ?
     `
     const params: any[] = [y]
@@ -444,6 +492,14 @@ ipcMain.handle('installments:calendar', async (_event, { year, student_id = null
       query += ' AND i.student_id = ?'
       params.push(Number(student_id))
     }
+    if (branch_id) {
+      query += ' AND s.branch_id = ?'
+      params.push(Number(branch_id))
+    }
+    const scope = branchScopeClause('s.branch_id')
+    query += scope.clause
+    params.push(...scope.params)
+
     query += ' GROUP BY i.year, i.month'
 
     const rows = db.prepare(query).all(...params) as any[]
@@ -468,6 +524,37 @@ ipcMain.handle('installments:calendar', async (_event, { year, student_id = null
   }
 })
 
+/**
+ * Recomputes an instalment from the sum of its collection rows, mirroring the most recent
+ * method onto the instalment for display. `paid` is always derived, never accumulated in place,
+ * so deleting a mistaken collection puts the balance back exactly.
+ */
+function recomputeInstallment(db: any, installmentId: number) {
+  const inst = db.prepare('SELECT * FROM student_installments WHERE id = ?').get(installmentId) as any
+  if (!inst) return
+
+  const paid = round2(Number(
+    (db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM student_installment_transactions WHERE installment_id = ?')
+      .get(installmentId) as any).s ?? 0
+  ))
+  const last = db.prepare(`
+    SELECT payment_method_id, payment_method_name, paid_date
+    FROM student_installment_transactions
+    WHERE installment_id = ? ORDER BY paid_date DESC, id DESC LIMIT 1
+  `).get(installmentId) as any
+
+  db.prepare(`
+    UPDATE student_installments
+    SET paid = ?, balance = ?, status = ?, paid_date = ?,
+        payment_method_id = ?, payment_method_name = ?, updated_at = ?, synced = 0
+    WHERE id = ?
+  `).run(
+    paid, round2(Number(inst.amount) - paid), statusFor(Number(inst.amount), paid),
+    last?.paid_date ?? null, last?.payment_method_id ?? null, last?.payment_method_name ?? null,
+    new Date().toISOString(), installmentId
+  )
+}
+
 ipcMain.handle('installments:pay', async (_event, { id, amount, payment_method_id = null, paid_date = null, notes = null }) => {
   try {
     checkAuth()
@@ -487,24 +574,23 @@ ipcMain.handle('installments:pay', async (_event, { id, amount, payment_method_i
       throw new Error('المبلغ أكبر من قيمة الدفعة المتبقية / Amount exceeds the instalment balance')
     }
 
-    let methodName: string | null = inst.payment_method_name ?? null
+    let methodName: string | null = null
     if (payment_method_id != null) {
       const m = db.prepare('SELECT name FROM payment_methods WHERE id = ?').get(payment_method_id) as any
       methodName = m?.name ?? null
     }
 
     const now = new Date().toISOString()
-    db.prepare(`
-      UPDATE student_installments
-      SET paid = ?, balance = ?, status = ?, paid_date = ?,
-          payment_method_id = ?, payment_method_name = ?, notes = COALESCE(?, notes),
-          updated_at = ?, synced = 0
-      WHERE id = ?
-    `).run(
-      paid, round2(Number(inst.amount) - paid), statusFor(Number(inst.amount), paid),
-      paid_date || now.slice(0, 10),
-      payment_method_id ?? inst.payment_method_id ?? null, methodName, notes, now, id
-    )
+    const user = getCurrentUser()
+
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO student_installment_transactions
+          (installment_id, amount, payment_method_id, payment_method_name, paid_date, notes, recorded_by, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      `).run(id, amt, payment_method_id, methodName, paid_date || now.slice(0, 10), notes, user?.id ?? null, now, now)
+      recomputeInstallment(db, Number(id))
+    })()
 
     return db.prepare('SELECT * FROM student_installments WHERE id = ?').get(id)
   } catch (error: any) {
@@ -513,10 +599,52 @@ ipcMain.handle('installments:pay', async (_event, { id, amount, payment_method_i
   }
 })
 
+/** The collection history behind an instalment — who took what, and when. */
+ipcMain.handle('installments:listTransactions', async (_event, { installment_id }) => {
+  try {
+    checkAuth()
+    const db = getDb()
+    if (!installment_id) throw new Error('Instalment ID is required')
+    return db.prepare(`
+      SELECT t.*, u.name AS recorded_by_name, u.username AS recorded_by_username
+      FROM student_installment_transactions t
+      LEFT JOIN users u ON u.id = t.recorded_by
+      WHERE t.installment_id = ?
+      ORDER BY t.paid_date ASC, t.id ASC
+    `).all(installment_id)
+  } catch (error: any) {
+    console.error('Failed to list instalment collections:', error)
+    throw new Error(error.message || 'Failed to list instalment collections')
+  }
+})
+
+/** Reverses one collection — the balance returns to exactly what it was before it. */
+ipcMain.handle('installments:deleteTransaction', async (_event, { id }) => {
+  try {
+    requireManager()
+    const db = getDb()
+    if (!id) throw new Error('Transaction ID is required')
+
+    const tx = db.prepare('SELECT installment_id FROM student_installment_transactions WHERE id = ?').get(id) as any
+    if (!tx) throw new Error('العملية غير موجودة / Collection not found')
+
+    db.transaction(() => {
+      db.prepare('DELETE FROM student_installment_transactions WHERE id = ?').run(id)
+      recordLocalTombstone(db, 'student_installment_transactions', Number(id))
+      recomputeInstallment(db, tx.installment_id)
+    })()
+
+    return db.prepare('SELECT * FROM student_installments WHERE id = ?').get(tx.installment_id)
+  } catch (error: any) {
+    console.error('Failed to delete instalment collection:', error)
+    throw new Error(error.message || 'Failed to delete instalment collection')
+  }
+})
+
 /** Adjusts a single instalment (date / amount / note) without rebuilding the whole plan. */
 ipcMain.handle('installments:update', async (_event, { id, patch }) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     if (!id || !patch) throw new Error('Instalment ID and patch data are required')
 
@@ -567,7 +695,7 @@ ipcMain.handle('installments:update', async (_event, { id, patch }) => {
 /** Drops a student's whole plan (and clears the plan fields on the student row). */
 ipcMain.handle('installments:clear', async (_event, { student_id }) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     if (!student_id) throw new Error('Student ID is required')
 

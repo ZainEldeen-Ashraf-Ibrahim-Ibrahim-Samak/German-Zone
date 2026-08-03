@@ -10,7 +10,7 @@ import { Select } from '../../components/ui/Select.js'
 import { Badge } from '../../components/ui/Badge.js'
 import { Alert } from '../../components/ui/Alert.js'
 import { Card } from '../../components/ui/Card.js'
-import type { Branch, BranchMode, User, UserBranchAssignment } from '../../types/index.js'
+import type { Branch, BranchMode, User, UserBranchAssignment, UserRole } from '../../types/index.js'
 
 export default function UsersList() {
   const { t } = useTranslation()
@@ -28,7 +28,7 @@ export default function UsersList() {
   // Form fields
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'admin' | 'employee'>('employee')
+  const [role, setRole] = useState<UserRole>('employee')
   const [name, setName] = useState('')
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
   const [formError, setFormError] = useState('')
@@ -285,8 +285,8 @@ export default function UsersList() {
       key: 'role',
       header: t('role'),
       render: (u: User) => (
-        <Badge variant={u.role === 'admin' ? 'info' : 'neutral'}>
-          {u.role === 'admin' ? t('admin') : t('employee')}
+        <Badge variant={u.role === 'admin' ? 'info' : u.role === 'branch_manager' ? 'warning' : 'neutral'}>
+          {t(u.role === 'admin' ? 'admin' : u.role === 'branch_manager' ? 'branch_manager' : 'employee')}
         </Badge>
       ),
     },
@@ -449,13 +449,17 @@ export default function UsersList() {
           <Select
             label={t('access_role')}
             value={role}
-            onChange={(e) => setRole(e.target.value as 'admin' | 'employee')}
+            onChange={(e) => setRole(e.target.value as UserRole)}
             disabled={isSubmitLoading || (editingUser !== null && currentUser?.id === editingUser.id)} // Prevent altering own role
             options={[
               { value: 'admin', label: t('admin') },
+              { value: 'branch_manager', label: t('branch_manager') },
               { value: 'employee', label: t('employee') },
             ]}
           />
+          <p className="text-xs text-slate-400 -mt-2 text-start">
+            {t('branch_manager_hint')}
+          </p>
 
           {/* Branch coverage — where this account works */}
           <div className="border-t border-slate-100 pt-4 flex flex-col gap-3">

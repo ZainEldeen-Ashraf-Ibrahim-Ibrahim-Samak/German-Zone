@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { getCurrentUser } from './authIPC.js'
 import { SERVICE_NAMES } from '../constants/services.js'
+import { installmentRowsForPeriod, installmentCollectionsByMethod } from '../services/revenueService.js'
 
 const arabicMonths = [
   'يناير',
@@ -93,7 +94,14 @@ ipcMain.handle('dashboard:get', async (_event, { month, year }) => {
     const targetProfitPct = targetProfitRow ? Number(targetProfitRow.value) : 0.20
 
     // 2. Fetch payments, expenses, salaries for selected month/year
-    const payments = db.prepare('SELECT total, paid, balance, service FROM payments WHERE month = ? AND year = ?').all(month, year) as any[]
+    // Money lives in two ledgers: monthly service billing AND instalment plans (which took the
+    // planned fees out of `payments` entirely). Reading only `payments` reported zero revenue for
+    // every family on a plan, so the instalments due this month are folded in as payment-shaped
+    // rows before any KPI is computed.
+    const payments = [
+      ...db.prepare('SELECT total, paid, balance, service FROM payments WHERE month = ? AND year = ?').all(month, year) as any[],
+      ...installmentRowsForPeriod(db, month, year),
+    ]
     const expenses = db.prepare('SELECT amount FROM expenses WHERE month = ? AND year = ?').all(month, year) as any[]
     const salaries = db.prepare('SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?').all(month, year) as any[]
 
@@ -132,10 +140,22 @@ ipcMain.handle('dashboard:get', async (_event, { month, year }) => {
       total: Number((r.total ?? 0).toFixed(2)),
     }))
 
+    // Fold instalment collections into the same breakdown, merging on method name so a method
+    // used by both ledgers shows one combined figure rather than two rows.
+    for (const row of installmentCollectionsByMethod(db, month, year)) {
+      const existing = collectedByMethod.find((m) => m.method === row.method)
+      if (existing) existing.total = Number((existing.total + row.total).toFixed(2))
+      else collectedByMethod.push(row)
+    }
+    collectedByMethod.sort((a, b) => b.total - a.total)
+
     // 4. 12-Month Summary for the selected year
     const summary12Month = []
     for (const m of arabicMonths) {
-      const mPayments = db.prepare('SELECT total, paid, balance FROM payments WHERE month = ? AND year = ?').all(m, year) as any[]
+      const mPayments = [
+        ...db.prepare('SELECT total, paid, balance FROM payments WHERE month = ? AND year = ?').all(m, year) as any[],
+        ...installmentRowsForPeriod(db, m, year),
+      ]
       const mExpenses = db.prepare('SELECT amount FROM expenses WHERE month = ? AND year = ?').all(m, year) as any[]
       const mSalaries = db.prepare('SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?').all(m, year) as any[]
 

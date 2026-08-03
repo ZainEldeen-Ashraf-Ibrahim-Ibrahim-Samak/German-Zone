@@ -236,6 +236,8 @@
     "branch_required": "At least one branch must be selected",
     "branches": "Branches",
     "halls": "Halls",
-    "installments": "Instalments"
+    "installments": "Instalments",
+    "branch_manager": "Branch manager",
+    "branch_manager_hint": "A branch manager runs students, halls and instalments within their own branches only — global settings stay with admins."
   }
 }

@@ -26,6 +26,9 @@ export const Sidebar: React.FC = () => {
   }
 
   const isAdmin = user?.role === 'admin'
+  // A branch manager runs their branches: they get the operational pages, while global
+  // configuration (users, settings, storage, sync, branch list, targets) stays admin-only.
+  const isManager = isAdmin || user?.role === 'branch_manager'
 
   // Navigation items definition
   const menuItems = [
@@ -120,6 +123,7 @@ export const Sidebar: React.FC = () => {
         </svg>
       ),
       adminOnly: true,
+      managerAllowed: true,
     },
     {
       to: '/salaries',
@@ -130,6 +134,7 @@ export const Sidebar: React.FC = () => {
         </svg>
       ),
       adminOnly: true,
+      managerAllowed: true,
     },
     {
       to: '/sessions',
@@ -150,6 +155,7 @@ export const Sidebar: React.FC = () => {
         </svg>
       ),
       adminOnly: true,
+      managerAllowed: true,
     },
     {
       to: '/expenses',
@@ -160,6 +166,7 @@ export const Sidebar: React.FC = () => {
         </svg>
       ),
       adminOnly: true,
+      managerAllowed: true,
     },
     {
       to: '/target',
@@ -233,7 +240,8 @@ export const Sidebar: React.FC = () => {
       <nav className="flex-1 px-4 py-6 overflow-y-auto space-y-1">
         {menuItems.map((item) => {
           // Hide admin items for employees
-          if (item.adminOnly && !isAdmin) return null
+          // Admin-only items open up to branch managers when explicitly marked.
+          if (item.adminOnly && !(isAdmin || ((item as any).managerAllowed && isManager))) return null
 
           return (
             <NavLink

@@ -31,16 +31,40 @@ export default function PayrollReport() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // The per-session teacher ledger behind these totals. Salary maths counts both pending and
+  // paid rows, so this is purely the payout record: marking rows paid is how a centre tracks
+  // which session fees have actually left the till.
+  const [ledger, setLedger] = useState<any[]>([])
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [successMsg, setSuccessMsg] = useState('')
+
   const fetchReport = async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await window.api.payroll.report(month, year)
+      const [result, pending] = await Promise.all([
+        window.api.payroll.report(month, year),
+        window.api.teacherPayments.list({ month, year }),
+      ])
       setRows(result)
+      setLedger(pending || [])
+      setSelectedIds([])
     } catch (err: any) {
       setError(err.message || 'Failed to generate payroll report')
     }
     setIsLoading(false)
+  }
+
+  const markSelectedPaid = async () => {
+    if (selectedIds.length === 0) return
+    setError(null)
+    try {
+      const result = await window.api.teacherPayments.markPaid(selectedIds)
+      setSuccessMsg(isAr ? `تم تعليم ${result.updated} عملية كمدفوعة` : `${result.updated} payment(s) marked paid`)
+      await fetchReport()
+    } catch (err: any) {
+      setError(err.message || 'Failed to mark payments paid')
+    }
   }
 
   useEffect(() => { fetchReport() }, [month, year])
@@ -96,6 +120,7 @@ export default function PayrollReport() {
       </Card>
 
       {error && <Alert variant="danger" onClose={() => setError(null)}>{error}</Alert>}
+      {successMsg && <Alert variant="success" onClose={() => setSuccessMsg('')}>{successMsg}</Alert>}
 
       {isLoading ? (
         <LoadingSpinner />
@@ -111,6 +136,62 @@ export default function PayrollReport() {
           keyExtractor={(row) => String(row.teacher_id)}
           emptyMessage={isAr ? 'لا توجد جلسات مدفوعة لهذا الشهر.' : 'No paid sessions for this month.'}
         />
+      )}
+
+      {/* Per-session payout ledger — which session fees have actually been handed over */}
+      {!isLoading && ledger.length > 0 && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex flex-col text-start">
+              <h3 className="font-bold text-slate-800">
+                {isAr ? 'سجل صرف الجلسات' : 'Session payout ledger'}
+              </h3>
+              <span className="text-xs text-slate-400">
+                {isAr
+                  ? 'تعليم الجلسة كمدفوعة يسجّل أنها صُرفت للمعلم — لا يغيّر قيمة الراتب المحسوبة.'
+                  : 'Marking a session paid records that it was handed over — it does not change the calculated salary.'}
+              </span>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={selectedIds.length === 0}
+              onClick={markSelectedPaid}
+            >
+              {isAr ? `صرف المحدد (${selectedIds.length})` : `Mark paid (${selectedIds.length})`}
+            </Button>
+          </div>
+
+          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+            {ledger.map((row) => {
+              const isPaid = row.status === 'paid'
+              return (
+                <label
+                  key={row.id}
+                  className={`flex items-center gap-3 py-2 px-1 text-sm ${isPaid ? 'opacity-60' : 'cursor-pointer hover:bg-slate-50'}`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={isPaid}
+                    checked={selectedIds.includes(row.id)}
+                    onChange={(e) =>
+                      setSelectedIds((prev) =>
+                        e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id)
+                      )
+                    }
+                  />
+                  <span className="flex-1 font-semibold text-slate-700">{row.teacher_name}</span>
+                  <span className="flex-1 text-slate-500">{row.student_name}</span>
+                  <span className="text-xs text-slate-400 w-24">{row.attendance_date}</span>
+                  <span className="font-bold text-slate-800 w-24 text-end">{row.session_cost} EGP</span>
+                  <span className={`text-xs w-16 text-end ${isPaid ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {isPaid ? (isAr ? 'مصروفة' : 'Paid') : (isAr ? 'معلّقة' : 'Pending')}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </Card>
       )}
 
       {rows.length > 0 && (

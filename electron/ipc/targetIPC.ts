@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { requireAdmin } from './_guard.js'
 import { RECOMMENDED_MIX_WEIGHTS, isSessionService } from '../constants/services.js'
+import { installmentCollectedForPeriod } from '../services/revenueService.js'
 
 const arabicMonths = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -73,7 +74,10 @@ ipcMain.handle('target:get', async (_event, { year }) => {
         'SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?'
       ).all(month, year) as { actual_paid: number }[]
 
+      // Instalment collections are revenue too — omitting them made every month a family paid by
+      // plan look like a missed target.
       const collected = payments.reduce((s, p) => s + p.paid, 0)
+        + installmentCollectedForPeriod(db, month, year)
       const expensesTotal = expenses.reduce((s, e) => s + e.amount, 0)
       const salariesTotal = salaries.reduce((s, s2) => s + s2.actual_paid, 0)
       const totalExpenses = expensesTotal + salariesTotal

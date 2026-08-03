@@ -61,6 +61,11 @@ export default function HallsList() {
 
   const [deleteTarget, setDeleteTarget] = useState<Hall | null>(null)
 
+  // "All halls" week grid — the cross-hall view that makes clashes and idle rooms visible,
+  // which the per-hall cards below cannot show.
+  const [showWeek, setShowWeek] = useState(false)
+  const [week, setWeek] = useState<{ day_of_week: number; slots: any[] }[]>([])
+
   const load = useCallback(async () => {
     setIsLoading(true)
     setError('')
@@ -78,6 +83,15 @@ export default function HallsList() {
   }, [selectedBranchId])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!showWeek) return
+    let cancelled = false
+    window.api.halls.timetable({ branch_id: selectedBranchId ?? undefined })
+      .then((rows: any[]) => { if (!cancelled) setWeek(rows || []) })
+      .catch(() => { if (!cancelled) setWeek([]) })
+    return () => { cancelled = true }
+  }, [showWeek, selectedBranchId, halls])
 
   useEffect(() => {
     window.api.branches.list().then((list: Branch[]) => setBranches(list || [])).catch(() => setBranches([]))
@@ -181,9 +195,16 @@ export default function HallsList() {
             {isAr ? 'مواعيد العمل الأسبوعية لكل قاعة' : 'Weekly opening hours for each hall'}
           </span>
         </div>
-        <Button variant="primary" size="md" onClick={openCreate}>
-          + {isAr ? 'إضافة قاعة' : 'Add hall'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="md" onClick={() => setShowWeek((v) => !v)}>
+            {showWeek
+              ? (isAr ? 'عرض القاعات' : 'Hall cards')
+              : (isAr ? 'جدول الأسبوع' : 'Week grid')}
+          </Button>
+          <Button variant="primary" size="md" onClick={openCreate}>
+            + {isAr ? 'إضافة قاعة' : 'Add hall'}
+          </Button>
+        </div>
       </div>
 
       {error && <Alert variant="danger" onClose={() => setError('')}>{error}</Alert>}
@@ -197,7 +218,41 @@ export default function HallsList() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Every hall's week side by side, so an empty day or a busy evening is obvious at a glance */}
+      {showWeek && (
+        <Card className="p-4 overflow-x-auto">
+          <div className="grid grid-cols-7 gap-2 min-w-3xl">
+            {week.map(({ day_of_week, slots }) => (
+              <div key={day_of_week} className="flex flex-col gap-1.5">
+                <div className={`text-xs font-bold text-center py-1.5 rounded ${
+                  slots.length > 0 ? 'bg-primary/10 text-primary' : 'bg-slate-50 text-slate-300'
+                }`}>
+                  {t(`days.${DAY_KEYS[day_of_week]}`)}
+                </div>
+                {slots.length === 0 ? (
+                  <div className="text-[11px] text-slate-300 text-center py-2">
+                    {isAr ? 'مغلقة' : 'Closed'}
+                  </div>
+                ) : (
+                  slots.map((s) => (
+                    <div key={s.id} className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white">
+                      <div className="text-[11px] font-bold text-slate-700 truncate">{s.hall_name}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {formatTime(s.start_time, isAr)} – {formatTime(s.end_time, isAr)}
+                      </div>
+                      {s.branch_name && (
+                        <div className="text-[10px] text-slate-400 truncate">{s.branch_name}</div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div className={showWeek ? 'hidden' : 'grid grid-cols-1 lg:grid-cols-2 gap-4'}>
         {halls.map((hall) => (
           <Card key={hall.id} className="p-5 flex flex-col gap-4">
             <div className="flex items-start justify-between gap-3">

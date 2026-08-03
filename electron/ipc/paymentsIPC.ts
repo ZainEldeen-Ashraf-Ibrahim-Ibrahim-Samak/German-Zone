@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { getCurrentUser } from './authIPC.js'
-import { requireAdmin } from './_guard.js'
+import { requireAdmin, branchScopeClause } from './_guard.js'
 import { loadPlanCoverage, isCoveredByPlan } from './installmentsIPC.js'
 import { TOTAL_UNIT } from '../../src/types/index.js'
 import type { Payment, PaymentStatus } from '../../src/types/index.js'
@@ -43,7 +43,7 @@ function checkAuth() {
   }
 }
 
-ipcMain.handle('payments:get', async (_event, { month, year }) => {
+ipcMain.handle('payments:get', async (_event, { month, year, branch_id }) => {
   try {
     checkAuth()
     const db = getDb()
@@ -55,7 +55,9 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
     // Fetch payments joined with students names and status.
     // Daily-unit (يوم) rows are included: since feature 009 replaced Daily Billing with the
     // read-only Transactions view, day/hour services are billed here from attendance counts.
-    const payments = db.prepare(`
+    // Branch-aware like the students roster: an explicit branch filters to it (plus students
+    // with no branch, which must never be hidden), and the user's own scope is always enforced.
+    let listQuery = `
       SELECT p.*, c.name as student_name, c.guardian as student_guardian, c.guardian_phone as student_guardian_phone, c.is_active as student_is_active,
         COALESCE(NULLIF(cs.lesson_days, '[]'), c.lesson_days) as service_lesson_days,
         (SELECT COUNT(*) FROM payment_transactions pt WHERE pt.payment_id = p.id) as transaction_count
@@ -63,8 +65,18 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
       JOIN students c ON p.student_id = c.id
       LEFT JOIN student_services cs ON cs.id = p.service_id
       WHERE p.month = ? AND p.year = ?
-      ORDER BY c.name ASC
-    `).all(month, year) as (Payment & { service_lesson_days: string | null })[]
+    `
+    const listParams: any[] = [month, year]
+    if (branch_id) {
+      listQuery += ' AND (c.branch_id = ? OR c.branch_id IS NULL)'
+      listParams.push(Number(branch_id))
+    }
+    const paymentsScope = branchScopeClause('c.branch_id')
+    listQuery += paymentsScope.clause
+    listParams.push(...paymentsScope.params)
+    listQuery += ' ORDER BY c.name ASC'
+
+    const payments = db.prepare(listQuery).all(...listParams) as (Payment & { service_lesson_days: string | null })[]
 
     // Expected quantity: the full scheduled amount for the month regardless of attendance
     // (unlike the billed `quantity`, which for attendance-driven units only counts days/hours

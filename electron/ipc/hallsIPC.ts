@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
-import { requireAdmin, checkAuth } from './_guard.js'
+import { requireManager, checkAuth, branchScopeClause, requireBranchAccess } from './_guard.js'
 import { recordLocalTombstone } from '../services/tombstones.js'
 
 /**
@@ -101,6 +101,9 @@ ipcMain.handle('halls:list', async (_event, args = {}) => {
       query += ' AND h.branch_id = ?'
       params.push(Number(args.branch_id))
     }
+    const scope = branchScopeClause('h.branch_id')
+    query += scope.clause
+    params.push(...scope.params)
     query += ' ORDER BY h.name ASC'
 
     const halls = db.prepare(query).all(...params) as any[]
@@ -148,13 +151,14 @@ ipcMain.handle('halls:get', async (_event, { id }) => {
 
 ipcMain.handle('halls:add', async (_event, args) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
 
     const name = String(args?.name ?? '').trim()
     if (!name) throw new Error('اسم القاعة مطلوب / Hall name is required')
 
     const branchId = args?.branch_id ? Number(args.branch_id) : null
+    requireBranchAccess(branchId)
     const clash = branchId
       ? db.prepare('SELECT id FROM halls WHERE name = ? AND branch_id = ?').get(name, branchId)
       : db.prepare('SELECT id FROM halls WHERE name = ? AND branch_id IS NULL').get(name)
@@ -187,7 +191,7 @@ ipcMain.handle('halls:add', async (_event, args) => {
 /** Updates a hall. Passing `slots` replaces the whole timetable; omitting it leaves it alone. */
 ipcMain.handle('halls:update', async (_event, { id, patch }) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     if (!id || !patch) throw new Error('Hall ID and patch data are required')
 
@@ -200,6 +204,10 @@ ipcMain.handle('halls:update', async (_event, { id, patch }) => {
     const branchId = patch.branch_id !== undefined
       ? (patch.branch_id ? Number(patch.branch_id) : null)
       : hall.branch_id
+    // Both the hall's current branch and the one it is being moved to must be in scope, so a
+    // manager can neither edit another branch's hall nor push one out of their own reach.
+    requireBranchAccess(hall.branch_id)
+    requireBranchAccess(branchId)
 
     const clash = branchId
       ? db.prepare('SELECT id FROM halls WHERE name = ? AND branch_id = ? AND id != ?').get(name, branchId, id)
@@ -236,12 +244,13 @@ ipcMain.handle('halls:update', async (_event, { id, patch }) => {
 
 ipcMain.handle('halls:delete', async (_event, { id }) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     if (!id) throw new Error('Hall ID is required')
 
-    const hall = db.prepare('SELECT id FROM halls WHERE id = ?').get(id)
+    const hall = db.prepare('SELECT id, branch_id FROM halls WHERE id = ?').get(id) as any
     if (!hall) throw new Error('القاعة غير موجودة / Hall not found')
+    requireBranchAccess(hall.branch_id)
 
     db.transaction(() => {
       // hall_time_slots cascades on the FK, so the timetable goes with the hall — but each
@@ -285,6 +294,9 @@ ipcMain.handle('halls:timetable', async (_event, args = {}) => {
       query += ' AND h.id = ?'
       params.push(Number(args.hall_id))
     }
+    const scope = branchScopeClause('h.branch_id')
+    query += scope.clause
+    params.push(...scope.params)
     query += ' ORDER BY s.day_of_week ASC, s.start_time ASC, h.name ASC'
 
     const slots = db.prepare(query).all(...params) as any[]

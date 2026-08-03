@@ -1,4 +1,14 @@
-export function getStudentStatement(student: any, existingPayments: any[], currentDate: Date) {
+/**
+ * @param installments Instalment-plan rows for the student. They belong in the statement as
+ *   first-class charges: a planned fee is deliberately absent from `payments`, so a statement
+ *   built from payments alone shows a student on a plan owing and paying nothing.
+ */
+export function getStudentStatement(
+  student: any,
+  existingPayments: any[],
+  currentDate: Date,
+  installments: any[] = []
+) {
   const arabicMonths = [
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
     'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
@@ -42,13 +52,36 @@ export function getStudentStatement(student: any, existingPayments: any[], curre
     }
   }
 
+  // Instalments are folded in as charges bucketed by the month they fall due, so they land in
+  // the same month rows as ordinary payments and roll up into the same totals.
+  const installmentRows = installments.map((i) => ({
+    month: i.month,
+    year: i.year,
+    service: i.service || student.service,
+    unit: 'إجمالي',
+    quantity: 1,
+    price: i.amount,
+    total: i.amount,
+    paid: i.paid,
+    balance: i.balance,
+    status: i.status,
+    notes: `دفعة ${i.seq} — تستحق ${i.due_date} / Instalment ${i.seq} — due ${i.due_date}`,
+  }))
+
   const paymentMap = new Map<string, any[]>()
-  for (const p of existingPayments) {
+  for (const p of [...existingPayments, ...installmentRows]) {
     const key = `${p.year}-${p.month}`
     if (!paymentMap.has(key)) {
       paymentMap.set(key, [])
     }
     paymentMap.get(key)!.push(p)
+  }
+
+  // A plan can run past the current month, so the statement must extend to the last due date —
+  // otherwise future instalments would be silently dropped from the account.
+  for (const row of installmentRows) {
+    const exists = statementMonths.some((m) => m.month === row.month && m.year === row.year)
+    if (!exists) statementMonths.push({ month: row.month, year: row.year })
   }
 
   const rows: any[] = []

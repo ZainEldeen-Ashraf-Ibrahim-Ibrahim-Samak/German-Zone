@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { friendlyError } from '../utils/errors.js'
+import { useBranchStore } from './useBranchStore.js'
 import type { Payment } from '../types/index.js'
 
 interface PaymentSummary {
@@ -74,7 +75,7 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
     try {
       const month = get().currentMonth
       const year = get().currentYear
-      const result = await window.api.payments.get({ month, year })
+      const result = await window.api.payments.get({ month, year, branch_id: useBranchStore.getState().selectedBranchId ?? undefined })
       set({
         payments: result.payments,
         byStudent: result.byStudent,

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { getCurrentUser } from './authIPC.js'
+import { installmentTransactionRows } from '../services/revenueService.js'
 
 function checkAuth() {
   const user = getCurrentUser()
@@ -89,10 +90,19 @@ ipcMain.handle('transactions:list', async (_event, args: {
       JOIN payments p ON p.id = pt.payment_id
       JOIN students c ON c.id = p.student_id
       WHERE ${conditions.join(' AND ')}
-      ORDER BY date DESC, pt.id DESC
-    `).all(...params)
+    `).all(...params) as any[]
 
-    return rows
+    // Collections against instalment plans are cash movements exactly like the rows above, but
+    // live in their own ledger — a plan's fee is deliberately absent from `payments`. Ids are
+    // namespaced so the two sources cannot collide as React keys.
+    const installmentRows = installmentTransactionRows(db, from!, to!, studentId).map((r) => ({
+      ...r,
+      id: `inst-${r.id}`,
+    }))
+
+    return [...rows, ...installmentRows].sort((a, b) =>
+      a.date === b.date ? String(b.id).localeCompare(String(a.id)) : (a.date < b.date ? 1 : -1)
+    )
   } catch (error: any) {
     console.error('Failed to list transactions:', error)
     throw new Error(error.message || 'Failed to list transactions')

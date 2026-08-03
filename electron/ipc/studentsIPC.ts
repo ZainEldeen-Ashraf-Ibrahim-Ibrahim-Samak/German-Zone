@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
-import { requireAdmin } from './_guard.js'
+import { requireAdmin, requireManager, branchScopeClause, requireBranchAccess } from './_guard.js'
 import { getCurrentUser } from './authIPC.js'
 import { getStudentStatement } from '../services/statementService.js'
+import { installmentStatementRows } from '../services/revenueService.js'
 import { regenerateInstallments, resolvePlanInput } from './installmentsIPC.js'
 import { recordLocalTombstone } from '../services/tombstones.js'
 import type { Student } from '../../src/types/index.js'
@@ -105,10 +106,18 @@ ipcMain.handle('students:get', async (_event, { search, service, activeOnly, bra
     }
 
     // Branch scoping — the header's branch selector passes the branch it is focused on.
+    // Students with no branch are included alongside it: an unassigned student must never
+    // become invisible just because a branch happens to be selected.
     if (branch_id) {
-      query += ' AND branch_id = ?'
+      query += ' AND (branch_id = ? OR branch_id IS NULL)'
       params.push(Number(branch_id))
     }
+
+    // Enforced regardless of the requested filter, so a scoped user cannot read another
+    // branch's roster by simply omitting `branch_id`.
+    const scope = branchScopeClause('branch_id')
+    query += scope.clause
+    params.push(...scope.params)
     
     // Default to activeOnly = true if not explicitly set to false
     if (activeOnly !== false) {
@@ -145,6 +154,8 @@ ipcMain.handle('students:add', async (_event, studentInput) => {
     if (student_phone) {
       validateStudentPhone(student_phone)
     }
+    // A scoped user may only enroll students into a branch they actually cover.
+    requireBranchAccess(branch_id ? Number(branch_id) : null)
 
     // Duplicate services are now allowed — each enrollment can have its own teacher/days
 
@@ -211,7 +222,7 @@ ipcMain.handle('students:add', async (_event, studentInput) => {
 
 ipcMain.handle('students:update', async (_event, { id, patch }) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     
     if (!id || !patch) {
@@ -222,6 +233,12 @@ ipcMain.handle('students:update', async (_event, { id, patch }) => {
     const student = db.prepare('SELECT * FROM students WHERE id = ?').get(id) as any
     if (!student) {
       throw new Error('الطالب غير موجود / Student not found')
+    }
+
+    // Both the student's current branch and any branch they are being moved to must be in scope.
+    requireBranchAccess(student.branch_id)
+    if (patch.branch_id !== undefined) {
+      requireBranchAccess(patch.branch_id ? Number(patch.branch_id) : null)
     }
 
     if (patch.guardian_phone !== undefined) {
@@ -382,7 +399,7 @@ ipcMain.handle('students:update', async (_event, { id, patch }) => {
 
 ipcMain.handle('students:deactivate', async (_event, { id }) => {
   try {
-    requireAdmin()
+    requireManager()
     const db = getDb()
     
     const student = db.prepare('SELECT id FROM students WHERE id = ?').get(id)
@@ -408,6 +425,8 @@ ipcMain.handle('students:deactivate', async (_event, { id }) => {
 // rows (services, payments, attendance, ...) are removed with the student.
 ipcMain.handle('students:delete', async (_event, { id }) => {
   try {
+    // Hard delete stays admin-only — it destroys payments, attendance and history irreversibly,
+    // which is beyond what a branch manager should be able to do on their own.
     requireAdmin()
     const db = getDb()
 
@@ -449,8 +468,11 @@ ipcMain.handle('students:statement', async (_event, { studentId }) => {
     }
 
     const payments = db.prepare('SELECT * FROM payments WHERE student_id = ?').all(studentId) as any[]
+    // Planned fees live in their own ledger, so the statement reads both or it shows nothing
+    // for a student paying by instalments.
+    const installments = installmentStatementRows(db, Number(studentId))
 
-    return getStudentStatement(student, payments, new Date())
+    return getStudentStatement(student, payments, new Date(), installments)
   } catch (error: any) {
     console.error('Failed to get student statement:', error)
     throw new Error(error.message || 'Failed to get student statement')

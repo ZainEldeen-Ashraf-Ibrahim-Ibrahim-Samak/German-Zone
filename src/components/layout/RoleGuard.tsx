@@ -1,9 +1,10 @@
 import * as React from 'react'
 import { useAuthStore } from '../../store/useAuthStore.js'
 import { Alert } from '../ui/Alert.js'
+import type { UserRole } from '../../types/index.js'
 
 interface RoleGuardProps {
-  allowedRoles: ('admin' | 'employee')[]
+  allowedRoles: UserRole[]
   children: React.ReactNode
   fallback?: React.ReactNode
 }

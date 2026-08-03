@@ -92,8 +92,8 @@ export default function App() {
 
           {/* Students Roster - all read & add (feature 004 FR-012); edit is admin-only */}
           <Route path="students" element={<StudentsList />} />
-          <Route path="students/new" element={<RoleGuard allowedRoles={['admin', 'employee']}><StudentForm /></RoleGuard>} />
-          <Route path="students/:id/edit" element={<RoleGuard allowedRoles={['admin']}><StudentForm /></RoleGuard>} />
+          <Route path="students/new" element={<RoleGuard allowedRoles={['admin', 'branch_manager', 'employee']}><StudentForm /></RoleGuard>} />
+          <Route path="students/:id/edit" element={<RoleGuard allowedRoles={['admin', 'branch_manager']}><StudentForm /></RoleGuard>} />
           <Route path="students/:id/statement" element={<StudentStatement />} />
           <Route path="students/:id/details" element={<StudentDetails />} />
 
@@ -122,7 +122,7 @@ export default function App() {
           <Route
             path="employees"
             element={
-              <RoleGuard allowedRoles={['admin']}>
+              <RoleGuard allowedRoles={['admin', 'branch_manager']}>
                 <EmployeesList />
               </RoleGuard>
             }
@@ -132,7 +132,7 @@ export default function App() {
           <Route
             path="salaries"
             element={
-              <RoleGuard allowedRoles={['admin']}>
+              <RoleGuard allowedRoles={['admin', 'branch_manager']}>
                 <SalariesList />
               </RoleGuard>
             }
@@ -140,7 +140,7 @@ export default function App() {
           <Route
             path="salaries/payroll-report"
             element={
-              <RoleGuard allowedRoles={['admin']}>
+              <RoleGuard allowedRoles={['admin', 'branch_manager']}>
                 <PayrollReport />
               </RoleGuard>
             }
@@ -150,7 +150,7 @@ export default function App() {
           <Route
             path="expenses"
             element={
-              <RoleGuard allowedRoles={['admin']}>
+              <RoleGuard allowedRoles={['admin', 'branch_manager']}>
                 <ExpensesList />
               </RoleGuard>
             }
@@ -201,7 +201,7 @@ export default function App() {
           <Route
             path="sync"
             element={
-              <RoleGuard allowedRoles={['admin', 'employee']}>
+              <RoleGuard allowedRoles={['admin', 'branch_manager', 'employee']}>
                 <SyncManager />
               </RoleGuard>
             }
@@ -214,7 +214,7 @@ export default function App() {
           <Route
             path="attendance/edit-requests"
             element={
-              <RoleGuard allowedRoles={['admin']}>
+              <RoleGuard allowedRoles={['admin', 'branch_manager']}>
                 <EditRequestsInbox />
               </RoleGuard>
             }

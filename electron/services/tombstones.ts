@@ -26,7 +26,7 @@ function normalizeEntity(entity: string): string {
  */
 export const DELETABLE_ENTITIES = [
   'students', 'student_services', 'payments', 'expenses', 'employees', 'salary_payments',
-  'student_installments', 'branches', 'user_branches', 'halls', 'hall_time_slots',
+  'student_installments', 'student_installment_transactions', 'branches', 'user_branches', 'halls', 'hall_time_slots',
 ]
 
 export function recordLocalTombstone(db: any, entity: string, recordId: number) {

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useStudentsStore } from '../../store/useStudentsStore.js'
 import { useServiceDefinitionsStore } from '../../store/useServiceDefinitionsStore.js'
+import { useBranchStore } from '../../store/useBranchStore.js'
 import { Button } from '../../components/ui/Button.js'
 import { Input } from '../../components/ui/Input.js'
 import { Select } from '../../components/ui/Select.js'
@@ -115,6 +116,7 @@ export default function StudentForm() {
   const isEdit = !!id
 
   const { addStudent, updateStudent, fetchStudents, error, clearError } = useStudentsStore()
+  const selectedBranchId = useBranchStore((s) => s.selectedBranchId)
   const { fetchServices, services: serviceDefs } = useServiceDefinitionsStore()
 
   // Form states
@@ -232,10 +234,20 @@ export default function StudentForm() {
   }, [planIsComplete, plan.count, planTotal, plan.start_date])
   const schedule = planIsComplete ? planSchedule : []
 
-  // Branch options for the "which branch is this student enrolled at" selector.
+  // Branch options for the "which branch is this student enrolled at" selector. A NEW student
+  // defaults to the branch currently selected in the header — leaving it blank used to hand back
+  // a student who then vanished from the branch-filtered roster.
   useEffect(() => {
-    window.api.branches.list().then((list: Branch[]) => setBranches(list || [])).catch(() => setBranches([]))
-  }, [])
+    window.api.branches.list()
+      .then((list: Branch[]) => {
+        setBranches(list || [])
+        if (!isEdit) {
+          const fallback = selectedBranchId ?? (list?.length === 1 ? list[0].id : '')
+          setFormData((prev) => (prev.branch_id === '' ? { ...prev, branch_id: fallback } : prev))
+        }
+      })
+      .catch(() => setBranches([]))
+  }, [isEdit, selectedBranchId])
 
   // Load the teacher options (from the Employees list, feature 004)
   useEffect(() => {

@@ -752,6 +752,24 @@ const studentInstallmentSchema = new Schema({
 export const StudentInstallmentModel: Model<any> = mongoose.models['sync_student_installments'] ||
   mongoose.model('sync_student_installments', studentInstallmentSchema)
 
+const studentInstallmentTransactionSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  installment_id: Number,
+  amount: Number,
+  payment_method_id: Number,
+  payment_method_name: String,
+  paid_date: String,
+  notes: String,
+  recorded_by: Number,
+  created_at: String,
+  updated_at: String,
+  synced: Number
+}, sharedOptions)
+
+export const StudentInstallmentTransactionModel: Model<any> =
+  mongoose.models['sync_student_installment_transactions'] ||
+  mongoose.model('sync_student_installment_transactions', studentInstallmentTransactionSchema)
+
 // ── Branches ──────────────────────────────────────────────────────────────────
 
 const branchSchema = new Schema({
@@ -857,6 +875,7 @@ export const SYNC_ENTITIES: {
   { name: 'student_illness_cases', model: StudentIllnessCaseModel, table: 'student_illness_cases' },
   { name: 'student_activities', model: StudentActivityModel, table: 'student_activities' },
   { name: 'student_installments', model: StudentInstallmentModel, table: 'student_installments' },
+  { name: 'student_installment_transactions', model: StudentInstallmentTransactionModel, table: 'student_installment_transactions' },
   { name: 'user_branches', model: UserBranchModel, table: 'user_branches' },
   { name: 'halls', model: HallModel, table: 'halls' },
   { name: 'hall_time_slots', model: HallTimeSlotModel, table: 'hall_time_slots' },

@@ -1500,6 +1500,64 @@ const migrations: Migration[] = [
     up: (db) => {
       try { db.exec('ALTER TABLE service_definitions ADD COLUMN price_total REAL;') } catch { /* already exists */ }
     }
+  },
+  {
+    // One row per collection against an instalment — the same shape `payment_transactions` gives
+    // the monthly ledger. Without it an instalment only kept a running `paid` total, so there was
+    // no record of who collected what or when, no way to reverse a single collection, and nothing
+    // for the dashboard/transactions views to read as a dated payment event.
+    name: '054_installment_transactions',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS student_installment_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          installment_id INTEGER NOT NULL REFERENCES student_installments(id) ON DELETE CASCADE,
+          amount REAL NOT NULL,
+          payment_method_id INTEGER REFERENCES payment_methods(id),
+          payment_method_name TEXT,
+          paid_date TEXT,
+          notes TEXT,
+          recorded_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_installment_tx_installment ON student_installment_transactions(installment_id);
+        CREATE INDEX IF NOT EXISTS idx_installment_tx_date ON student_installment_transactions(paid_date);
+      `)
+
+      // Instalments collected before this table existed keep their money: seed one row carrying
+      // the amount already recorded, so paid = SUM(transactions) holds from here on.
+      const now = new Date().toISOString()
+      const collected = db.prepare(
+        'SELECT id, paid, paid_date, payment_method_id, payment_method_name, updated_at FROM student_installments WHERE paid > 0'
+      ).all() as any[]
+      for (const row of collected) {
+        db.prepare(`
+          INSERT INTO student_installment_transactions
+            (installment_id, amount, payment_method_id, payment_method_name, paid_date, notes, created_at, updated_at, synced)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+        `).run(
+          row.id, row.paid, row.payment_method_id ?? null, row.payment_method_name ?? null,
+          row.paid_date ?? (row.updated_at ?? now).slice(0, 10),
+          'رصيد سابق / Previous balance', now, now
+        )
+      }
+    }
+  },
+  {
+    // 'branch_manager' joins admin/employee: full management rights over the branches the user
+    // covers, while global configuration (users, settings, sync, branch list) stays admin-only.
+    // `users.role` has no CHECK constraint, so this is a documentation-only migration that also
+    // gives existing branch managers the role instead of leaving them as plain employees.
+    name: '055_branch_manager_role',
+    up: (db) => {
+      db.exec(`
+        UPDATE users SET role = 'branch_manager', synced = 0
+        WHERE role = 'employee'
+          AND id IN (SELECT manager_user_id FROM branches WHERE manager_user_id IS NOT NULL);
+      `)
+    }
   }
 ]
 

@@ -1,4 +1,8 @@
-export type UserRole = 'admin' | 'employee'
+/**
+ * 'branch_manager' sits between the two: full management of the branches the account covers,
+ * while global configuration (users, settings, sync, the branch list) stays admin-only.
+ */
+export type UserRole = 'admin' | 'branch_manager' | 'employee'
 
 export interface User {
   id: number
