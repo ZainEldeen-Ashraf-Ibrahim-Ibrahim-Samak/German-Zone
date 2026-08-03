@@ -16321,6 +16321,45 @@ var migrations = [
 				db.exec("ALTER TABLE service_definitions ADD COLUMN price_total REAL;");
 			} catch {}
 		}
+	},
+	{
+		name: "054_installment_transactions",
+		up: (db) => {
+			db.exec(`
+        CREATE TABLE IF NOT EXISTS student_installment_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          installment_id INTEGER NOT NULL REFERENCES student_installments(id) ON DELETE CASCADE,
+          amount REAL NOT NULL,
+          payment_method_id INTEGER REFERENCES payment_methods(id),
+          payment_method_name TEXT,
+          paid_date TEXT,
+          notes TEXT,
+          recorded_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_installment_tx_installment ON student_installment_transactions(installment_id);
+        CREATE INDEX IF NOT EXISTS idx_installment_tx_date ON student_installment_transactions(paid_date);
+      `);
+			const now = (/* @__PURE__ */ new Date()).toISOString();
+			const collected = db.prepare("SELECT id, paid, paid_date, payment_method_id, payment_method_name, updated_at FROM student_installments WHERE paid > 0").all();
+			for (const row of collected) db.prepare(`
+          INSERT INTO student_installment_transactions
+            (installment_id, amount, payment_method_id, payment_method_name, paid_date, notes, created_at, updated_at, synced)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+        `).run(row.id, row.paid, row.payment_method_id ?? null, row.payment_method_name ?? null, row.paid_date ?? (row.updated_at ?? now).slice(0, 10), "رصيد سابق / Previous balance", now, now);
+		}
+	},
+	{
+		name: "055_branch_manager_role",
+		up: (db) => {
+			db.exec(`
+        UPDATE users SET role = 'branch_manager', synced = 0
+        WHERE role = 'employee'
+          AND id IN (SELECT manager_user_id FROM branches WHERE manager_user_id IS NOT NULL);
+      `);
+		}
 	}
 ];
 function runMigrations(db) {
@@ -22387,8 +22426,65 @@ function requireAdmin() {
 	if (!user) throw new Error("UNAUTHORIZED: يجب تسجيل الدخول أولاً / Unauthorized");
 	if (user.role !== "admin") throw new Error("FORBIDDEN: غير مسموح بالوصول لغير المسؤولين / Forbidden");
 }
+/**
+* Admin OR branch manager. Use for management actions that are meaningful per branch — editing
+* students, planning instalments, managing halls — as opposed to global configuration.
+*/
+function requireManager() {
+	const user = getCurrentUser();
+	if (!user) throw new Error("UNAUTHORIZED: يجب تسجيل الدخول أولاً / Unauthorized");
+	if (user.role !== "admin" && user.role !== "branch_manager") throw new Error("FORBIDDEN: هذا الإجراء متاح للمسؤولين ومديري الفروع فقط / Forbidden: admins and branch managers only");
+}
 function checkAuth$10() {
 	if (!getCurrentUser()) throw new Error("UNAUTHORIZED: يجب تسجيل الدخول أولاً / Unauthorized");
+}
+/**
+* The branch ids the signed-in user may read, or `null` for "unrestricted".
+*
+* Unrestricted means admins (who are never scoped) AND any user with no `user_branches` rows at
+* all. That second case matters for upgrades: every account predates branch assignment, so
+* treating "no assignment" as "no access" would lock the whole team out the moment this ships.
+* An account becomes scoped only once someone actually assigns it branches.
+*/
+function currentBranchScope() {
+	const user = getCurrentUser();
+	if (!user) return null;
+	if (user.role === "admin") return null;
+	const rows = getDb().prepare("SELECT branch_id FROM user_branches WHERE user_id = ?").all(user.id);
+	return rows.length === 0 ? null : rows.map((r) => r.branch_id);
+}
+/**
+* A `WHERE` fragment restricting `<column>` to the user's branches, plus its bound parameters.
+* Returns an empty clause when the user is unrestricted.
+*
+* Rows with a NULL branch are always included: a student nobody has assigned to a branch yet must
+* never become invisible — silently hiding records is worse than showing an unassigned one.
+*/
+function branchScopeClause(column) {
+	const scope = currentBranchScope();
+	if (scope === null) return {
+		clause: "",
+		params: []
+	};
+	if (scope.length === 0) return {
+		clause: ` AND ${column} IS NULL`,
+		params: []
+	};
+	return {
+		clause: ` AND (${column} IN (${scope.map(() => "?").join(",")}) OR ${column} IS NULL)`,
+		params: scope
+	};
+}
+/** True when the user may act on the given branch (unrestricted users may act on any). */
+function canAccessBranch(branchId) {
+	const scope = currentBranchScope();
+	if (scope === null) return true;
+	if (branchId == null) return true;
+	return scope.includes(Number(branchId));
+}
+/** Throws unless the user covers the given branch. */
+function requireBranchAccess(branchId) {
+	if (!canAccessBranch(branchId)) throw new Error("FORBIDDEN: لا تملك صلاحية على هذا الفرع / Forbidden: you do not have access to this branch");
 }
 //#endregion
 //#region electron/ipc/authIPC.ts
@@ -22570,7 +22666,12 @@ ipcMain.handle("users:delete", async (_event, { id }) => {
 });
 //#endregion
 //#region electron/services/statementService.ts
-function getStudentStatement(student, existingPayments, currentDate) {
+/**
+* @param installments Instalment-plan rows for the student. They belong in the statement as
+*   first-class charges: a planned fee is deliberately absent from `payments`, so a statement
+*   built from payments alone shows a student on a plan owing and paying nothing.
+*/
+function getStudentStatement(student, existingPayments, currentDate, installments = []) {
 	const arabicMonths = [
 		"يناير",
 		"فبراير",
@@ -22613,12 +22714,29 @@ function getStudentStatement(student, existingPayments, currentDate) {
 			currY++;
 		}
 	}
+	const installmentRows = installments.map((i) => ({
+		month: i.month,
+		year: i.year,
+		service: i.service || student.service,
+		unit: "إجمالي",
+		quantity: 1,
+		price: i.amount,
+		total: i.amount,
+		paid: i.paid,
+		balance: i.balance,
+		status: i.status,
+		notes: `دفعة ${i.seq} — تستحق ${i.due_date} / Instalment ${i.seq} — due ${i.due_date}`
+	}));
 	const paymentMap = /* @__PURE__ */ new Map();
-	for (const p of existingPayments) {
+	for (const p of [...existingPayments, ...installmentRows]) {
 		const key = `${p.year}-${p.month}`;
 		if (!paymentMap.has(key)) paymentMap.set(key, []);
 		paymentMap.get(key).push(p);
 	}
+	for (const row of installmentRows) if (!statementMonths.some((m) => m.month === row.month && m.year === row.year)) statementMonths.push({
+		month: row.month,
+		year: row.year
+	});
 	const rows = [];
 	for (const { month, year } of statementMonths) {
 		const key = `${year}-${month}`;
@@ -22689,6 +22807,88 @@ function getStudentStatement(student, existingPayments, currentDate) {
 	};
 }
 //#endregion
+//#region electron/services/revenueService.ts
+var round2$1 = (n) => Number((n ?? 0).toFixed(2));
+/**
+* Instalment rows shaped like `payments` rows, so callers that already reduce over payments can
+* concatenate these and keep their existing arithmetic. `service` carries the enrolled service
+* name where one is linked, so revenue-by-service breakdowns still work.
+*/
+function installmentRowsForPeriod(db, month, year) {
+	return db.prepare(`
+    SELECT i.amount AS total, i.paid AS paid, i.balance AS balance,
+           COALESCE(ss.service, s.service, '') AS service
+    FROM student_installments i
+    JOIN students s ON s.id = i.student_id
+    LEFT JOIN student_services ss ON ss.id = i.service_id
+    WHERE i.month = ? AND i.year = ?
+  `).all(month, Number(year));
+}
+/**
+* Collections recorded against instalments between two dates, grouped by payment method — the
+* instalment half of the dashboard's "collected by method" breakdown.
+*/
+function installmentCollectionsByMethod(db, month, year) {
+	return db.prepare(`
+    SELECT COALESCE(NULLIF(t.payment_method_name, ''), 'غير محدد') AS method,
+           SUM(t.amount) AS total
+    FROM student_installment_transactions t
+    JOIN student_installments i ON i.id = t.installment_id
+    WHERE i.month = ? AND i.year = ?
+    GROUP BY method
+  `).all(month, Number(year)).map((r) => ({
+		method: r.method,
+		total: round2$1(r.total)
+	}));
+}
+/** Total collected against instalments due in a period — used by target planning. */
+function installmentCollectedForPeriod(db, month, year) {
+	return round2$1(db.prepare("SELECT COALESCE(SUM(paid), 0) AS s FROM student_installments WHERE month = ? AND year = ?").get(month, Number(year))?.s);
+}
+/**
+* Instalment collections in a date range, shaped as Transactions-page rows. Dated by when the
+* money actually arrived (`paid_date`), which is what a cash-movement view wants.
+*/
+function installmentTransactionRows(db, from, to, studentId) {
+	const params = [from, to];
+	let studentClause = "";
+	if (studentId) {
+		studentClause = " AND i.student_id = ?";
+		params.push(Number(studentId));
+	}
+	return db.prepare(`
+    SELECT
+      t.id,
+      i.student_id,
+      s.name AS student_name,
+      COALESCE(ss.service, s.service, '') AS service_name,
+      t.amount,
+      'payment' AS type,
+      t.paid_date AS date,
+      i.seq AS installment_seq
+    FROM student_installment_transactions t
+    JOIN student_installments i ON i.id = t.installment_id
+    JOIN students s ON s.id = i.student_id
+    LEFT JOIN student_services ss ON ss.id = i.service_id
+    WHERE t.paid_date BETWEEN ? AND ?${studentClause}
+  `).all(...params);
+}
+/**
+* A student's instalments as statement rows, matching the shape `statementService` produces for
+* `payments` so the two merge into one chronological account.
+*/
+function installmentStatementRows(db, studentId) {
+	return db.prepare(`
+    SELECT i.month, i.year, i.seq, i.due_date, i.amount, i.paid, i.balance, i.status,
+           COALESCE(ss.service, s.service, '') AS service
+    FROM student_installments i
+    JOIN students s ON s.id = i.student_id
+    LEFT JOIN student_services ss ON ss.id = i.service_id
+    WHERE i.student_id = ?
+    ORDER BY i.seq ASC
+  `).all(studentId);
+}
+//#endregion
 //#region electron/services/tombstones.ts
 /**
 * Deletes recorded by a build that predates the German Zone rename still arrive
@@ -22720,6 +22920,7 @@ var DELETABLE_ENTITIES = [
 	"employees",
 	"salary_payments",
 	"student_installments",
+	"student_installment_transactions",
 	"branches",
 	"user_branches",
 	"halls",
@@ -22899,8 +23100,19 @@ function regenerateInstallments(db, args) {
 	const service_id = args.service_id ?? null;
 	const now = (/* @__PURE__ */ new Date()).toISOString();
 	const duplicatesRemoved = clearDuplicateServiceCharges(db, student_id, service_id);
-	const previouslyPaid = Number(db.prepare("SELECT COALESCE(SUM(paid), 0) AS s FROM student_installments WHERE student_id = ?").get(student_id).s ?? 0);
+	const carried = db.prepare(`
+    SELECT t.amount, t.payment_method_id, t.payment_method_name, t.paid_date, t.notes, t.recorded_by
+    FROM student_installment_transactions t
+    JOIN student_installments i ON i.id = t.installment_id
+    WHERE i.student_id = ?
+    ORDER BY t.paid_date ASC, t.id ASC
+  `).all(student_id);
 	for (const row of db.prepare("SELECT id FROM student_installments WHERE student_id = ?").all(student_id)) recordLocalTombstone(db, "student_installments", row.id);
+	for (const row of db.prepare(`
+    SELECT t.id FROM student_installment_transactions t
+    JOIN student_installments i ON i.id = t.installment_id
+    WHERE i.student_id = ?
+  `).all(student_id)) recordLocalTombstone(db, "student_installment_transactions", row.id);
 	db.prepare("DELETE FROM student_installments WHERE student_id = ?").run(student_id);
 	const insert = db.prepare(`
     INSERT INTO student_installments (
@@ -22908,12 +23120,35 @@ function regenerateInstallments(db, args) {
       amount, paid, balance, status, created_at, updated_at, synced
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `);
-	let remainingPaid = previouslyPaid;
+	const insertTx = db.prepare(`
+    INSERT INTO student_installment_transactions
+      (installment_id, amount, payment_method_id, payment_method_name, paid_date, notes, recorded_by, created_at, updated_at, synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `);
 	const schedule = buildInstallmentSchedule(total, count, start_date);
+	let pending = carried.map((t) => ({
+		...t,
+		remaining: round2(Number(t.amount))
+	}));
 	for (const row of schedule) {
-		const paid = round2(Math.min(remainingPaid, row.amount));
-		remainingPaid = round2(remainingPaid - paid);
-		insert.run(student_id, service_id, row.seq, row.due_date, row.month, row.year, row.amount, paid, round2(row.amount - paid), statusFor(row.amount, paid), now, now);
+		let capacity = row.amount;
+		const applied = [];
+		for (const tx of pending) {
+			if (capacity <= 0) break;
+			if (tx.remaining <= 0) continue;
+			const take = round2(Math.min(tx.remaining, capacity));
+			tx.remaining = round2(tx.remaining - take);
+			capacity = round2(capacity - take);
+			applied.push({
+				tx,
+				amount: take
+			});
+		}
+		const paid = round2(applied.reduce((sum, a) => sum + a.amount, 0));
+		const result = insert.run(student_id, service_id, row.seq, row.due_date, row.month, row.year, row.amount, paid, round2(row.amount - paid), statusFor(row.amount, paid), now, now);
+		const installmentId = Number(result.lastInsertRowid);
+		for (const a of applied) insertTx.run(installmentId, a.amount, a.tx.payment_method_id ?? null, a.tx.payment_method_name ?? null, a.tx.paid_date ?? null, a.tx.notes ?? null, a.tx.recorded_by ?? null, now, now);
+		pending = pending.filter((t) => t.remaining > 0);
 	}
 	db.prepare(`
     UPDATE students
@@ -22992,7 +23227,7 @@ ipcMain.handle("installments:enrolledFee", async (_event, { student_id }) => {
 });
 ipcMain.handle("installments:plan", async (_event, args) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		const student_id = Number(args?.student_id);
 		if (!student_id) throw new Error("Student ID is required");
@@ -23066,6 +23301,9 @@ ipcMain.handle("installments:list", async (_event, args = {}) => {
 			query += " AND s.branch_id = ?";
 			params.push(Number(args.branch_id));
 		}
+		const scope = branchScopeClause("s.branch_id");
+		query += scope.clause;
+		params.push(...scope.params);
 		query += " ORDER BY i.due_date ASC, i.seq ASC";
 		const rows = db.prepare(query).all(...params);
 		const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -23094,7 +23332,7 @@ ipcMain.handle("installments:list", async (_event, args = {}) => {
 * Month-by-month view of everything due across a year: one bucket per month, so the UI can show
 * "this is what is owed in March" rather than one aggregate arrears figure.
 */
-ipcMain.handle("installments:calendar", async (_event, { year, student_id = null } = {}) => {
+ipcMain.handle("installments:calendar", async (_event, { year, student_id = null, branch_id = null } = {}) => {
 	try {
 		checkAuth$10();
 		const db = getDb();
@@ -23106,6 +23344,7 @@ ipcMain.handle("installments:calendar", async (_event, { year, student_id = null
              COALESCE(SUM(i.paid), 0) AS collected,
              COALESCE(SUM(i.balance), 0) AS outstanding
       FROM student_installments i
+      JOIN students s ON s.id = i.student_id
       WHERE i.year = ?
     `;
 		const params = [y];
@@ -23113,6 +23352,13 @@ ipcMain.handle("installments:calendar", async (_event, { year, student_id = null
 			query += " AND i.student_id = ?";
 			params.push(Number(student_id));
 		}
+		if (branch_id) {
+			query += " AND s.branch_id = ?";
+			params.push(Number(branch_id));
+		}
+		const scope = branchScopeClause("s.branch_id");
+		query += scope.clause;
+		params.push(...scope.params);
 		query += " GROUP BY i.year, i.month";
 		const rows = db.prepare(query).all(...params);
 		const byMonth = new Map(rows.map((r) => [r.month, r]));
@@ -23133,6 +23379,27 @@ ipcMain.handle("installments:calendar", async (_event, { year, student_id = null
 		throw new Error(error.message || "Failed to build instalment calendar");
 	}
 });
+/**
+* Recomputes an instalment from the sum of its collection rows, mirroring the most recent
+* method onto the instalment for display. `paid` is always derived, never accumulated in place,
+* so deleting a mistaken collection puts the balance back exactly.
+*/
+function recomputeInstallment(db, installmentId) {
+	const inst = db.prepare("SELECT * FROM student_installments WHERE id = ?").get(installmentId);
+	if (!inst) return;
+	const paid = round2(Number(db.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM student_installment_transactions WHERE installment_id = ?").get(installmentId).s ?? 0));
+	const last = db.prepare(`
+    SELECT payment_method_id, payment_method_name, paid_date
+    FROM student_installment_transactions
+    WHERE installment_id = ? ORDER BY paid_date DESC, id DESC LIMIT 1
+  `).get(installmentId);
+	db.prepare(`
+    UPDATE student_installments
+    SET paid = ?, balance = ?, status = ?, paid_date = ?,
+        payment_method_id = ?, payment_method_name = ?, updated_at = ?, synced = 0
+    WHERE id = ?
+  `).run(paid, round2(Number(inst.amount) - paid), statusFor(Number(inst.amount), paid), last?.paid_date ?? null, last?.payment_method_id ?? null, last?.payment_method_name ?? null, (/* @__PURE__ */ new Date()).toISOString(), installmentId);
+}
 ipcMain.handle("installments:pay", async (_event, { id, amount, payment_method_id = null, paid_date = null, notes = null }) => {
 	try {
 		checkAuth$10();
@@ -23142,28 +23409,66 @@ ipcMain.handle("installments:pay", async (_event, { id, amount, payment_method_i
 		if (!inst) throw new Error("الدفعة غير موجودة / Instalment not found");
 		const amt = round2(Number(amount));
 		if (!Number.isFinite(amt) || amt <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر / Amount must be greater than zero");
-		const paid = round2(Number(inst.paid) + amt);
-		if (paid > Number(inst.amount) + .001) throw new Error("المبلغ أكبر من قيمة الدفعة المتبقية / Amount exceeds the instalment balance");
-		let methodName = inst.payment_method_name ?? null;
+		if (round2(Number(inst.paid) + amt) > Number(inst.amount) + .001) throw new Error("المبلغ أكبر من قيمة الدفعة المتبقية / Amount exceeds the instalment balance");
+		let methodName = null;
 		if (payment_method_id != null) methodName = db.prepare("SELECT name FROM payment_methods WHERE id = ?").get(payment_method_id)?.name ?? null;
 		const now = (/* @__PURE__ */ new Date()).toISOString();
-		db.prepare(`
-      UPDATE student_installments
-      SET paid = ?, balance = ?, status = ?, paid_date = ?,
-          payment_method_id = ?, payment_method_name = ?, notes = COALESCE(?, notes),
-          updated_at = ?, synced = 0
-      WHERE id = ?
-    `).run(paid, round2(Number(inst.amount) - paid), statusFor(Number(inst.amount), paid), paid_date || now.slice(0, 10), payment_method_id ?? inst.payment_method_id ?? null, methodName, notes, now, id);
+		const user = getCurrentUser();
+		db.transaction(() => {
+			db.prepare(`
+        INSERT INTO student_installment_transactions
+          (installment_id, amount, payment_method_id, payment_method_name, paid_date, notes, recorded_by, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      `).run(id, amt, payment_method_id, methodName, paid_date || now.slice(0, 10), notes, user?.id ?? null, now, now);
+			recomputeInstallment(db, Number(id));
+		})();
 		return db.prepare("SELECT * FROM student_installments WHERE id = ?").get(id);
 	} catch (error) {
 		console.error("Failed to record instalment payment:", error);
 		throw new Error(error.message || "Failed to record instalment payment");
 	}
 });
+/** The collection history behind an instalment — who took what, and when. */
+ipcMain.handle("installments:listTransactions", async (_event, { installment_id }) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		if (!installment_id) throw new Error("Instalment ID is required");
+		return db.prepare(`
+      SELECT t.*, u.name AS recorded_by_name, u.username AS recorded_by_username
+      FROM student_installment_transactions t
+      LEFT JOIN users u ON u.id = t.recorded_by
+      WHERE t.installment_id = ?
+      ORDER BY t.paid_date ASC, t.id ASC
+    `).all(installment_id);
+	} catch (error) {
+		console.error("Failed to list instalment collections:", error);
+		throw new Error(error.message || "Failed to list instalment collections");
+	}
+});
+/** Reverses one collection — the balance returns to exactly what it was before it. */
+ipcMain.handle("installments:deleteTransaction", async (_event, { id }) => {
+	try {
+		requireManager();
+		const db = getDb();
+		if (!id) throw new Error("Transaction ID is required");
+		const tx = db.prepare("SELECT installment_id FROM student_installment_transactions WHERE id = ?").get(id);
+		if (!tx) throw new Error("العملية غير موجودة / Collection not found");
+		db.transaction(() => {
+			db.prepare("DELETE FROM student_installment_transactions WHERE id = ?").run(id);
+			recordLocalTombstone(db, "student_installment_transactions", Number(id));
+			recomputeInstallment(db, tx.installment_id);
+		})();
+		return db.prepare("SELECT * FROM student_installments WHERE id = ?").get(tx.installment_id);
+	} catch (error) {
+		console.error("Failed to delete instalment collection:", error);
+		throw new Error(error.message || "Failed to delete instalment collection");
+	}
+});
 /** Adjusts a single instalment (date / amount / note) without rebuilding the whole plan. */
 ipcMain.handle("installments:update", async (_event, { id, patch }) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		if (!id || !patch) throw new Error("Instalment ID and patch data are required");
 		const inst = db.prepare("SELECT * FROM student_installments WHERE id = ?").get(id);
@@ -23198,7 +23503,7 @@ ipcMain.handle("installments:update", async (_event, { id, patch }) => {
 /** Drops a student's whole plan (and clears the plan fields on the student row). */
 ipcMain.handle("installments:clear", async (_event, { student_id }) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		if (!student_id) throw new Error("Student ID is required");
 		let deleted = 0;
@@ -23268,9 +23573,12 @@ ipcMain.handle("students:get", async (_event, { search, service, activeOnly, bra
 			params.push(service);
 		}
 		if (branch_id) {
-			query += " AND branch_id = ?";
+			query += " AND (branch_id = ? OR branch_id IS NULL)";
 			params.push(Number(branch_id));
 		}
+		const scope = branchScopeClause("branch_id");
+		query += scope.clause;
+		params.push(...scope.params);
 		if (activeOnly !== false) query += " AND is_active = 1";
 		query += " ORDER BY name ASC";
 		const rows = db.prepare(query).all(...params);
@@ -23294,6 +23602,7 @@ ipcMain.handle("students:add", async (_event, studentInput) => {
 		if (!name || !guardian || !guardian_phone || enrollments.length === 0 || !reg_date) throw new Error("جميع الحقول الإلزامية مطلوبة / Missing required fields");
 		validateGuardianPhone(guardian_phone);
 		if (student_phone) validateStudentPhone(student_phone);
+		requireBranchAccess(branch_id ? Number(branch_id) : null);
 		const lesson = buildLessonFields(studentInput);
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const createdId = db.transaction(() => {
@@ -23337,11 +23646,13 @@ ipcMain.handle("students:add", async (_event, studentInput) => {
 });
 ipcMain.handle("students:update", async (_event, { id, patch }) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		if (!id || !patch) throw new Error("Student ID and patch data are required");
 		const student = db.prepare("SELECT * FROM students WHERE id = ?").get(id);
 		if (!student) throw new Error("الطالب غير موجود / Student not found");
+		requireBranchAccess(student.branch_id);
+		if (patch.branch_id !== void 0) requireBranchAccess(patch.branch_id ? Number(patch.branch_id) : null);
 		if (patch.guardian_phone !== void 0) validateGuardianPhone(patch.guardian_phone);
 		if (patch.student_phone !== void 0) validateStudentPhone(patch.student_phone);
 		db.transaction(() => {
@@ -23466,7 +23777,7 @@ ipcMain.handle("students:update", async (_event, { id, patch }) => {
 });
 ipcMain.handle("students:deactivate", async (_event, { id }) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		if (!db.prepare("SELECT id FROM students WHERE id = ?").get(id)) throw new Error("الطالب غير موجود / Student not found");
 		db.prepare("UPDATE students SET is_active = 0, updated_at = ?, synced = 0 WHERE id = ?").run((/* @__PURE__ */ new Date()).toISOString(), id);
@@ -23498,7 +23809,9 @@ ipcMain.handle("students:statement", async (_event, { studentId }) => {
 		const student = db.prepare("SELECT * FROM students WHERE id = ?").get(studentId);
 		if (!student) throw new Error("الطالب غير موجود / Student not found");
 		if (student.teacher_id) student.teacher_name = db.prepare("SELECT name FROM employees WHERE id = ?").get(student.teacher_id)?.name ?? null;
-		return getStudentStatement(student, db.prepare("SELECT * FROM payments WHERE student_id = ?").all(studentId), /* @__PURE__ */ new Date());
+		const payments = db.prepare("SELECT * FROM payments WHERE student_id = ?").all(studentId);
+		const installments = installmentStatementRows(db, Number(studentId));
+		return getStudentStatement(student, payments, /* @__PURE__ */ new Date(), installments);
 	} catch (error) {
 		console.error("Failed to get student statement:", error);
 		throw new Error(error.message || "Failed to get student statement");
@@ -23689,12 +24002,12 @@ function calculateStudentStatusRollup(payments) {
 function checkAuth$7() {
 	if (!getCurrentUser()) throw new Error("UNAUTHORIZED: يجب تسجيل الدخول أولاً / Unauthorized");
 }
-ipcMain.handle("payments:get", async (_event, { month, year }) => {
+ipcMain.handle("payments:get", async (_event, { month, year, branch_id }) => {
 	try {
 		checkAuth$7();
 		const db = getDb();
 		if (!month || !year) throw new Error("Month and year are required");
-		const payments = db.prepare(`
+		let listQuery = `
       SELECT p.*, c.name as student_name, c.guardian as student_guardian, c.guardian_phone as student_guardian_phone, c.is_active as student_is_active,
         COALESCE(NULLIF(cs.lesson_days, '[]'), c.lesson_days) as service_lesson_days,
         (SELECT COUNT(*) FROM payment_transactions pt WHERE pt.payment_id = p.id) as transaction_count
@@ -23702,8 +24015,17 @@ ipcMain.handle("payments:get", async (_event, { month, year }) => {
       JOIN students c ON p.student_id = c.id
       LEFT JOIN student_services cs ON cs.id = p.service_id
       WHERE p.month = ? AND p.year = ?
-      ORDER BY c.name ASC
-    `).all(month, year);
+    `;
+		const listParams = [month, year];
+		if (branch_id) {
+			listQuery += " AND (c.branch_id = ? OR c.branch_id IS NULL)";
+			listParams.push(Number(branch_id));
+		}
+		const paymentsScope = branchScopeClause("c.branch_id");
+		listQuery += paymentsScope.clause;
+		listParams.push(...paymentsScope.params);
+		listQuery += " ORDER BY c.name ASC";
+		const payments = db.prepare(listQuery).all(...listParams);
 		const monthIndex = [
 			"يناير",
 			"فبراير",
@@ -25645,7 +25967,7 @@ ipcMain.handle("target:get", async (_event, { year }) => {
 			const payments = db.prepare("SELECT paid FROM payments WHERE month = ? AND year = ?").all(month, year);
 			const expenses = db.prepare("SELECT amount FROM expenses WHERE month = ? AND year = ?").all(month, year);
 			const salaries = db.prepare("SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?").all(month, year);
-			const collected = payments.reduce((s, p) => s + p.paid, 0);
+			const collected = payments.reduce((s, p) => s + p.paid, 0) + installmentCollectedForPeriod(db, month, year);
 			const expensesTotal = expenses.reduce((s, e) => s + e.amount, 0);
 			const salariesTotal = salaries.reduce((s, s2) => s + s2.actual_paid, 0);
 			const totalExpenses = expensesTotal + salariesTotal;
@@ -31469,6 +31791,24 @@ var studentInstallmentSchema = new Schema({
 	synced: Number
 }, sharedOptions);
 var StudentInstallmentModel = mongoose.models["sync_student_installments"] || mongoose.model("sync_student_installments", studentInstallmentSchema);
+var studentInstallmentTransactionSchema = new Schema({
+	id: {
+		type: Number,
+		required: true,
+		unique: true
+	},
+	installment_id: Number,
+	amount: Number,
+	payment_method_id: Number,
+	payment_method_name: String,
+	paid_date: String,
+	notes: String,
+	recorded_by: Number,
+	created_at: String,
+	updated_at: String,
+	synced: Number
+}, sharedOptions);
+var StudentInstallmentTransactionModel = mongoose.models["sync_student_installment_transactions"] || mongoose.model("sync_student_installment_transactions", studentInstallmentTransactionSchema);
 var branchSchema = new Schema({
 	id: {
 		type: Number,
@@ -31683,6 +32023,11 @@ var SYNC_ENTITIES = [
 		name: "student_installments",
 		model: StudentInstallmentModel,
 		table: "student_installments"
+	},
+	{
+		name: "student_installment_transactions",
+		model: StudentInstallmentTransactionModel,
+		table: "student_installment_transactions"
 	},
 	{
 		name: "user_branches",
@@ -32210,7 +32555,7 @@ ipcMain.handle("dashboard:get", async (_event, { month, year }) => {
 		if (!month || !year) throw new Error("Month and year are required");
 		const targetProfitRow = db.prepare("SELECT value FROM settings WHERE key = 'target_profit_pct'").get();
 		const targetProfitPct = targetProfitRow ? Number(targetProfitRow.value) : .2;
-		const payments = db.prepare("SELECT total, paid, balance, service FROM payments WHERE month = ? AND year = ?").all(month, year);
+		const payments = [...db.prepare("SELECT total, paid, balance, service FROM payments WHERE month = ? AND year = ?").all(month, year), ...installmentRowsForPeriod(db, month, year)];
 		const kpi = calculateDashboard(payments, db.prepare("SELECT amount FROM expenses WHERE month = ? AND year = ?").all(month, year), db.prepare("SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?").all(month, year), targetProfitPct);
 		const revenueByService = SERVICE_NAMES.map((srv) => {
 			const collectedSrv = payments.filter((p) => p.service === srv).reduce((sum, p) => sum + p.paid, 0);
@@ -32237,9 +32582,15 @@ ipcMain.handle("dashboard:get", async (_event, { month, year }) => {
 			method: r.method,
 			total: Number((r.total ?? 0).toFixed(2))
 		}));
+		for (const row of installmentCollectionsByMethod(db, month, year)) {
+			const existing = collectedByMethod.find((m) => m.method === row.method);
+			if (existing) existing.total = Number((existing.total + row.total).toFixed(2));
+			else collectedByMethod.push(row);
+		}
+		collectedByMethod.sort((a, b) => b.total - a.total);
 		const summary12Month = [];
 		for (const m of arabicMonths) {
-			const mKpi = calculateDashboard(db.prepare("SELECT total, paid, balance FROM payments WHERE month = ? AND year = ?").all(m, year), db.prepare("SELECT amount FROM expenses WHERE month = ? AND year = ?").all(m, year), db.prepare("SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?").all(m, year), targetProfitPct);
+			const mKpi = calculateDashboard([...db.prepare("SELECT total, paid, balance FROM payments WHERE month = ? AND year = ?").all(m, year), ...installmentRowsForPeriod(db, m, year)], db.prepare("SELECT amount FROM expenses WHERE month = ? AND year = ?").all(m, year), db.prepare("SELECT actual_paid FROM salary_payments WHERE month = ? AND year = ?").all(m, year), targetProfitPct);
 			const totalExp = mKpi.expensesTotal + mKpi.salariesTotal;
 			summary12Month.push({
 				month: m,
@@ -32928,7 +33279,7 @@ ipcMain.handle("transactions:list", async (_event, args) => {
 			conditions.push("p.student_id = ?");
 			params.push(studentId);
 		}
-		return db.prepare(`
+		const rows = db.prepare(`
       SELECT
         pt.id,
         p.student_id,
@@ -32941,8 +33292,12 @@ ipcMain.handle("transactions:list", async (_event, args) => {
       JOIN payments p ON p.id = pt.payment_id
       JOIN students c ON c.id = p.student_id
       WHERE ${conditions.join(" AND ")}
-      ORDER BY date DESC, pt.id DESC
     `).all(...params);
+		const installmentRows = installmentTransactionRows(db, from, to, studentId).map((r) => ({
+			...r,
+			id: `inst-${r.id}`
+		}));
+		return [...rows, ...installmentRows].sort((a, b) => a.date === b.date ? String(b.id).localeCompare(String(a.id)) : a.date < b.date ? 1 : -1);
 	} catch (error) {
 		console.error("Failed to list transactions:", error);
 		throw new Error(error.message || "Failed to list transactions");
@@ -33465,6 +33820,9 @@ ipcMain.handle("halls:list", async (_event, args = {}) => {
 			query += " AND h.branch_id = ?";
 			params.push(Number(args.branch_id));
 		}
+		const scope = branchScopeClause("h.branch_id");
+		query += scope.clause;
+		params.push(...scope.params);
 		query += " ORDER BY h.name ASC";
 		const halls = db.prepare(query).all(...params);
 		const slots = db.prepare(`
@@ -33500,11 +33858,12 @@ ipcMain.handle("halls:get", async (_event, { id }) => {
 });
 ipcMain.handle("halls:add", async (_event, args) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		const name = String(args?.name ?? "").trim();
 		if (!name) throw new Error("اسم القاعة مطلوب / Hall name is required");
 		const branchId = args?.branch_id ? Number(args.branch_id) : null;
+		requireBranchAccess(branchId);
 		if (branchId ? db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id = ?").get(name, branchId) : db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id IS NULL").get(name)) throw new Error("اسم القاعة موجود بالفعل في هذا الفرع / A hall with this name already exists in this branch");
 		const slots = Array.isArray(args?.slots) ? args.slots : [];
 		validateTimetable(slots);
@@ -33529,7 +33888,7 @@ ipcMain.handle("halls:add", async (_event, args) => {
 /** Updates a hall. Passing `slots` replaces the whole timetable; omitting it leaves it alone. */
 ipcMain.handle("halls:update", async (_event, { id, patch }) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		if (!id || !patch) throw new Error("Hall ID and patch data are required");
 		const hall = db.prepare("SELECT * FROM halls WHERE id = ?").get(id);
@@ -33537,6 +33896,8 @@ ipcMain.handle("halls:update", async (_event, { id, patch }) => {
 		const name = patch.name !== void 0 ? String(patch.name).trim() : hall.name;
 		if (!name) throw new Error("اسم القاعة مطلوب / Hall name is required");
 		const branchId = patch.branch_id !== void 0 ? patch.branch_id ? Number(patch.branch_id) : null : hall.branch_id;
+		requireBranchAccess(hall.branch_id);
+		requireBranchAccess(branchId);
 		if (branchId ? db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id = ? AND id != ?").get(name, branchId, id) : db.prepare("SELECT id FROM halls WHERE name = ? AND branch_id IS NULL AND id != ?").get(name, id)) throw new Error("اسم القاعة موجود بالفعل في هذا الفرع / A hall with this name already exists in this branch");
 		if (patch.slots !== void 0) validateTimetable(patch.slots ?? []);
 		const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -33558,10 +33919,12 @@ ipcMain.handle("halls:update", async (_event, { id, patch }) => {
 });
 ipcMain.handle("halls:delete", async (_event, { id }) => {
 	try {
-		requireAdmin();
+		requireManager();
 		const db = getDb();
 		if (!id) throw new Error("Hall ID is required");
-		if (!db.prepare("SELECT id FROM halls WHERE id = ?").get(id)) throw new Error("القاعة غير موجودة / Hall not found");
+		const hall = db.prepare("SELECT id, branch_id FROM halls WHERE id = ?").get(id);
+		if (!hall) throw new Error("القاعة غير موجودة / Hall not found");
+		requireBranchAccess(hall.branch_id);
 		db.transaction(() => {
 			for (const row of db.prepare("SELECT id FROM hall_time_slots WHERE hall_id = ?").all(id)) recordLocalTombstone(db, "hall_time_slots", row.id);
 			db.prepare("DELETE FROM halls WHERE id = ?").run(id);
@@ -33597,6 +33960,9 @@ ipcMain.handle("halls:timetable", async (_event, args = {}) => {
 			query += " AND h.id = ?";
 			params.push(Number(args.hall_id));
 		}
+		const scope = branchScopeClause("h.branch_id");
+		query += scope.clause;
+		params.push(...scope.params);
 		query += " ORDER BY s.day_of_week ASC, s.start_time ASC, h.name ASC";
 		const slots = db.prepare(query).all(...params);
 		return Array.from({ length: 7 }, (_, day) => ({

@@ -30,7 +30,31 @@ export default function EditRequestsInbox() {
   const [auditLog, setAuditLog] = useState<AttendanceAuditLogEntry[]>([])
   const [auditLoading, setAuditLoading] = useState(false)
 
+  // Sync conflicts: two machines recorded different attendance for the same session and one
+  // overwrote the other. They were being logged with no way to review them, so they simply
+  // accumulated forever — this surfaces them where an admin already comes to arbitrate.
+  const [conflicts, setConflicts] = useState<any[]>([])
+
+  const loadConflicts = async () => {
+    try {
+      setConflicts(await window.api.attendance.getConflicts())
+    } catch {
+      setConflicts([])
+    }
+  }
+
   useEffect(() => { fetchRequests({ status: tab }) }, [tab])
+  useEffect(() => { loadConflicts() }, [])
+
+  const resolveConflict = async (conflictId: number, finalStatus: string) => {
+    try {
+      await window.api.attendance.resolveConflict(conflictId, finalStatus)
+      setSuccessMsg(isAr ? 'تم حسم التعارض.' : 'Conflict resolved.')
+      await loadConflicts()
+    } catch (err: any) {
+      console.error('Failed to resolve conflict:', err)
+    }
+  }
 
   const openAuditLog = async (attendanceRecordId: number) => {
     setAuditRecordId(attendanceRecordId)
@@ -62,6 +86,49 @@ export default function EditRequestsInbox() {
 
       {successMsg && <Alert variant="success" onClose={() => setSuccessMsg('')}>{successMsg}</Alert>}
       {error && <Alert variant="danger" onClose={clearError}>{error}</Alert>}
+
+      {/* Unreviewed sync conflicts — pick which version of the record wins */}
+      {conflicts.length > 0 && (
+        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+          <div className="flex flex-col text-start">
+            <h2 className="font-bold text-amber-900">
+              {isAr ? `تعارضات المزامنة (${conflicts.length})` : `Sync conflicts (${conflicts.length})`}
+            </h2>
+            <span className="text-xs text-amber-700">
+              {isAr
+                ? 'سجلّان مختلفان لنفس الحضور من جهازين — اختر النسخة الصحيحة.'
+                : 'Two devices recorded this attendance differently — choose which version is correct.'}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {conflicts.map((c) => (
+              <div key={c.id} className="bg-white border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-xs text-slate-600 text-start">
+                  <div>
+                    <span className="font-semibold">{isAr ? 'المحفوظ: ' : 'Kept: '}</span>
+                    {statusLabel(c.winning_status, isAr)}
+                    {c.winning_by ? ` (${c.winning_by})` : ''} · {String(c.winning_at).slice(0, 16).replace('T', ' ')}
+                  </div>
+                  <div className="text-slate-400">
+                    <span className="font-semibold">{isAr ? 'المستبدل: ' : 'Overwritten: '}</span>
+                    {statusLabel(c.overwritten_status, isAr)}
+                    {c.overwritten_by ? ` (${c.overwritten_by})` : ''}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => resolveConflict(c.id, c.winning_status)}>
+                    {isAr ? 'إبقاء المحفوظ' : 'Keep kept'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => resolveConflict(c.id, c.overwritten_status)}>
+                    {isAr ? 'استعادة المستبدل' : 'Restore overwritten'}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-1 border-b border-slate-200">
         {STATUS_TABS.map((s) => (
