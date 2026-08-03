@@ -128,8 +128,18 @@ export interface InstallmentMonth {
 export type ServiceType = 'A1' | 'A2' | 'B1' | 'B2' | 'جلسات محادثة'
 
 /** Billing unit. Note 'جلسة' here is the per-session *unit*, unrelated to the
- *  'جلسات محادثة' speaking-sessions *service*. */
-export type UnitType = 'شهر' | 'يوم' | 'ساعة' | 'جلسة'
+ *  'جلسات محادثة' speaking-sessions *service*.
+ *
+ *  'إجمالي' is the odd one out: a single fixed fee for the whole course rather than a recurring
+ *  rate. It is charged once, and it is the only unit an instalment plan can split — "pay it over
+ *  4" only means something for a fee with a known end. See {@link TOTAL_UNIT}. */
+export type UnitType = 'شهر' | 'يوم' | 'ساعة' | 'جلسة' | 'إجمالي'
+
+/**
+ * The one-off, whole-course billing unit. Referenced by name from both processes so the string
+ * literal never drifts between the schema, the billing rules and the UI.
+ */
+export const TOTAL_UNIT = 'إجمالي' as const
 
 export interface ServiceEnrollment {
   id: number
@@ -363,6 +373,8 @@ export interface ServiceDefinition {
   price_monthly: number | null
   price_daily: number | null
   price_hourly: number | null
+  /** One fixed fee for the whole course — the price an instalment plan splits. */
+  price_total: number | null
   created_at: string
   updated_at: string
   synced: number

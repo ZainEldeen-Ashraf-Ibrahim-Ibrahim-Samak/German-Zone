@@ -10,6 +10,7 @@ import { Select } from '../../components/ui/Select.js'
 import { Card } from '../../components/ui/Card.js'
 import { Alert } from '../../components/ui/Alert.js'
 import PhotoCapture from '../../components/PhotoCapture.js'
+import { TOTAL_UNIT } from '../../types/index.js'
 import type { ServiceType, UnitType, Teacher, Branch } from '../../types/index.js'
 import { isSessionService } from '../../utils/services.js'
 
@@ -53,15 +54,16 @@ function ServiceCostPreview({ lessonDays, unit, price, isAr }: { lessonDays: num
   }
 
   const unitPrice = Number(price) || 0
-  const isMonthly = unit === 'شهر'
-  const expected = isMonthly ? unitPrice : Number((total * unitPrice).toFixed(2))
+  // Monthly and whole-course fees are flat — the lesson-day count doesn't multiply them.
+  const isFlat = unit === 'شهر' || unit === TOTAL_UNIT
+  const expected = isFlat ? unitPrice : Number((total * unitPrice).toFixed(2))
 
   return (
     <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-slate-600 flex items-center justify-between">
       <span>
         {isAr
-          ? `الجلسات المتبقية هذا الشهر: ${total}${isMonthly ? '' : ` × ${unitPrice} ج.م`}`
-          : `Remaining sessions this month: ${total}${isMonthly ? '' : ` × ${unitPrice} EGP`}`}
+          ? `الجلسات المتبقية هذا الشهر: ${total}${isFlat ? '' : ` × ${unitPrice} ج.م`}`
+          : `Remaining sessions this month: ${total}${isFlat ? '' : ` × ${unitPrice} EGP`}`}
       </span>
       <span className="font-bold text-slate-800">
         {isAr ? `التكلفة المتوقعة: ${expected} ج.م` : `Expected cost: ${expected} EGP`}
@@ -176,6 +178,7 @@ export default function StudentForm() {
             if (row.unit === 'شهر' && svcDef.price_monthly != null) resolved = svcDef.price_monthly
             else if (row.unit === 'يوم' && svcDef.price_daily != null) resolved = svcDef.price_daily
             else if ((row.unit === 'ساعة' || row.unit === 'جلسة') && svcDef.price_hourly != null) resolved = svcDef.price_hourly
+            else if (row.unit === TOTAL_UNIT && svcDef.price_total != null) resolved = svcDef.price_total
           }
           return resolved > 0 ? { ...row, price: resolved } : row
         })
@@ -203,10 +206,16 @@ export default function StudentForm() {
   // Pro-rate session baseline (kept for pro-rate notice display; per-row session_price drives actual fees)
   const sessionsBaseline = proRate?.total_sessions && proRate.total_sessions > 0 ? proRate.total_sessions : 8
 
-  // The fee the plan is built from: the price of the services enrolled on this form. Reading it
-  // from the live form rows (rather than the saved record) keeps the plan in step while prices
-  // are still being edited.
-  const servicesFee = formData.services.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+  // Instalments only make sense for a whole-course fee: a fixed sum with an end, which "pay it
+  // over 4" can divide. A recurring month/day/hour rate has no final figure to split, so the
+  // plan section stays hidden until at least one service is billed as a total.
+  const totalBilledServices = formData.services.filter((s) => s.unit === TOTAL_UNIT)
+  const planApplies = totalBilledServices.length > 0
+
+  // The fee the plan is built from: the price of the total-billed services enrolled on this
+  // form. Reading it from the live form rows (rather than the saved record) keeps the plan in
+  // step while prices are still being edited.
+  const servicesFee = totalBilledServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
   const planTotal = plan.override !== '' && Number(plan.override) > 0 ? Number(plan.override) : servicesFee
 
   // Live preview of the instalment split. Computed in the main process by the same function
@@ -342,6 +351,9 @@ export default function StudentForm() {
     const pushMonthly = () => { if (svcDef.price_monthly != null) opts.push({ value: 'شهر', label: t('units.month') }) }
     const pushDaily = () => { if (svcDef.price_daily != null) opts.push({ value: 'يوم', label: t('units.day') }) }
     const pushHourly = () => { if (svcDef.price_hourly != null) opts.push({ value: 'ساعة', label: t('units.hour') }) }
+    // The whole-course fee is offered last: it is the exception, and it changes how the service
+    // is billed (once, splittable into instalments) rather than being another recurring rate.
+    const pushTotal = () => { if (svcDef.price_total != null) opts.push({ value: TOTAL_UNIT, label: t('units.total') }) }
     if (isSessionService(serviceName)) {
       // Hourly-priced first (the per-session rate), then the less-specific monthly/daily
       // fallbacks — never a separate "session" unit duplicating the same price field.
@@ -349,6 +361,7 @@ export default function StudentForm() {
     } else {
       pushMonthly(); pushDaily(); pushHourly()
     }
+    pushTotal()
     return opts
   }
 
@@ -395,6 +408,7 @@ export default function StudentForm() {
           if (row.unit === 'شهر' && svcDef.price_monthly != null) resolved = svcDef.price_monthly
           else if (row.unit === 'يوم' && svcDef.price_daily != null) resolved = svcDef.price_daily
           else if ((row.unit === 'ساعة' || row.unit === 'جلسة') && svcDef.price_hourly != null) resolved = svcDef.price_hourly
+            else if (row.unit === TOTAL_UNIT && svcDef.price_total != null) resolved = svcDef.price_total
         }
         if (resolved > 0) row.price = resolved
       }
@@ -454,11 +468,11 @@ export default function StudentForm() {
 
     // The plan is optional. Its amount comes from the enrolled services, so the only thing that
     // can be missing is a priced service to build it from.
-    const hasCount = plan.count !== '' && Number(plan.count) > 0
+    const hasCount = planApplies && plan.count !== '' && Number(plan.count) > 0
     if (hasCount && planTotal <= 0) {
       errors.installments = i18n.language === 'ar'
-        ? 'أضف خدمة لها سعر (أو أدخل مبلغاً مخصصاً) حتى يمكن تقسيم الرسوم على دفعات'
-        : 'Add a priced service (or set a custom amount) so the fee can be split into instalments'
+        ? 'حدّد سعراً للخدمة ذات الوحدة "إجمالي" (أو أدخل مبلغاً مخصصاً) حتى يمكن تقسيمه على دفعات'
+        : 'Set a price on the service billed as a total (or enter a custom amount) so it can be split'
     }
     if (hasCount && (Number(plan.count) > 60 || !Number.isInteger(Number(plan.count)))) {
       errors.installments = i18n.language === 'ar'
@@ -532,9 +546,11 @@ export default function StudentForm() {
         notes: formData.notes.trim() || null,
         branch_id: formData.branch_id === '' ? null : Number(formData.branch_id),
         // A blank count means "no plan" — on edit that also clears any existing schedule.
-        installments_count: plan.count === '' ? null : Number(plan.count),
+        // Switching every service off the total unit retires the plan along with it — the fee it
+        // was splitting no longer exists.
+        installments_count: !planApplies || plan.count === '' ? null : Number(plan.count),
         // The plan amount is the enrolled service fee unless explicitly overridden.
-        installment_total: plan.count === '' ? null : planTotal,
+        installment_total: !planApplies || plan.count === '' ? null : planTotal,
         installment_start_date: plan.start_date || formData.reg_date,
         services: formData.services.map(s => ({
           id: s.id,
@@ -916,7 +932,11 @@ export default function StudentForm() {
 
           {/* Instalment plan — how many payments the fee is split into, and when each falls due.
               Each instalment carries its own due date, so a month only ever shows the amount
-              actually due in it instead of the whole outstanding fee as one lump of arrears. */}
+              actually due in it instead of the whole outstanding fee as one lump of arrears.
+
+              Shown only for services billed as a whole-course total: a recurring month/day/hour
+              rate has no final figure to divide, so there is nothing to split. */}
+          {planApplies && (
           <div className="space-y-4 border-t border-slate-100 pt-6">
             <div className="flex items-center justify-between">
               <label className="text-lg font-bold text-slate-800">
@@ -941,7 +961,7 @@ export default function StudentForm() {
                 <span className="text-base font-bold text-slate-900">{formatCurrency(servicesFee)}</span>
               </div>
               <div className="text-[11px] text-slate-500 leading-relaxed">
-                {formData.services.map((s, i) => (
+                {totalBilledServices.map((s, i) => (
                   <span key={i}>
                     {i > 0 && ' + '}
                     {s.service} ({formatCurrency(Number(s.price) || 0)})
@@ -1037,6 +1057,7 @@ export default function StudentForm() {
               </div>
             )}
           </div>
+          )}
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-slate-700">

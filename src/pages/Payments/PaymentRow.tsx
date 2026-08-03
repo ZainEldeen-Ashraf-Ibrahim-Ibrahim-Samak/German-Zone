@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge.js'
 import { Button } from '../../components/ui/Button.js'
+import { TOTAL_UNIT } from '../../types/index.js'
 import type { Payment } from '../../types/index.js'
 import { serviceLabel } from '../../utils/services.js'
 import type { PaymentMethod } from '../../store/usePaymentMethodsStore.js'
@@ -105,6 +106,7 @@ export default function PaymentRow({
     if (payment.unit === 'شهر') return t('units.month')
     if (payment.unit === 'يوم') return t('units.day')
     if (payment.unit === 'ساعة') return t('units.hour')
+    if (payment.unit === TOTAL_UNIT) return t('units.total')
     if (payment.unit === 'جلسة') return t('units.session')
     return payment.unit
   }

@@ -79,6 +79,8 @@ electron.contextBridge.exposeInMainWorld("api", {
 		list: (args) => electron.ipcRenderer.invoke("installments:list", args ?? {}),
 		calendar: (args) => electron.ipcRenderer.invoke("installments:calendar", args),
 		preview: (args) => electron.ipcRenderer.invoke("installments:preview", args),
+		/** The fee a plan would be built from — the price of the student's enrolled services. */
+		enrolledFee: (args) => electron.ipcRenderer.invoke("installments:enrolledFee", args),
 		pay: (args) => electron.ipcRenderer.invoke("installments:pay", args),
 		update: (args) => electron.ipcRenderer.invoke("installments:update", args),
 		clear: (args) => electron.ipcRenderer.invoke("installments:clear", args)

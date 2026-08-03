@@ -14,6 +14,7 @@ import { Alert } from '../../components/ui/Alert.js'
 import { Pagination } from '../../components/ui/Pagination.js'
 import { BUILT_IN_SERVICES, serviceLabel, serviceVariant } from '../../utils/services.js'
 import { Modal } from '../../components/ui/Modal.js'
+import { TOTAL_UNIT } from '../../types/index.js'
 import type { Student } from '../../types/index.js'
 
 type SortKey = 'id' | 'name' | 'guardian' | 'price' | 'reg_date' | 'is_active'
@@ -244,7 +245,7 @@ export default function StudentsList() {
               <span key={idx} className="font-mono font-medium text-slate-800 block whitespace-nowrap text-sm">
                 {formatCurrency(s.price)}
                 <span className="text-xs text-slate-400 ms-1 inline-block">
-                  / {s.unit === 'شهر' ? t('units.month') : s.unit === 'يوم' ? t('units.day') : s.unit === 'ساعة' ? t('units.hour') : t('units.session')}
+                  / {s.unit === 'شهر' ? t('units.month') : s.unit === 'يوم' ? t('units.day') : s.unit === 'ساعة' ? t('units.hour') : s.unit === TOTAL_UNIT ? t('units.total') : t('units.session')}
                 </span>
               </span>
             ))}

@@ -16313,6 +16313,14 @@ var migrations = [
 			} catch {}
 			db.exec("UPDATE user_branches SET updated_at = created_at WHERE updated_at IS NULL;");
 		}
+	},
+	{
+		name: "053_service_total_price",
+		up: (db) => {
+			try {
+				db.exec("ALTER TABLE service_definitions ADD COLUMN price_total REAL;");
+			} catch {}
+		}
 	}
 ];
 function runMigrations(db) {
@@ -22735,6 +22743,13 @@ function applyCloudTombstones(db, cloudTombstones) {
 	}
 }
 //#endregion
+//#region src/types/index.ts
+/**
+* The one-off, whole-course billing unit. Referenced by name from both processes so the string
+* literal never drifts between the schema, the billing rules and the UI.
+*/
+var TOTAL_UNIT = "إجمالي";
+//#endregion
 //#region electron/ipc/installmentsIPC.ts
 /** Arabic month names in calendar order — the same labels `payments.month` stores. */
 var ARABIC_MONTHS$1 = [
@@ -22800,6 +22815,81 @@ function statusFor(amount, paid) {
 	return "partial";
 }
 /**
+* The fee a plan is built from: the price of the services the student is actually enrolled in
+* (A1 at 10,000 → a plan for 10,000). A plan scoped to one enrollment uses just that
+* enrollment's price; an unscoped plan covers every total-priced enrollment.
+*
+* Only 'إجمالي' (whole-course) enrollments count. Splitting a recurring month/day/hour rate into
+* instalments is meaningless — there is no final figure to divide — so a plan is built from the
+* fixed course fees alone.
+*
+* This is the single source of the plan's amount — the fee is never typed in independently of
+* what the student is enrolled in, which is what let the two drift apart and double-charge.
+*/
+function enrolledFeeFor(db, studentId, serviceId) {
+	const row = serviceId ? db.prepare("SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ? AND id = ?").get(studentId, serviceId) : db.prepare("SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ? AND unit = ?").get(studentId, TOTAL_UNIT);
+	return round2(Number(row?.s ?? 0));
+}
+/** True when the student has at least one whole-course enrollment an instalment plan could split. */
+function hasPlannableEnrollment(db, studentId) {
+	const row = db.prepare("SELECT COUNT(*) AS c FROM student_services WHERE student_id = ? AND unit = ? AND price > 0").get(studentId, TOTAL_UNIT);
+	return Number(row?.c ?? 0) > 0;
+}
+/**
+* Which enrollments are billed by an instalment plan rather than by monthly generation.
+*
+* Returns student_id → covered enrollment ids, where the `null` member means "this student's
+* plan is unscoped". `payments:generate` consults this so a planned fee is charged once, as the
+* plan — never a second time as a monthly service row.
+*/
+function loadPlanCoverage(db) {
+	const rows = db.prepare("SELECT DISTINCT student_id, service_id FROM student_installments").all();
+	const coverage = /* @__PURE__ */ new Map();
+	for (const row of rows) {
+		if (!coverage.has(row.student_id)) coverage.set(row.student_id, /* @__PURE__ */ new Set());
+		coverage.get(row.student_id).add(row.service_id);
+	}
+	return coverage;
+}
+/**
+* True when this enrollment's fee is already billed through the student's instalment plan.
+*
+* An UNSCOPED plan covers only the whole-course ('إجمالي') enrollments, because those are the
+* only ones `enrolledFeeFor` puts into the plan total. Letting it cover recurring enrollments
+* too would suppress their monthly charge without ever having billed them inside the plan — the
+* subscription would silently stop being invoiced.
+*/
+function isCoveredByPlan(coverage, studentId, enrollmentId, enrollmentUnit) {
+	const covered = coverage.get(studentId);
+	if (!covered) return false;
+	if (covered.has(enrollmentId)) return true;
+	return covered.has(null) && enrollmentUnit === "إجمالي";
+}
+/**
+* Removes monthly service charges that the new plan now bills instead, so the family is not
+* asked for the fee twice. Only untouched rows go: anything with money already recorded
+* against it is left alone (deleting it would erase a real collection), and so is the separate
+* "حصص إضافية" extra-sessions charge, which is genuinely on top of the plan.
+*/
+function clearDuplicateServiceCharges(db, studentId, serviceId) {
+	const rows = serviceId ? db.prepare(`
+        SELECT p.id FROM payments p
+        WHERE p.student_id = ? AND p.service_id = ? AND p.paid = 0 AND p.service != 'حصص إضافية'
+          AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.payment_id = p.id)
+      `).all(studentId, serviceId) : db.prepare(`
+        SELECT p.id FROM payments p
+        JOIN student_services ss ON ss.id = p.service_id
+        WHERE p.student_id = ? AND ss.unit = ? AND p.paid = 0 AND p.service != 'حصص إضافية'
+          AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.payment_id = p.id)
+      `).all(studentId, TOTAL_UNIT);
+	if (rows.length === 0) return 0;
+	const ids = rows.map((r) => r.id);
+	const placeholders = ids.map(() => "?").join(",");
+	db.prepare(`DELETE FROM payments WHERE id IN (${placeholders})`).run(...ids);
+	for (const id of ids) recordLocalTombstone(db, "payments", id);
+	return ids.length;
+}
+/**
 * Rebuilds a student's instalment plan. Any amounts already collected are preserved by
 * re-applying the previous plan's total paid, oldest instalment first — so re-planning after a
 * price change never silently wipes a family's payment history.
@@ -22808,6 +22898,7 @@ function regenerateInstallments(db, args) {
 	const { student_id, count, total, start_date } = args;
 	const service_id = args.service_id ?? null;
 	const now = (/* @__PURE__ */ new Date()).toISOString();
+	const duplicatesRemoved = clearDuplicateServiceCharges(db, student_id, service_id);
 	const previouslyPaid = Number(db.prepare("SELECT COALESCE(SUM(paid), 0) AS s FROM student_installments WHERE student_id = ?").get(student_id).s ?? 0);
 	for (const row of db.prepare("SELECT id FROM student_installments WHERE student_id = ?").all(student_id)) recordLocalTombstone(db, "student_installments", row.id);
 	db.prepare("DELETE FROM student_installments WHERE student_id = ?").run(student_id);
@@ -22830,7 +22921,10 @@ function regenerateInstallments(db, args) {
         updated_at = ?, synced = 0
     WHERE id = ?
   `).run(count, total, start_date, now, student_id);
-	return { created: schedule.length };
+	return {
+		created: schedule.length,
+		duplicatesRemoved
+	};
 }
 /** Validates and normalises the plan inputs shared by students:add/update and installments:plan. */
 function normalizePlanInput(src) {
@@ -22847,6 +22941,21 @@ function normalizePlanInput(src) {
 	};
 }
 /**
+* Same as `normalizePlanInput`, but fills a missing/blank total from what the student is
+* actually enrolled in. Callers can therefore say "split this student's fee over 4" without
+* restating the price, which is what keeps the plan and the service price from drifting apart.
+*/
+function resolvePlanInput(db, studentId, src) {
+	const supplied = src.total ?? src.installment_total;
+	const hasTotal = supplied !== void 0 && supplied !== null && supplied !== "" && Number(supplied) > 0;
+	const total = hasTotal ? Number(supplied) : enrolledFeeFor(db, studentId, src.service_id ?? null);
+	if (!hasTotal && total <= 0) throw new Error("خطة الدفعات تتطلب خدمة بنظام السعر الإجمالي — غيّر وحدة الخدمة إلى \"إجمالي\" أو أدخل مبلغاً مخصصاً / An instalment plan needs a service billed as a total — set the service unit to \"total\" or enter a custom amount");
+	return normalizePlanInput({
+		...src,
+		total
+	});
+}
+/**
 * Computes a schedule WITHOUT persisting it — the student form's live preview, so the admin sees
 * exactly which months get charged what before saving. Shares `buildInstallmentSchedule` with the
 * real plan, so the preview can never drift from what actually gets written.
@@ -22854,10 +22963,31 @@ function normalizePlanInput(src) {
 ipcMain.handle("installments:preview", async (_event, args) => {
 	try {
 		checkAuth$10();
-		const plan = normalizePlanInput(args);
+		const plan = args?.student_id ? resolvePlanInput(getDb(), Number(args.student_id), args) : normalizePlanInput(args);
 		return buildInstallmentSchedule(plan.total, plan.count, plan.start_date);
 	} catch (error) {
 		throw new Error(error.message || "Failed to preview instalment schedule");
+	}
+});
+/**
+* The fee a plan would be built from, per enrolled service — what the student form shows as
+* "the plan covers this much, taken from the service price".
+*/
+ipcMain.handle("installments:enrolledFee", async (_event, { student_id }) => {
+	try {
+		checkAuth$10();
+		const db = getDb();
+		if (!student_id) throw new Error("Student ID is required");
+		const services = db.prepare("SELECT id, service, unit, price FROM student_services WHERE student_id = ? ORDER BY id ASC").all(student_id);
+		return {
+			total: enrolledFeeFor(db, Number(student_id)),
+			services: services.filter((s) => s.unit === TOTAL_UNIT),
+			recurringServices: services.filter((s) => s.unit !== TOTAL_UNIT),
+			plannable: hasPlannableEnrollment(db, Number(student_id))
+		};
+	} catch (error) {
+		console.error("Failed to resolve enrolled fee:", error);
+		throw new Error(error.message || "Failed to resolve enrolled fee");
 	}
 });
 ipcMain.handle("installments:plan", async (_event, args) => {
@@ -22867,8 +22997,11 @@ ipcMain.handle("installments:plan", async (_event, args) => {
 		const student_id = Number(args?.student_id);
 		if (!student_id) throw new Error("Student ID is required");
 		if (!db.prepare("SELECT id FROM students WHERE id = ?").get(student_id)) throw new Error("الطالب غير موجود / Student not found");
-		const plan = normalizePlanInput(args);
-		let result = { created: 0 };
+		const plan = resolvePlanInput(db, student_id, args);
+		let result = {
+			created: 0,
+			duplicatesRemoved: 0
+		};
 		db.transaction(() => {
 			result = regenerateInstallments(db, {
 				student_id,
@@ -22879,6 +23012,7 @@ ipcMain.handle("installments:plan", async (_event, args) => {
 		return {
 			ok: true,
 			...result,
+			total: plan.total,
 			installments: db.prepare("SELECT * FROM student_installments WHERE student_id = ? ORDER BY seq ASC").all(student_id)
 		};
 	} catch (error) {
@@ -23185,7 +23319,7 @@ ipcMain.handle("students:add", async (_event, studentInput) => {
 			}
 			if (studentInput.installments_count) regenerateInstallments(db, {
 				student_id: studentId,
-				...normalizePlanInput({
+				...resolvePlanInput(db, studentId, {
 					count: studentInput.installments_count,
 					total: studentInput.installment_total,
 					start_date: studentInput.installment_start_date || reg_date
@@ -23311,9 +23445,9 @@ ipcMain.handle("students:update", async (_event, { id, patch }) => {
             WHERE id = ?
           `).run(now, id);
 			} else {
-				const plan = normalizePlanInput({
+				const plan = resolvePlanInput(db, Number(id), {
 					count: patch.installments_count,
-					total: patch.installment_total ?? student.installment_total,
+					total: patch.installment_total,
 					start_date: patch.installment_start_date ?? student.installment_start_date ?? student.reg_date
 				});
 				regenerateInstallments(db, {
@@ -23594,7 +23728,7 @@ ipcMain.handle("payments:get", async (_event, { month, year }) => {
 			return count;
 		};
 		const computeExpectedQuantity = (p) => {
-			if (p.unit === "شهر") return 1;
+			if (p.unit === "شهر" || p.unit === "إجمالي") return 1;
 			let lessonDays = [];
 			try {
 				lessonDays = JSON.parse(p.service_lesson_days || "[]");
@@ -23687,8 +23821,11 @@ ipcMain.handle("payments:generate", async (_event, { month, year }) => {
     `).all();
 		let createdCount = 0;
 		let updatedCount = 0;
+		let planSkippedCount = 0;
 		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const planCoverage = loadPlanCoverage(db);
 		const checkStmt = db.prepare("SELECT id FROM payments WHERE student_id = ? AND service_id = ? AND month = ? AND year = ?");
+		const checkTotalStmt = db.prepare("SELECT id FROM payments WHERE student_id = ? AND service_id = ?");
 		const checkExtraStmt = db.prepare(`SELECT id FROM payments WHERE student_id = ? AND month = ? AND year = ? AND service = 'حصص إضافية'`);
 		const insertStmt = db.prepare(`
       INSERT INTO payments (
@@ -23707,6 +23844,8 @@ ipcMain.handle("payments:generate", async (_event, { month, year }) => {
     `);
 		db.transaction(() => {
 			for (const enrollment of activeEnrollments) {
+				const coveredByPlan = isCoveredByPlan(planCoverage, enrollment.student_id, enrollment.id, enrollment.unit);
+				if (coveredByPlan) planSkippedCount++;
 				const monthIndex = [
 					"يناير",
 					"فبراير",
@@ -23730,8 +23869,8 @@ ipcMain.handle("payments:generate", async (_event, { month, year }) => {
 					const row = billableAttendanceStmt.get(enrollment.student_id, monthStartStr, monthEndStr, enrollment.service);
 					return Number(row?.cnt) || 0;
 				};
-				const existing = checkStmt.get(enrollment.student_id, enrollment.id, month, year);
-				if (existing && (enrollment.unit === "يوم" || enrollment.unit === "ساعة")) {
+				const existing = enrollment.unit === "إجمالي" ? checkTotalStmt.get(enrollment.student_id, enrollment.id) : checkStmt.get(enrollment.student_id, enrollment.id, month, year);
+				if (existing && !coveredByPlan && (enrollment.unit === "يوم" || enrollment.unit === "ساعة")) {
 					const current = db.prepare("SELECT * FROM payments WHERE id = ?").get(existing.id);
 					const newQuantity = countBillableAttendance();
 					if (current && current.quantity !== newQuantity) {
@@ -23743,9 +23882,9 @@ ipcMain.handle("payments:generate", async (_event, { month, year }) => {
 						updatedCount++;
 					}
 				}
-				if (!existing) {
+				if (!existing && !coveredByPlan) {
 					let quantity;
-					if (enrollment.unit === "شهر") quantity = 1;
+					if (enrollment.unit === "شهر" || enrollment.unit === "إجمالي") quantity = 1;
 					else if (enrollment.unit === "يوم") quantity = countBillableAttendance();
 					else if (enrollment.unit === "ساعة") quantity = countBillableAttendance();
 					else if (enrollment.unit === "جلسة") {
@@ -23796,7 +23935,8 @@ ipcMain.handle("payments:generate", async (_event, { month, year }) => {
 		})();
 		return {
 			created: createdCount,
-			updated: updatedCount
+			updated: updatedCount,
+			planSkipped: planSkippedCount
 		};
 	} catch (error) {
 		console.error("Failed to generate payments:", error);
@@ -31046,6 +31186,7 @@ var serviceDefinitionSchema = new Schema({
 	price_monthly: Number,
 	price_daily: Number,
 	price_hourly: Number,
+	price_total: Number,
 	created_at: String,
 	updated_at: String,
 	synced: Number
@@ -32300,14 +32441,14 @@ ipcMain.handle("serviceDefinitions:add", async (_event, input) => {
 	try {
 		requireAdmin();
 		const db = getDb();
-		const { name, price_monthly = null, price_daily = null, price_hourly = null } = input;
+		const { name, price_monthly = null, price_daily = null, price_hourly = null, price_total = null } = input;
 		if (!name?.trim()) throw new Error("الاسم مطلوب / Name is required");
-		if (price_monthly == null && price_daily == null && price_hourly == null) throw new Error("يجب تحديد سعر واحد على الأقل / At least one price is required");
+		if (price_monthly == null && price_daily == null && price_hourly == null && price_total == null) throw new Error("يجب تحديد سعر واحد على الأقل / At least one price is required");
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const result = db.prepare(`
-      INSERT INTO service_definitions (name, is_custom, price_monthly, price_daily, price_hourly, created_at, updated_at, synced)
-      VALUES (?, 1, ?, ?, ?, ?, ?, 0)
-    `).run(name.trim(), price_monthly, price_daily, price_hourly, now, now);
+      INSERT INTO service_definitions (name, is_custom, price_monthly, price_daily, price_hourly, price_total, created_at, updated_at, synced)
+      VALUES (?, 1, ?, ?, ?, ?, ?, ?, 0)
+    `).run(name.trim(), price_monthly, price_daily, price_hourly, price_total, now, now);
 		return db.prepare("SELECT * FROM service_definitions WHERE id = ?").get(Number(result.lastInsertRowid));
 	} catch (error) {
 		throw new Error(error.message || "Failed to add service definition");
@@ -32323,9 +32464,10 @@ ipcMain.handle("serviceDefinitions:update", async (_event, { id, patch }) => {
 		const price_monthly = patch.price_monthly !== void 0 ? patch.price_monthly : svc.price_monthly;
 		const price_daily = patch.price_daily !== void 0 ? patch.price_daily : svc.price_daily;
 		const price_hourly = patch.price_hourly !== void 0 ? patch.price_hourly : svc.price_hourly;
+		const price_total = patch.price_total !== void 0 ? patch.price_total : svc.price_total;
 		db.prepare(`
-      UPDATE service_definitions SET name = ?, price_monthly = ?, price_daily = ?, price_hourly = ?, updated_at = ?, synced = 0 WHERE id = ?
-    `).run(name, price_monthly, price_daily, price_hourly, (/* @__PURE__ */ new Date()).toISOString(), id);
+      UPDATE service_definitions SET name = ?, price_monthly = ?, price_daily = ?, price_hourly = ?, price_total = ?, updated_at = ?, synced = 0 WHERE id = ?
+    `).run(name, price_monthly, price_daily, price_hourly, price_total, (/* @__PURE__ */ new Date()).toISOString(), id);
 		return db.prepare("SELECT * FROM service_definitions WHERE id = ?").get(id);
 	} catch (error) {
 		throw new Error(error.message || "Failed to update service definition");

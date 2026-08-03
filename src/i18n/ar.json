@@ -69,7 +69,8 @@
       "month": "شهر",
       "day": "يوم",
       "hour": "ساعة",
-      "session": "جلسة"
+      "session": "جلسة",
+      "total": "إجمالي"
     },
     "student_name": "اسم الطالب",
     "guardian": "ولي الأمر",

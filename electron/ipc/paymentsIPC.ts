@@ -3,6 +3,7 @@ import { getDb } from '../db/connection.js'
 import { getCurrentUser } from './authIPC.js'
 import { requireAdmin } from './_guard.js'
 import { loadPlanCoverage, isCoveredByPlan } from './installmentsIPC.js'
+import { TOTAL_UNIT } from '../../src/types/index.js'
 import type { Payment, PaymentStatus } from '../../src/types/index.js'
 
 // Pure function for payment calculations (exported for unit testing)
@@ -90,7 +91,8 @@ ipcMain.handle('payments:get', async (_event, { month, year }) => {
     }
 
     const computeExpectedQuantity = (p: Payment & { service_lesson_days: string | null }): number => {
-      if (p.unit === 'شهر') return 1
+      // Flat charges: a month's subscription, or the whole-course fee — one either way.
+      if (p.unit === 'شهر' || p.unit === TOTAL_UNIT) return 1
       // 'يوم' / 'ساعة' / 'جلسة' — expected = all lesson-day occurrences in the calendar month
       let lessonDays: number[] = []
       try { lessonDays = JSON.parse(p.service_lesson_days || '[]') } catch { /* no schedule set */ }
@@ -226,6 +228,9 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
     const planCoverage = loadPlanCoverage(db)
 
     const checkStmt = db.prepare('SELECT id FROM payments WHERE student_id = ? AND service_id = ? AND month = ? AND year = ?')
+    // A total-priced enrollment is a one-off course fee, so it must not be re-raised every
+    // month: it counts as already charged if a row exists for it in ANY period, not just this one.
+    const checkTotalStmt = db.prepare('SELECT id FROM payments WHERE student_id = ? AND service_id = ?')
     const checkExtraStmt = db.prepare(`SELECT id FROM payments WHERE student_id = ? AND month = ? AND year = ? AND service = 'حصص إضافية'`)
     const insertStmt = db.prepare(`
       INSERT INTO payments (
@@ -253,7 +258,7 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
         // Covered by an instalment plan → the plan is this enrollment's billing, so no monthly
         // service row is created for it. The extra-sessions charge further down is still
         // generated: those are on top of the agreed fee, not part of it.
-        const coveredByPlan = isCoveredByPlan(planCoverage, enrollment.student_id, enrollment.id)
+        const coveredByPlan = isCoveredByPlan(planCoverage, enrollment.student_id, enrollment.id, enrollment.unit)
         if (coveredByPlan) planSkippedCount++
 
         const arabicMonthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
@@ -269,7 +274,9 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
           return Number(row?.cnt) || 0
         }
 
-        const existing = checkStmt.get(enrollment.student_id, enrollment.id, month, year) as any
+        const existing = enrollment.unit === TOTAL_UNIT
+          ? checkTotalStmt.get(enrollment.student_id, enrollment.id) as any
+          : checkStmt.get(enrollment.student_id, enrollment.id, month, year) as any
         if (existing && !coveredByPlan && (enrollment.unit === 'يوم' || enrollment.unit === 'ساعة')) {
           // Attendance-driven units: refresh the quantity on regeneration so charges track
           // attendance recorded after the row was first created. Paid amounts are preserved;
@@ -288,7 +295,8 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
         if (!existing && !coveredByPlan) {
           // Determine quantity based on unit type
           let quantity: number
-          if (enrollment.unit === 'شهر') {
+          if (enrollment.unit === 'شهر' || enrollment.unit === TOTAL_UNIT) {
+            // Monthly = one month's subscription; total = the whole course fee, charged once.
             quantity = 1
           } else if (enrollment.unit === 'يوم') {
             // charge only days the student actually attended or was absent without excuse

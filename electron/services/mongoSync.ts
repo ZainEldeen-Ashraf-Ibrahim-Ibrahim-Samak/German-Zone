@@ -450,6 +450,7 @@ const serviceDefinitionSchema = new Schema({
   price_monthly: Number,
   price_daily: Number,
   price_hourly: Number,
+  price_total: Number,
   created_at: String,
   updated_at: String,
   synced: Number

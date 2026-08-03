@@ -19,6 +19,8 @@ export default function ServiceDefinitions() {
   const [priceMonthly, setPriceMonthly] = useState('')
   const [priceDaily, setPriceDaily] = useState('')
   const [priceHourly, setPriceHourly] = useState('')
+  // A single fee for the whole course — the only pricing an instalment plan can split.
+  const [priceTotal, setPriceTotal] = useState('')
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
@@ -30,7 +32,7 @@ export default function ServiceDefinitions() {
   useEffect(() => { window.api.teachers.list({}).then(setAllTeachers).catch(() => { }) }, [])
 
   const openCreate = () => {
-    setEditing(null); setName(''); setPriceMonthly(''); setPriceDaily(''); setPriceHourly(''); setFormError('')
+    setEditing(null); setName(''); setPriceMonthly(''); setPriceDaily(''); setPriceHourly(''); setPriceTotal(''); setFormError('')
     setSelectedTeacherIds([])
     setIsFormOpen(true)
   }
@@ -39,6 +41,7 @@ export default function ServiceDefinitions() {
     setPriceMonthly(s.price_monthly != null ? String(s.price_monthly) : '')
     setPriceDaily(s.price_daily != null ? String(s.price_daily) : '')
     setPriceHourly(s.price_hourly != null ? String(s.price_hourly) : '')
+    setPriceTotal(s.price_total != null ? String(s.price_total) : '')
     setFormError('')
     window.api.serviceTeachers.list(s.id).then((list: Teacher[]) => setSelectedTeacherIds(list.map((t) => t.id))).catch(() => setSelectedTeacherIds([]))
     setIsFormOpen(true)
@@ -57,6 +60,7 @@ export default function ServiceDefinitions() {
       price_monthly: priceMonthly ? Number(priceMonthly) : null,
       price_daily: priceDaily ? Number(priceDaily) : null,
       price_hourly: priceHourly ? Number(priceHourly) : null,
+      price_total: priceTotal ? Number(priceTotal) : null,
     }
     const result = editing ? await updateService(editing.id, payload) : await addService(payload)
     if (result) {
@@ -100,6 +104,7 @@ export default function ServiceDefinitions() {
                   {s.price_monthly != null && <span>{isAr ? 'شهري:' : 'Monthly:'} {s.price_monthly} EGP</span>}
                   {s.price_daily != null && <span>{isAr ? 'يومي:' : 'Daily:'} {s.price_daily} EGP</span>}
                   {s.price_hourly != null && <span>{isAr ? 'ساعة:' : 'Hourly:'} {s.price_hourly} EGP</span>}
+                  {s.price_total != null && <span className="font-semibold text-primary">{isAr ? 'إجمالي:' : 'Total:'} {s.price_total} EGP</span>}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -125,6 +130,15 @@ export default function ServiceDefinitions() {
           <Input label={isAr ? 'السعر الشهري (جنيه)' : 'Monthly Price (EGP)'} type="number" value={priceMonthly} onChange={(e) => setPriceMonthly(e.target.value)} min={0} />
           <Input label={isAr ? 'السعر اليومي (جنيه)' : 'Daily Price (EGP)'} type="number" value={priceDaily} onChange={(e) => setPriceDaily(e.target.value)} min={0} />
           <Input label={isAr ? 'السعر بالساعة (جنيه)' : 'Hourly Price (EGP)'} type="number" value={priceHourly} onChange={(e) => setPriceHourly(e.target.value)} min={0} />
+
+          <div className="space-y-1">
+            <Input label={isAr ? 'السعر الإجمالي للكورس (جنيه)' : 'Total Course Price (EGP)'} type="number" value={priceTotal} onChange={(e) => setPriceTotal(e.target.value)} min={0} />
+            <p className="text-[11px] text-slate-400">
+              {isAr
+                ? 'رسوم ثابتة للكورس بالكامل، تُحصَّل مرة واحدة — وهي الوحيدة التي يمكن تقسيمها على دفعات.'
+                : 'A fixed fee for the whole course, charged once — the only pricing that can be split into instalments.'}
+            </p>
+          </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-500">{isAr ? 'المعلمون المؤهلون لهذه الخدمة' : 'Teachers qualified for this service'}</label>

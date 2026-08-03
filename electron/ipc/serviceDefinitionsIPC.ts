@@ -16,16 +16,16 @@ ipcMain.handle('serviceDefinitions:add', async (_event, input) => {
   try {
     requireAdmin()
     const db = getDb()
-    const { name, price_monthly = null, price_daily = null, price_hourly = null } = input
+    const { name, price_monthly = null, price_daily = null, price_hourly = null, price_total = null } = input
     if (!name?.trim()) throw new Error('الاسم مطلوب / Name is required')
-    if (price_monthly == null && price_daily == null && price_hourly == null) {
+    if (price_monthly == null && price_daily == null && price_hourly == null && price_total == null) {
       throw new Error('يجب تحديد سعر واحد على الأقل / At least one price is required')
     }
     const now = new Date().toISOString()
     const result = db.prepare(`
-      INSERT INTO service_definitions (name, is_custom, price_monthly, price_daily, price_hourly, created_at, updated_at, synced)
-      VALUES (?, 1, ?, ?, ?, ?, ?, 0)
-    `).run(name.trim(), price_monthly, price_daily, price_hourly, now, now)
+      INSERT INTO service_definitions (name, is_custom, price_monthly, price_daily, price_hourly, price_total, created_at, updated_at, synced)
+      VALUES (?, 1, ?, ?, ?, ?, ?, ?, 0)
+    `).run(name.trim(), price_monthly, price_daily, price_hourly, price_total, now, now)
     return db.prepare('SELECT * FROM service_definitions WHERE id = ?').get(Number(result.lastInsertRowid))
   } catch (error: any) {
     throw new Error(error.message || 'Failed to add service definition')
@@ -42,9 +42,10 @@ ipcMain.handle('serviceDefinitions:update', async (_event, { id, patch }) => {
     const price_monthly = patch.price_monthly !== undefined ? patch.price_monthly : svc.price_monthly
     const price_daily = patch.price_daily !== undefined ? patch.price_daily : svc.price_daily
     const price_hourly = patch.price_hourly !== undefined ? patch.price_hourly : svc.price_hourly
+    const price_total = patch.price_total !== undefined ? patch.price_total : svc.price_total
     db.prepare(`
-      UPDATE service_definitions SET name = ?, price_monthly = ?, price_daily = ?, price_hourly = ?, updated_at = ?, synced = 0 WHERE id = ?
-    `).run(name, price_monthly, price_daily, price_hourly, new Date().toISOString(), id)
+      UPDATE service_definitions SET name = ?, price_monthly = ?, price_daily = ?, price_hourly = ?, price_total = ?, updated_at = ?, synced = 0 WHERE id = ?
+    `).run(name, price_monthly, price_daily, price_hourly, price_total, new Date().toISOString(), id)
     return db.prepare('SELECT * FROM service_definitions WHERE id = ?').get(id)
   } catch (error: any) {
     throw new Error(error.message || 'Failed to update service definition')

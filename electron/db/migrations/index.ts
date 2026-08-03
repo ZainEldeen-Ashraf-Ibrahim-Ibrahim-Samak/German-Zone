@@ -1490,6 +1490,16 @@ const migrations: Migration[] = [
       try { db.exec('ALTER TABLE user_branches ADD COLUMN updated_at TEXT;') } catch { /* already exists */ }
       db.exec('UPDATE user_branches SET updated_at = created_at WHERE updated_at IS NULL;')
     }
+  },
+  {
+    // A fourth way to price a service: a single total for the whole course ('إجمالي'), as
+    // opposed to a recurring month/day/hour rate. A total-priced enrollment is what an
+    // instalment plan splits — the fee is a fixed sum with an end, so "pay it over 4" is
+    // meaningful, which it is not for an open-ended monthly subscription.
+    name: '053_service_total_price',
+    up: (db) => {
+      try { db.exec('ALTER TABLE service_definitions ADD COLUMN price_total REAL;') } catch { /* already exists */ }
+    }
   }
 ]
 

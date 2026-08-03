@@ -69,7 +69,8 @@
       "month": "Month",
       "day": "Day",
       "hour": "Hour",
-      "session": "Session"
+      "session": "Session",
+      "total": "Total"
     },
     "student_name": "Student Name",
     "guardian": "Guardian",

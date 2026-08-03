@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { requireAdmin, checkAuth } from './_guard.js'
 import { recordLocalTombstone } from '../services/tombstones.js'
+import { TOTAL_UNIT } from '../../src/types/index.js'
 
 /** Arabic month names in calendar order — the same labels `payments.month` stores. */
 const ARABIC_MONTHS = [
@@ -69,7 +70,11 @@ function statusFor(amount: number, paid: number): 'unpaid' | 'partial' | 'paid' 
 /**
  * The fee a plan is built from: the price of the services the student is actually enrolled in
  * (A1 at 10,000 → a plan for 10,000). A plan scoped to one enrollment uses just that
- * enrollment's price; an unscoped plan covers the student's whole enrollment fee.
+ * enrollment's price; an unscoped plan covers every total-priced enrollment.
+ *
+ * Only 'إجمالي' (whole-course) enrollments count. Splitting a recurring month/day/hour rate into
+ * instalments is meaningless — there is no final figure to divide — so a plan is built from the
+ * fixed course fees alone.
  *
  * This is the single source of the plan's amount — the fee is never typed in independently of
  * what the student is enrolled in, which is what let the two drift apart and double-charge.
@@ -78,16 +83,23 @@ export function enrolledFeeFor(db: any, studentId: number, serviceId?: number | 
   const row = serviceId
     ? db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ? AND id = ?')
         .get(studentId, serviceId)
-    : db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ?')
-        .get(studentId)
+    : db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ? AND unit = ?')
+        .get(studentId, TOTAL_UNIT)
   return round2(Number(row?.s ?? 0))
+}
+
+/** True when the student has at least one whole-course enrollment an instalment plan could split. */
+export function hasPlannableEnrollment(db: any, studentId: number): boolean {
+  const row = db.prepare('SELECT COUNT(*) AS c FROM student_services WHERE student_id = ? AND unit = ? AND price > 0')
+    .get(studentId, TOTAL_UNIT)
+  return Number(row?.c ?? 0) > 0
 }
 
 /**
  * Which enrollments are billed by an instalment plan rather than by monthly generation.
  *
- * Returns student_id → covered enrollment ids, where the `null` member means "every enrollment
- * of this student". `payments:generate` consults this so a planned fee is charged once, as the
+ * Returns student_id → covered enrollment ids, where the `null` member means "this student's
+ * plan is unscoped". `payments:generate` consults this so a planned fee is charged once, as the
  * plan — never a second time as a monthly service row.
  */
 export function loadPlanCoverage(db: any): Map<number, Set<number | null>> {
@@ -103,15 +115,24 @@ export function loadPlanCoverage(db: any): Map<number, Set<number | null>> {
   return coverage
 }
 
-/** True when this enrollment's fee is already billed through the student's instalment plan. */
+/**
+ * True when this enrollment's fee is already billed through the student's instalment plan.
+ *
+ * An UNSCOPED plan covers only the whole-course ('إجمالي') enrollments, because those are the
+ * only ones `enrolledFeeFor` puts into the plan total. Letting it cover recurring enrollments
+ * too would suppress their monthly charge without ever having billed them inside the plan — the
+ * subscription would silently stop being invoiced.
+ */
 export function isCoveredByPlan(
   coverage: Map<number, Set<number | null>>,
   studentId: number,
-  enrollmentId: number
+  enrollmentId: number,
+  enrollmentUnit: string
 ): boolean {
   const covered = coverage.get(studentId)
   if (!covered) return false
-  return covered.has(null) || covered.has(enrollmentId)
+  if (covered.has(enrollmentId)) return true
+  return covered.has(null) && enrollmentUnit === TOTAL_UNIT
 }
 
 /**
@@ -121,6 +142,8 @@ export function isCoveredByPlan(
  * "حصص إضافية" extra-sessions charge, which is genuinely on top of the plan.
  */
 function clearDuplicateServiceCharges(db: any, studentId: number, serviceId: number | null): number {
+  // An unscoped plan only takes over the whole-course enrollments (see isCoveredByPlan), so
+  // only their charges are retired — a recurring subscription keeps its monthly invoice.
   const rows = (serviceId
     ? db.prepare(`
         SELECT p.id FROM payments p
@@ -129,9 +152,10 @@ function clearDuplicateServiceCharges(db: any, studentId: number, serviceId: num
       `).all(studentId, serviceId)
     : db.prepare(`
         SELECT p.id FROM payments p
-        WHERE p.student_id = ? AND p.paid = 0 AND p.service != 'حصص إضافية'
+        JOIN student_services ss ON ss.id = p.service_id
+        WHERE p.student_id = ? AND ss.unit = ? AND p.paid = 0 AND p.service != 'حصص إضافية'
           AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.payment_id = p.id)
-      `).all(studentId)) as { id: number }[]
+      `).all(studentId, TOTAL_UNIT)) as { id: number }[]
 
   if (rows.length === 0) return 0
 
@@ -233,8 +257,8 @@ export function resolvePlanInput(
 
   if (!hasTotal && total <= 0) {
     throw new Error(
-      'لا يمكن تحديد قيمة الخطة — أضف خدمة لها سعر أو أدخل الإجمالي يدوياً / ' +
-      'Cannot determine the plan amount — enroll a priced service or enter the total manually'
+      'خطة الدفعات تتطلب خدمة بنظام السعر الإجمالي — غيّر وحدة الخدمة إلى "إجمالي" أو أدخل مبلغاً مخصصاً / ' +
+      'An instalment plan needs a service billed as a total — set the service unit to "total" or enter a custom amount'
     )
   }
 
@@ -278,7 +302,13 @@ ipcMain.handle('installments:enrolledFee', async (_event, { student_id }) => {
       'SELECT id, service, unit, price FROM student_services WHERE student_id = ? ORDER BY id ASC'
     ).all(student_id) as { id: number; service: string; unit: string; price: number }[]
 
-    return { total: enrolledFeeFor(db, Number(student_id)), services }
+    return {
+      total: enrolledFeeFor(db, Number(student_id)),
+      // Only the whole-course enrollments feed a plan; the rest stay on recurring billing.
+      services: services.filter((s) => s.unit === TOTAL_UNIT),
+      recurringServices: services.filter((s) => s.unit !== TOTAL_UNIT),
+      plannable: hasPlannableEnrollment(db, Number(student_id)),
+    }
   } catch (error: any) {
     console.error('Failed to resolve enrolled fee:', error)
     throw new Error(error.message || 'Failed to resolve enrolled fee')
