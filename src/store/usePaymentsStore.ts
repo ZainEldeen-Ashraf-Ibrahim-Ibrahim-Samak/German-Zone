@@ -19,6 +19,8 @@ interface PaymentsState {
   setPeriod: (month: string, year: number) => void
   fetchPayments: () => Promise<void>
   generatePayments: () => Promise<number>
+  /** Enrollments the last generate skipped because their fee is billed by an instalment plan. */
+  lastPlanSkipped: number
   updatePayment: (args: {
     id: number
     quantity?: number
@@ -58,6 +60,7 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
   summary: { totalInvoiced: 0, totalCollected: 0, arrears: 0 },
   isLoading: false,
   error: null,
+  lastPlanSkipped: 0,
   currentMonth: defaultMonth,
   currentYear: defaultYear,
 
@@ -91,6 +94,9 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
       const year = get().currentYear
       const result = await window.api.payments.generate({ month, year })
       await get().fetchPayments()
+      // Enrollments billed by an instalment plan are deliberately not generated here — record
+      // how many, so the UI can explain the gap instead of it looking like a failure.
+      set({ lastPlanSkipped: result.planSkipped ?? 0 })
       return result.created
     } catch (err: any) {
       const errorMsg = friendlyError(err, 'Failed to generate payments')

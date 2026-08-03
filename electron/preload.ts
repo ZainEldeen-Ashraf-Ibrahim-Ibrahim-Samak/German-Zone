@@ -97,10 +97,16 @@ const api = {
     list: (args?: { student_id?: number; month?: string; year?: number; from?: string; to?: string; status?: string; branch_id?: number }) =>
       ipcRenderer.invoke('installments:list', args ?? {}),
     calendar: (args: { year: number; student_id?: number | null }) => ipcRenderer.invoke('installments:calendar', args),
-    preview: (args: { count: number; total: number; start_date: string }) =>
+    preview: (args: { count: number; total?: number; start_date: string; student_id?: number }) =>
       ipcRenderer.invoke('installments:preview', args) as Promise<
         { seq: number; due_date: string; month: string; year: number; amount: number }[]
       >,
+    /** The fee a plan would be built from — the price of the student's enrolled services. */
+    enrolledFee: (args: { student_id: number }) =>
+      ipcRenderer.invoke('installments:enrolledFee', args) as Promise<{
+        total: number
+        services: { id: number; service: string; unit: string; price: number }[]
+      }>,
     pay: (args: { id: number; amount: number; payment_method_id?: number | null; paid_date?: string | null; notes?: string | null }) =>
       ipcRenderer.invoke('installments:pay', args),
     update: (args: { id: number; patch: { amount?: number; due_date?: string; notes?: string | null } }) =>

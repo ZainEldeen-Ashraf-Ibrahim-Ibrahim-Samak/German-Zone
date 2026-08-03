@@ -70,6 +70,7 @@ export default function MonthlyPayments() {
     deleteSelectedPayments,
     deleteAllPayments,
     clearError,
+    lastPlanSkipped,
   } = usePaymentsStore()
 
   const { user } = useAuthStore()
@@ -284,6 +285,16 @@ export default function MonthlyPayments() {
       {error && (
         <Alert variant="danger" title={t('error')} onClose={clearError}>
           {error}
+        </Alert>
+      )}
+
+      {/* Enrollments on an instalment plan are billed by that plan, so generation skips them on
+          purpose. Saying so keeps their absence from reading as a bug. */}
+      {lastPlanSkipped > 0 && (
+        <Alert variant="info">
+          {isAr
+            ? `${lastPlanSkipped} تسجيل يُحصَّل عبر خطة دفعات — لم تُضف كفاتورة شهرية حتى لا تُحتسب الرسوم مرتين. راجعها في صفحة "الدفعات".`
+            : `${lastPlanSkipped} enrollment(s) are billed by an instalment plan — no monthly charge was created for them, so the fee is not counted twice. See the Instalments page.`}
         </Alert>
       )}
 

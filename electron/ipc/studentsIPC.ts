@@ -3,7 +3,7 @@ import { getDb } from '../db/connection.js'
 import { requireAdmin } from './_guard.js'
 import { getCurrentUser } from './authIPC.js'
 import { getStudentStatement } from '../services/statementService.js'
-import { regenerateInstallments, normalizePlanInput } from './installmentsIPC.js'
+import { regenerateInstallments, resolvePlanInput } from './installmentsIPC.js'
 import { recordLocalTombstone } from '../services/tombstones.js'
 import type { Student } from '../../src/types/index.js'
 
@@ -185,8 +185,10 @@ ipcMain.handle('students:add', async (_event, studentInput) => {
 
       // Instalment plan: "this family pays over N instalments". Spreading it here (at
       // enrollment) is what keeps the schedule month-by-month rather than one lump of arrears.
+      // The amount defaults to the fee of the services just enrolled above, so the plan and the
+      // service price are the same number by construction.
       if (studentInput.installments_count) {
-        const plan = normalizePlanInput({
+        const plan = resolvePlanInput(db, studentId, {
           count: studentInput.installments_count,
           total: studentInput.installment_total,
           start_date: studentInput.installment_start_date || reg_date,
@@ -355,9 +357,11 @@ ipcMain.handle('students:update', async (_event, { id, patch }) => {
             WHERE id = ?
           `).run(now, id)
         } else {
-          const plan = normalizePlanInput({
+          // A blank total re-derives from the (possibly just-updated) enrollment prices, so
+          // changing a service price and re-saving re-splits the plan over the new fee.
+          const plan = resolvePlanInput(db, Number(id), {
             count: patch.installments_count,
-            total: patch.installment_total ?? student.installment_total,
+            total: patch.installment_total,
             start_date: patch.installment_start_date ?? student.installment_start_date ?? student.reg_date,
           })
           regenerateInstallments(db, { student_id: Number(id), ...plan })

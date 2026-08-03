@@ -67,6 +67,82 @@ function statusFor(amount: number, paid: number): 'unpaid' | 'partial' | 'paid' 
 }
 
 /**
+ * The fee a plan is built from: the price of the services the student is actually enrolled in
+ * (A1 at 10,000 → a plan for 10,000). A plan scoped to one enrollment uses just that
+ * enrollment's price; an unscoped plan covers the student's whole enrollment fee.
+ *
+ * This is the single source of the plan's amount — the fee is never typed in independently of
+ * what the student is enrolled in, which is what let the two drift apart and double-charge.
+ */
+export function enrolledFeeFor(db: any, studentId: number, serviceId?: number | null): number {
+  const row = serviceId
+    ? db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ? AND id = ?')
+        .get(studentId, serviceId)
+    : db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM student_services WHERE student_id = ?')
+        .get(studentId)
+  return round2(Number(row?.s ?? 0))
+}
+
+/**
+ * Which enrollments are billed by an instalment plan rather than by monthly generation.
+ *
+ * Returns student_id → covered enrollment ids, where the `null` member means "every enrollment
+ * of this student". `payments:generate` consults this so a planned fee is charged once, as the
+ * plan — never a second time as a monthly service row.
+ */
+export function loadPlanCoverage(db: any): Map<number, Set<number | null>> {
+  const rows = db.prepare(
+    'SELECT DISTINCT student_id, service_id FROM student_installments'
+  ).all() as { student_id: number; service_id: number | null }[]
+
+  const coverage = new Map<number, Set<number | null>>()
+  for (const row of rows) {
+    if (!coverage.has(row.student_id)) coverage.set(row.student_id, new Set())
+    coverage.get(row.student_id)!.add(row.service_id)
+  }
+  return coverage
+}
+
+/** True when this enrollment's fee is already billed through the student's instalment plan. */
+export function isCoveredByPlan(
+  coverage: Map<number, Set<number | null>>,
+  studentId: number,
+  enrollmentId: number
+): boolean {
+  const covered = coverage.get(studentId)
+  if (!covered) return false
+  return covered.has(null) || covered.has(enrollmentId)
+}
+
+/**
+ * Removes monthly service charges that the new plan now bills instead, so the family is not
+ * asked for the fee twice. Only untouched rows go: anything with money already recorded
+ * against it is left alone (deleting it would erase a real collection), and so is the separate
+ * "حصص إضافية" extra-sessions charge, which is genuinely on top of the plan.
+ */
+function clearDuplicateServiceCharges(db: any, studentId: number, serviceId: number | null): number {
+  const rows = (serviceId
+    ? db.prepare(`
+        SELECT p.id FROM payments p
+        WHERE p.student_id = ? AND p.service_id = ? AND p.paid = 0 AND p.service != 'حصص إضافية'
+          AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.payment_id = p.id)
+      `).all(studentId, serviceId)
+    : db.prepare(`
+        SELECT p.id FROM payments p
+        WHERE p.student_id = ? AND p.paid = 0 AND p.service != 'حصص إضافية'
+          AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.payment_id = p.id)
+      `).all(studentId)) as { id: number }[]
+
+  if (rows.length === 0) return 0
+
+  const ids = rows.map((r) => r.id)
+  const placeholders = ids.map(() => '?').join(',')
+  db.prepare(`DELETE FROM payments WHERE id IN (${placeholders})`).run(...ids)
+  for (const id of ids) recordLocalTombstone(db, 'payments', id)
+  return ids.length
+}
+
+/**
  * Rebuilds a student's instalment plan. Any amounts already collected are preserved by
  * re-applying the previous plan's total paid, oldest instalment first — so re-planning after a
  * price change never silently wipes a family's payment history.
@@ -74,10 +150,14 @@ function statusFor(amount: number, paid: number): 'unpaid' | 'partial' | 'paid' 
 export function regenerateInstallments(
   db: any,
   args: { student_id: number; count: number; total: number; start_date: string; service_id?: number | null }
-): { created: number } {
+): { created: number; duplicatesRemoved: number } {
   const { student_id, count, total, start_date } = args
   const service_id = args.service_id ?? null
   const now = new Date().toISOString()
+
+  // The plan takes over billing for the enrollments it covers, so any monthly service charge
+  // already generated for them is retired here — the fee is owed once, through the plan.
+  const duplicatesRemoved = clearDuplicateServiceCharges(db, student_id, service_id)
 
   const previouslyPaid = Number(
     (db.prepare('SELECT COALESCE(SUM(paid), 0) AS s FROM student_installments WHERE student_id = ?')
@@ -116,7 +196,7 @@ export function regenerateInstallments(
     WHERE id = ?
   `).run(count, total, start_date, now, student_id)
 
-  return { created: schedule.length }
+  return { created: schedule.length, duplicatesRemoved }
 }
 
 /** Validates and normalises the plan inputs shared by students:add/update and installments:plan. */
@@ -137,6 +217,30 @@ export function normalizePlanInput(src: any): { count: number; total: number; st
   return { count, total: round2(total), start_date }
 }
 
+/**
+ * Same as `normalizePlanInput`, but fills a missing/blank total from what the student is
+ * actually enrolled in. Callers can therefore say "split this student's fee over 4" without
+ * restating the price, which is what keeps the plan and the service price from drifting apart.
+ */
+export function resolvePlanInput(
+  db: any,
+  studentId: number,
+  src: any
+): { count: number; total: number; start_date: string } {
+  const supplied = src.total ?? src.installment_total
+  const hasTotal = supplied !== undefined && supplied !== null && supplied !== '' && Number(supplied) > 0
+  const total = hasTotal ? Number(supplied) : enrolledFeeFor(db, studentId, src.service_id ?? null)
+
+  if (!hasTotal && total <= 0) {
+    throw new Error(
+      'لا يمكن تحديد قيمة الخطة — أضف خدمة لها سعر أو أدخل الإجمالي يدوياً / ' +
+      'Cannot determine the plan amount — enroll a priced service or enter the total manually'
+    )
+  }
+
+  return normalizePlanInput({ ...src, total })
+}
+
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /**
@@ -147,11 +251,37 @@ export function normalizePlanInput(src: any): { count: number; total: number; st
 ipcMain.handle('installments:preview', async (_event, args) => {
   try {
     checkAuth()
-    const plan = normalizePlanInput(args)
+    // In edit mode the student already exists, so a blank total resolves from their enrollments
+    // exactly as it will on save. On a brand-new student the caller passes the total it has
+    // computed from the service rows still being filled in on the form.
+    const plan = args?.student_id
+      ? resolvePlanInput(getDb(), Number(args.student_id), args)
+      : normalizePlanInput(args)
     return buildInstallmentSchedule(plan.total, plan.count, plan.start_date)
   } catch (error: any) {
     // The preview runs on every keystroke; a half-typed plan is not an error worth logging.
     throw new Error(error.message || 'Failed to preview instalment schedule')
+  }
+})
+
+/**
+ * The fee a plan would be built from, per enrolled service — what the student form shows as
+ * "the plan covers this much, taken from the service price".
+ */
+ipcMain.handle('installments:enrolledFee', async (_event, { student_id }) => {
+  try {
+    checkAuth()
+    const db = getDb()
+    if (!student_id) throw new Error('Student ID is required')
+
+    const services = db.prepare(
+      'SELECT id, service, unit, price FROM student_services WHERE student_id = ? ORDER BY id ASC'
+    ).all(student_id) as { id: number; service: string; unit: string; price: number }[]
+
+    return { total: enrolledFeeFor(db, Number(student_id)), services }
+  } catch (error: any) {
+    console.error('Failed to resolve enrolled fee:', error)
+    throw new Error(error.message || 'Failed to resolve enrolled fee')
   }
 })
 
@@ -165,8 +295,9 @@ ipcMain.handle('installments:plan', async (_event, args) => {
     const student = db.prepare('SELECT id FROM students WHERE id = ?').get(student_id)
     if (!student) throw new Error('الطالب غير موجود / Student not found')
 
-    const plan = normalizePlanInput(args)
-    let result = { created: 0 }
+    // The amount comes from the enrolled service price unless an explicit total is passed.
+    const plan = resolvePlanInput(db, student_id, args)
+    let result = { created: 0, duplicatesRemoved: 0 }
     db.transaction(() => {
       result = regenerateInstallments(db, { student_id, service_id: args?.service_id ?? null, ...plan })
     })()
@@ -174,6 +305,7 @@ ipcMain.handle('installments:plan', async (_event, args) => {
     return {
       ok: true,
       ...result,
+      total: plan.total,
       installments: db.prepare('SELECT * FROM student_installments WHERE student_id = ? ORDER BY seq ASC').all(student_id),
     }
   } catch (error: any) {

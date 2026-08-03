@@ -130,9 +130,13 @@ export default function StudentForm() {
 
   // Instalment plan — "how many payments will this family pay the fee over?". Left off entirely
   // when `installments_count` is blank, in which case billing stays purely month-by-month.
-  const [plan, setPlan] = useState<{ count: number | ''; total: number | ''; start_date: string }>({
+  //
+  // The amount is NOT entered here: it is the price of the services enrolled above, so the plan
+  // and the service price can never disagree. `override` exists only for the rare case where the
+  // agreed figure differs from the list price.
+  const [plan, setPlan] = useState<{ count: number | ''; override: number | ''; start_date: string }>({
     count: '',
-    total: '',
+    override: '',
     start_date: '',
   })
   const [planSchedule, setPlanSchedule] = useState<
@@ -199,20 +203,24 @@ export default function StudentForm() {
   // Pro-rate session baseline (kept for pro-rate notice display; per-row session_price drives actual fees)
   const sessionsBaseline = proRate?.total_sessions && proRate.total_sessions > 0 ? proRate.total_sessions : 8
 
+  // The fee the plan is built from: the price of the services enrolled on this form. Reading it
+  // from the live form rows (rather than the saved record) keeps the plan in step while prices
+  // are still being edited.
+  const servicesFee = formData.services.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+  const planTotal = plan.override !== '' && Number(plan.override) > 0 ? Number(plan.override) : servicesFee
+
   // Live preview of the instalment split. Computed in the main process by the same function
   // that writes the real plan, so what the admin sees here is exactly what gets saved.
-  const planIsComplete = plan.count !== '' && Number(plan.count) > 0
-    && plan.total !== '' && Number(plan.total) > 0
-    && !!plan.start_date
+  const planIsComplete = plan.count !== '' && Number(plan.count) > 0 && planTotal > 0 && !!plan.start_date
   useEffect(() => {
     if (!planIsComplete) return
     let cancelled = false
     window.api.installments
-      .preview({ count: Number(plan.count), total: Number(plan.total), start_date: plan.start_date })
+      .preview({ count: Number(plan.count), total: planTotal, start_date: plan.start_date })
       .then((rows) => { if (!cancelled) setPlanSchedule(rows) })
       .catch(() => { if (!cancelled) setPlanSchedule([]) })
     return () => { cancelled = true }
-  }, [planIsComplete, plan.count, plan.total, plan.start_date])
+  }, [planIsComplete, plan.count, planTotal, plan.start_date])
   const schedule = planIsComplete ? planSchedule : []
 
   // Branch options for the "which branch is this student enrolled at" selector.
@@ -296,9 +304,13 @@ export default function StudentForm() {
             branch_id: student.branch_id ?? '',
             services: loadedServices,
           })
+          // A stored total that differs from the enrolled service price was an explicit
+          // override; one that matches is just the derived figure and stays derived.
+          const enrolledFee = (student.services ?? []).reduce((sum: number, s: any) => sum + (Number(s.price) || 0), 0)
+          const storedTotal = student.installment_total ?? null
           setPlan({
             count: student.installments_count ?? '',
-            total: student.installment_total ?? '',
+            override: storedTotal != null && Math.abs(storedTotal - enrolledFee) > 0.009 ? storedTotal : '',
             start_date: student.installment_start_date || student.reg_date || '',
           })
           setPhoto(student.photo_url || null)
@@ -440,17 +452,13 @@ export default function StudentForm() {
       if (invalidPrice) errors.services = i18n.language === 'ar' ? 'السعر لا يمكن أن يكون سالباً' : 'Price cannot be negative'
     }
 
-    // The plan is optional, but a count without a total (or vice versa) is half-entered — catch
-    // it here rather than letting the IPC layer reject the whole save.
+    // The plan is optional. Its amount comes from the enrolled services, so the only thing that
+    // can be missing is a priced service to build it from.
     const hasCount = plan.count !== '' && Number(plan.count) > 0
-    const hasTotal = plan.total !== '' && Number(plan.total) > 0
-    if (hasCount && !hasTotal) {
+    if (hasCount && planTotal <= 0) {
       errors.installments = i18n.language === 'ar'
-        ? 'أدخل إجمالي المبلغ المطلوب تقسيمه على الدفعات'
-        : 'Enter the total amount to split across the instalments'
-    }
-    if (hasTotal && !hasCount) {
-      errors.installments = i18n.language === 'ar' ? 'أدخل عدد الدفعات' : 'Enter the number of instalments'
+        ? 'أضف خدمة لها سعر (أو أدخل مبلغاً مخصصاً) حتى يمكن تقسيم الرسوم على دفعات'
+        : 'Add a priced service (or set a custom amount) so the fee can be split into instalments'
     }
     if (hasCount && (Number(plan.count) > 60 || !Number.isInteger(Number(plan.count)))) {
       errors.installments = i18n.language === 'ar'
@@ -525,7 +533,8 @@ export default function StudentForm() {
         branch_id: formData.branch_id === '' ? null : Number(formData.branch_id),
         // A blank count means "no plan" — on edit that also clears any existing schedule.
         installments_count: plan.count === '' ? null : Number(plan.count),
-        installment_total: plan.total === '' ? null : Number(plan.total),
+        // The plan amount is the enrolled service fee unless explicitly overridden.
+        installment_total: plan.count === '' ? null : planTotal,
         installment_start_date: plan.start_date || formData.reg_date,
         services: formData.services.map(s => ({
           id: s.id,
@@ -922,6 +931,32 @@ export default function StudentForm() {
               <p className="text-sm text-red-500 font-medium">{formErrors.installments}</p>
             )}
 
+            {/* The amount is the enrolled service fee — shown, not typed, so the plan can never
+                disagree with the price above and end up billing the family twice. */}
+            <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-slate-600">
+                  {i18n.language === 'ar' ? 'الرسوم من الخدمات المسجّلة' : 'Fee from enrolled services'}
+                </span>
+                <span className="text-base font-bold text-slate-900">{formatCurrency(servicesFee)}</span>
+              </div>
+              <div className="text-[11px] text-slate-500 leading-relaxed">
+                {formData.services.map((s, i) => (
+                  <span key={i}>
+                    {i > 0 && ' + '}
+                    {s.service} ({formatCurrency(Number(s.price) || 0)})
+                  </span>
+                ))}
+              </div>
+              {plan.count !== '' && (
+                <p className="text-[11px] text-slate-500 border-t border-primary/15 pt-2">
+                  {i18n.language === 'ar'
+                    ? 'هذه الرسوم تُحصَّل عبر الدفعات فقط — لن تُضاف مرة أخرى كفاتورة شهرية للخدمة.'
+                    : 'This fee is collected through the instalments only — it is not billed again as a monthly service charge.'}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-500">
@@ -943,18 +978,6 @@ export default function StudentForm() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-500">
-                  {i18n.language === 'ar' ? 'إجمالي المبلغ (EGP)' : 'Total amount (EGP)'}
-                </label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={plan.total}
-                  placeholder={i18n.language === 'ar' ? 'إجمالي الرسوم' : 'Total fee'}
-                  onChange={(e) => setPlan((prev) => ({ ...prev, total: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500">
                   {i18n.language === 'ar' ? 'تاريخ أول دفعة' : 'First instalment due'}
                 </label>
                 <Input
@@ -963,29 +986,33 @@ export default function StudentForm() {
                   onChange={(e) => setPlan((prev) => ({ ...prev, start_date: e.target.value }))}
                 />
               </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500">
+                  {i18n.language === 'ar' ? 'مبلغ مخصص (اختياري)' : 'Custom amount (optional)'}
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={plan.override}
+                  placeholder={formatCurrency(servicesFee)}
+                  onChange={(e) => setPlan((prev) => ({ ...prev, override: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) }))}
+                />
+              </div>
             </div>
-
-            {plan.count !== '' && plan.total === '' && (
-              <button
-                type="button"
-                onClick={() => setPlan((prev) => ({
-                  ...prev,
-                  total: formData.services.reduce((sum, s) => sum + (Number(s.price) || 0), 0) * Number(prev.count || 1),
-                }))}
-                className="text-xs font-semibold text-primary hover:underline"
-              >
-                {i18n.language === 'ar'
-                  ? 'احسب الإجمالي من أسعار الخدمات'
-                  : 'Calculate the total from the service prices'}
-              </button>
-            )}
 
             {schedule.length > 0 && (
               <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  {i18n.language === 'ar'
-                    ? `جدول السداد — ${schedule.length} دفعات`
-                    : `Payment schedule — ${schedule.length} instalments`}
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center justify-between">
+                  <span>
+                    {i18n.language === 'ar'
+                      ? `جدول السداد — ${schedule.length} دفعات`
+                      : `Payment schedule — ${schedule.length} instalments`}
+                  </span>
+                  {plan.override !== '' && (
+                    <span className="text-amber-600 normal-case font-semibold">
+                      {i18n.language === 'ar' ? 'مبلغ مخصص' : 'Custom amount'}
+                    </span>
+                  )}
                 </div>
                 <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
                   {schedule.map((row) => (

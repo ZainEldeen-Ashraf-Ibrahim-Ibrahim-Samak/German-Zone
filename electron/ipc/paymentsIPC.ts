@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/connection.js'
 import { getCurrentUser } from './authIPC.js'
 import { requireAdmin } from './_guard.js'
+import { loadPlanCoverage, isCoveredByPlan } from './installmentsIPC.js'
 import type { Payment, PaymentStatus } from '../../src/types/index.js'
 
 // Pure function for payment calculations (exported for unit testing)
@@ -216,7 +217,13 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
 
     let createdCount = 0
     let updatedCount = 0
+    let planSkippedCount = 0
     const now = new Date().toISOString()
+
+    // Enrollments billed by an instalment plan are charged by that plan, not month by month.
+    // Without this the family would owe the fee twice: once as the plan's instalments and again
+    // as a generated service row for the same enrollment.
+    const planCoverage = loadPlanCoverage(db)
 
     const checkStmt = db.prepare('SELECT id FROM payments WHERE student_id = ? AND service_id = ? AND month = ? AND year = ?')
     const checkExtraStmt = db.prepare(`SELECT id FROM payments WHERE student_id = ? AND month = ? AND year = ? AND service = 'حصص إضافية'`)
@@ -243,6 +250,12 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
 
     const transaction = db.transaction(() => {
       for (const enrollment of activeEnrollments) {
+        // Covered by an instalment plan → the plan is this enrollment's billing, so no monthly
+        // service row is created for it. The extra-sessions charge further down is still
+        // generated: those are on top of the agreed fee, not part of it.
+        const coveredByPlan = isCoveredByPlan(planCoverage, enrollment.student_id, enrollment.id)
+        if (coveredByPlan) planSkippedCount++
+
         const arabicMonthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
         const monthIndex = arabicMonthNames.indexOf(month)
         const payYear = Number(year)
@@ -257,7 +270,7 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
         }
 
         const existing = checkStmt.get(enrollment.student_id, enrollment.id, month, year) as any
-        if (existing && (enrollment.unit === 'يوم' || enrollment.unit === 'ساعة')) {
+        if (existing && !coveredByPlan && (enrollment.unit === 'يوم' || enrollment.unit === 'ساعة')) {
           // Attendance-driven units: refresh the quantity on regeneration so charges track
           // attendance recorded after the row was first created. Paid amounts are preserved;
           // total/balance/status are recomputed from the new quantity.
@@ -272,7 +285,7 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
             updatedCount++
           }
         }
-        if (!existing) {
+        if (!existing && !coveredByPlan) {
           // Determine quantity based on unit type
           let quantity: number
           if (enrollment.unit === 'شهر') {
@@ -382,7 +395,9 @@ ipcMain.handle('payments:generate', async (_event, { month, year }) => {
     })
 
     transaction()
-    return { created: createdCount, updated: updatedCount }
+    // `planSkipped` is surfaced so the Payments page can say "N enrollments are billed by their
+    // instalment plan" rather than looking as though generation silently missed them.
+    return { created: createdCount, updated: updatedCount, planSkipped: planSkippedCount }
   } catch (error: any) {
     console.error('Failed to generate payments:', error)
     throw new Error(error.message || 'Failed to generate payments')
